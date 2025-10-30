@@ -1,0 +1,464 @@
+/* Therapy Selection Page */
+.therapy-selection-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(135deg, rgba(71, 154, 195, 0.05) 0%, rgba(232, 176, 78, 0.05) 100%);
+}
+
+/* Header */
+.therapy-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-white);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  border-bottom: 3px solid var(--color-primary);
+  z-index: 1000;
+  padding: 15px 0;
+}
+
+.therapy-header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.therapy-logo-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.therapy-header-logo {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+}
+
+.therapy-header-text {
+  height: 35px;
+  object-fit: contain;
+}
+
+/* Logout Button */
+.therapy-logout-btn {
+  padding: 10px 24px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.therapy-logout-btn:hover {
+  background: #b52e29;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.3);
+}
+
+/* Main Content */
+.therapy-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 20px 40px;
+}
+
+.therapy-container {
+  max-width: 1400px;
+  width: 100%;
+}
+
+.therapy-title {
+  text-align: center;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 15px;
+}
+
+.therapy-subtitle {
+  text-align: center;
+  font-size: 1.2rem;
+  color: var(--color-text-light);
+  margin-bottom: 60px;
+}
+
+/* Therapy Options Container */
+.therapy-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: center;
+  position: relative;
+  min-height: 550px;
+}
+
+/* Individual Therapy Option */
+.therapy-option {
+  position: relative;
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  min-height: 500px;
+}
+
+.therapy-option.hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.5);
+  pointer-events: none;
+}
+
+.therapy-option.active {
+  z-index: 10;
+}
+
+/* Image Wrapper */
+.therapy-image-wrapper {
+  position: relative;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 10px solid var(--color-primary);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.therapy-option:hover .therapy-image-wrapper {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  transform: scale(1.1);
+}
+
+.therapy-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.therapy-option:hover .therapy-image {
+  transform: scale(1.05);
+}
+
+/* Overlay */
+.therapy-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  text-align: center;
+  padding: 40px 30px;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+}
+
+.therapy-option:hover .therapy-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.3) 0%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
+}
+
+/* Therapy Icon */
+.therapy-icon {
+  font-size: 3.5rem;
+  margin-bottom: 10px;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.therapy-option:hover .therapy-icon {
+  font-size: 4rem;
+  transform: translateY(-5px);
+}
+
+/* Therapy Name */
+.therapy-name {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: black;
+  margin: 0;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.therapy-option:hover .therapy-name {
+  font-size: 2rem;
+}
+
+/* Details Section (Appears in opposite side space) */
+.therapy-details {
+  width: 100%;
+  max-width: 500px;
+  text-align: left;
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  visibility: hidden;
+  position: absolute;
+  padding: 40px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Physical therapy (left) - details appear on RIGHT side */
+.therapy-option:nth-child(1) .therapy-details {
+  left: 100%;
+  margin-left: 60px;
+  transform: translateY(-50%) translateX(50px);
+}
+
+.therapy-option:nth-child(1):hover .therapy-details {
+  transform: translateY(-50%) translateX(0);
+}
+
+/* Speech therapy (right) - details appear on LEFT side */
+.therapy-option:nth-child(2) .therapy-details {
+  right: 100%;
+  margin-right: 60px;
+  transform: translateY(-50%) translateX(-50px);
+}
+
+.therapy-option:nth-child(2):hover .therapy-details {
+  transform: translateY(-50%) translateX(0);
+}
+
+.therapy-option:hover .therapy-details {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Description (hidden by default, shown on hover) */
+.therapy-description {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 25px;
+}
+
+.therapy-description p {
+  color: var(--color-text);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+/* Features List */
+.therapy-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 25px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.therapy-features li {
+  color: var(--color-text-light);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+/* Button */
+.therapy-btn {
+  width: 100%;
+  padding: 16px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.therapy-btn:hover {
+  background: #b52e29;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(206, 54, 48, 0.4);
+}
+
+/* Physical Therapy specific accent */
+.therapy-option:nth-child(1):hover .therapy-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(206, 54, 48, 0.3) 0%,
+    rgba(206, 54, 48, 0.6) 50%,
+    rgba(206, 54, 48, 0.85) 100%
+  );
+}
+
+/* Speech Therapy specific accent */
+.therapy-option:nth-child(2):hover .therapy-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(71, 154, 195, 0.3) 0%,
+    rgba(71, 154, 195, 0.6) 50%,
+    rgba(71, 154, 195, 0.85) 100%
+  );
+}
+
+.therapy-option:nth-child(2) .therapy-btn {
+  background: var(--color-secondary);
+}
+
+.therapy-option:nth-child(2) .therapy-btn:hover {
+  background: #3a7d9e;
+  box-shadow: 0 8px 20px rgba(71, 154, 195, 0.4);
+}
+
+/* Footer */
+.therapy-footer {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: white;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.therapy-footer-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+.therapy-footer-container p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .therapy-options {
+    grid-template-columns: 1fr;
+    max-width: 600px;
+    min-height: auto;
+    gap: 40px;
+  }
+
+  .therapy-image-wrapper {
+    width: 350px;
+    height: 350px;
+  }
+
+  .therapy-title {
+    font-size: 2rem;
+  }
+
+  .therapy-subtitle {
+    font-size: 1rem;
+    margin-bottom: 40px;
+  }
+
+  .therapy-option.hidden {
+    position: relative;
+  }
+
+  .therapy-details {
+    position: relative;
+    margin-top: 30px;
+    transform: translateY(20px);
+  }
+
+  .therapy-option:nth-child(1) .therapy-details,
+  .therapy-option:nth-child(2) .therapy-details {
+    left: 0;
+    right: 0;
+    transform: translateY(20px);
+  }
+
+  .therapy-option:hover .therapy-details {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .therapy-header-container {
+    padding: 0 20px;
+  }
+
+  .therapy-header-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .therapy-header-text {
+    height: 28px;
+  }
+
+  .therapy-main {
+    padding: 90px 15px 30px;
+  }
+
+  .therapy-title {
+    font-size: 1.8rem;
+  }
+
+  .therapy-options {
+    gap: 30px;
+  }
+
+  .therapy-image-wrapper {
+    width: 300px;
+    height: 300px;
+  }
+
+  .therapy-overlay {
+    padding: 25px 20px;
+  }
+
+  .therapy-name {
+    font-size: 1.5rem;
+  }
+
+  .therapy-option:hover .therapy-name {
+    font-size: 1.7rem;
+  }
+
+  .therapy-icon {
+    font-size: 3rem;
+  }
+
+  .therapy-option:hover .therapy-icon {
+    font-size: 3.5rem;
+  }
+
+  .therapy-features {
+    grid-template-columns: 1fr;
+  }
+
+  .therapy-details {
+    padding: 30px 20px;
+  }
+
+  .therapy-description p {
+    font-size: 0.95rem;
+  }
+}

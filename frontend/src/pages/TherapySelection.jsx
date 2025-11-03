@@ -98,18 +98,20 @@ function TherapySelection({ onLogout }) {
               <div className="therapy-details">
                 <div className="therapy-description">
                   <p>
-                    Professional services to improve communication skills, treat speech disorders, and enhance language development. 
-                    Our certified speech therapists provide personalized care for all ages.
+                    Comprehensive speech therapy programs designed to improve communication skills for children. 
+                    Choose from three specialized therapy types tailored to specific needs.
                   </p>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', marginTop: '20px' }}>
+                    Available Therapy Types:
+                  </h3>
                   <ul className="therapy-features">
-                    <li>✓ Speech Improvement</li>
-                    <li>✓ Language Development</li>
-                    <li>✓ Swallowing Disorders</li>
-                    <li>✓ Voice Therapy</li>
+                    <li><strong>Articulation Therapy:</strong> Sound production and pronunciation improvement</li>
+                    <li><strong>Language Therapy:</strong> Receptive and expressive language development</li>
+                    <li><strong>Fluency Therapy:</strong> Stuttering reduction and speech rate control</li>
                   </ul>
                 </div>
                 <button className="therapy-btn" onClick={() => handleTherapyClick('speech')}>
-                  Select Speech Therapy
+                  Explore Speech Therapy Options
                 </button>
               </div>
             </div>

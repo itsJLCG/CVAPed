@@ -8,6 +8,8 @@ import Dashboard from './pages/Dashboard';
 import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
 import SpeechTherapy from './pages/SpeechTherapy';
+import ArticulationTherapy from './pages/ArticulationTherapy';
+import ArticulationExercise from './pages/ArticulationExercise';
 import './App.css';
 
 function App() {
@@ -80,6 +82,18 @@ function App() {
               path="/speech-therapy" 
               element={
                 isAuthenticated ? <SpeechTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/articulation" 
+              element={
+                isAuthenticated ? <ArticulationTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/articulation/:soundId" 
+              element={
+                isAuthenticated ? <ArticulationExercise onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
           </Routes>

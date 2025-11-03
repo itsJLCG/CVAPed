@@ -1,0 +1,306 @@
+/* Speech Therapy Types Page */
+.speech-therapy-types-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(135deg, rgba(71, 154, 195, 0.05) 0%, rgba(232, 176, 78, 0.05) 100%);
+}
+
+/* Header */
+.speech-types-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-white);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  border-bottom: 3px solid var(--color-secondary);
+  z-index: 1000;
+  padding: 15px 0;
+}
+
+.speech-types-header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.speech-types-logo-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.speech-types-header-logo {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+}
+
+.speech-types-header-text {
+  height: 35px;
+  object-fit: contain;
+}
+
+.speech-types-nav {
+  display: flex;
+  gap: 15px;
+}
+
+.speech-types-nav-btn {
+  padding: 10px 20px;
+  background: var(--color-secondary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.speech-types-nav-btn:hover {
+  background: #3a7d9e;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(71, 154, 195, 0.3);
+}
+
+.speech-types-nav-btn.logout {
+  background: var(--color-primary);
+}
+
+.speech-types-nav-btn.logout:hover {
+  background: #b52e29;
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.3);
+}
+
+/* Main Content */
+.speech-types-main {
+  flex: 1;
+  padding: 120px 20px 60px;
+}
+
+.speech-types-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.speech-types-header-section {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.speech-types-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 15px;
+}
+
+.speech-types-subtitle {
+  font-size: 1.2rem;
+  color: var(--color-text-light);
+}
+
+/* Therapy Types Grid */
+.speech-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Individual Therapy Type Card */
+.speech-type-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: 3px solid transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+.speech-type-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.speech-type-card.selected {
+  border-color: var(--color-secondary);
+  box-shadow: 0 8px 30px rgba(71, 154, 195, 0.2);
+}
+
+.speech-type-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.speech-type-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.speech-type-subtitle {
+  font-size: 1rem;
+  color: var(--color-text-light);
+  margin-bottom: 20px;
+  text-align: center;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.speech-type-description {
+  font-size: 1.05rem;
+  color: var(--color-text);
+  line-height: 1.7;
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.speech-type-features {
+  flex: 1;
+  margin-bottom: 30px;
+}
+
+.speech-type-features h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 15px;
+}
+
+.speech-type-features ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.speech-type-features li {
+  font-size: 0.95rem;
+  color: var(--color-text-light);
+  padding: 8px 0;
+  padding-left: 25px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.speech-type-features li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-secondary);
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.speech-type-btn {
+  width: 100%;
+  padding: 16px;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.speech-type-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  filter: brightness(0.95);
+}
+
+/* Footer */
+.speech-types-footer {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: white;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.speech-types-footer-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+.speech-types-footer-container p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .speech-types-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 25px;
+  }
+
+  .speech-types-title {
+    font-size: 2rem;
+  }
+
+  .speech-type-card {
+    padding: 30px;
+  }
+}
+
+@media (max-width: 768px) {
+  .speech-types-header-container {
+    padding: 0 20px;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .speech-types-nav {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .speech-types-main {
+    padding: 160px 15px 40px;
+  }
+
+  .speech-types-title {
+    font-size: 1.8rem;
+  }
+
+  .speech-types-subtitle {
+    font-size: 1rem;
+  }
+
+  .speech-types-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .speech-type-card {
+    padding: 25px;
+  }
+
+  .speech-type-icon {
+    font-size: 3rem;
+  }
+
+  .speech-type-title {
+    font-size: 1.5rem;
+  }
+
+  .speech-type-features li {
+    font-size: 0.9rem;
+  }
+}

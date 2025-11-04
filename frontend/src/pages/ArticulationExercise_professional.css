@@ -321,130 +321,33 @@
   border: 2px solid #e5e7eb;
 }
 
-/* Compact 4-Metric Trial Cards */
-.trials-compact {
-  margin-bottom: 1.25rem;
-  display: flex;
-  flex-direction: column;
+.trials-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
+  margin-bottom: 1.25rem;
 }
 
-.trial-metrics-card {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+.trial-result {
   padding: 0.75rem;
+  background: white;
+  border-radius: 6px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
 }
 
-.trial-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.trial-num {
-  font-size: 0.8rem;
+.trial-label {
+  font-size: 0.75rem;
   color: #6b7280;
   font-weight: 600;
+  margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .trial-score {
-  font-size: 1.1rem;
+  font-size: 1.5rem;
   font-weight: 700;
-}
-
-.metrics-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.metric-bar-row {
-  display: grid;
-  grid-template-columns: 100px 1fr 45px;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.metric-label {
-  font-size: 0.75rem;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.metric-bar-bg {
-  height: 18px;
-  background: white;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid #e5e7eb;
-}
-
-.metric-bar-fill {
-  height: 100%;
-  transition: width 0.5s ease;
-  border-radius: 3px;
-}
-
-.metric-value {
-  font-size: 0.75rem;
-  color: #374151;
-  font-weight: 600;
-  text-align: right;
-}
-
-/* 4-Metric Line Chart */
-.chart-container {
-  margin: 1.25rem 0;
-  padding: 1rem;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
-.chart-header {
-  margin-bottom: 0.75rem;
-}
-
-.chart-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #374151;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.line-chart {
-  width: 100%;
-  height: 140px;
-  margin-bottom: 0.75rem;
-}
-
-.chart-legend {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.75rem;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
 }
 
 .average-score-box {
@@ -597,15 +500,15 @@
   background: #4b5563;
 }
 
-.action-btn.retry {
+.action-btn.tertiary {
   background: white;
-  border: 2px solid;
-  font-weight: 700;
+  color: #4b5563;
+  border: 2px solid #e5e7eb;
 }
 
-.action-btn.retry:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+.action-btn.tertiary:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
 }
 
 .status-message {
@@ -698,6 +601,10 @@
 
   .target-text {
     font-size: 2rem;
+  }
+
+  .trials-row {
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .metrics-grid {

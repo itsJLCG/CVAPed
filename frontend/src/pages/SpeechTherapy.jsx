@@ -15,49 +15,49 @@ function SpeechTherapy({ onLogout }) {
   const therapyTypes = [
     {
       id: 'articulation',
-      icon: '🗣️',
+      icon: 'A',
       title: 'Articulation Therapy',
-      subtitle: 'Sound Production',
-      description: 'Focus on improving the pronunciation of specific sounds and words. Perfect for children struggling with clear speech.',
+      subtitle: 'Sound Production & Pronunciation',
+      description: 'Clinical speech sound therapy focused on improving articulation accuracy and phonological development through systematic assessment and intervention.',
       features: [
-        'Picture/word targets with model pronunciation',
-        'Record and practice pronunciation (2-3 trials)',
-        'Automated pronunciation scoring',
-        'Immediate feedback on accuracy',
-        'Progress tracking and unlockable levels',
-        'Therapist review and correction interface'
+        'Standardized pronunciation assessment protocol',
+        'Multi-trial recording and evaluation system',
+        'Evidence-based pronunciation scoring metrics',
+        'Real-time accuracy feedback mechanisms',
+        'Comprehensive progress monitoring',
+        'Professional therapist review interface'
       ],
       color: '#ce3630'
     },
     {
       id: 'language',
-      icon: '📚',
+      icon: 'L',
       title: 'Language Therapy',
-      subtitle: 'Receptive & Expressive',
-      description: 'Build vocabulary, comprehension, and expressive language skills through interactive exercises and guided activities.',
+      subtitle: 'Receptive & Expressive Language',
+      description: 'Comprehensive language intervention program targeting vocabulary development, comprehension skills, and expressive language abilities through structured therapeutic activities.',
       features: [
-        'Receptive tasks: image recognition and matching',
-        'Expressive tasks: describe pictures and answer prompts',
-        'Sentence-building and grammar exercises',
-        'Response accuracy and latency tracking',
-        'Keyword and semantic similarity scoring',
-        'Age-appropriate difficulty progression'
+        'Receptive language assessment tasks',
+        'Expressive language evaluation protocols',
+        'Grammar and syntax development exercises',
+        'Quantitative response analysis',
+        'Semantic and syntactic scoring system',
+        'Age-appropriate intervention progression'
       ],
       color: '#479ac3'
     },
     {
       id: 'fluency',
-      icon: '⚡',
+      icon: 'F',
       title: 'Fluency Therapy',
-      subtitle: 'Stuttering & Speech Rate',
-      description: 'Practice smooth, flowing speech patterns. Helps reduce stuttering and improve overall speech fluency and rhythm.',
+      subtitle: 'Fluency Disorders & Speech Rate Control',
+      description: 'Evidence-based fluency intervention program designed to address stuttering behaviors and improve speech flow through systematic desensitization and fluency-shaping techniques.',
       features: [
-        'Read-aloud passages and sentence practice',
-        'Speech rate analysis (words per minute)',
-        'Dysfluency detection (repetitions, blocks, pauses)',
-        'Real-time visual pace feedback',
-        'Smoothness score calculation',
-        'Practice rounds with progress tracking'
+        'Structured reading and speaking tasks',
+        'Quantitative speech rate analysis (WPM)',
+        'Dysfluency pattern identification',
+        'Real-time biofeedback visualization',
+        'Fluency enhancement metrics',
+        'Systematic progress documentation'
       ],
       color: '#e8b04e'
     }
@@ -108,16 +108,17 @@ function SpeechTherapy({ onLogout }) {
                 key={type.id}
                 className={`speech-type-card ${selectedType === type.id ? 'selected' : ''}`}
                 onClick={() => handleTypeSelect(type.id)}
+                style={{ '--card-color': type.color }}
               >
-                <div className="speech-type-icon" style={{ color: type.color }}>
+                <div className="speech-type-icon" style={{ color: type.color, borderColor: type.color }}>
                   {type.icon}
                 </div>
                 <h2 className="speech-type-title">{type.title}</h2>
                 <p className="speech-type-subtitle">{type.subtitle}</p>
                 <p className="speech-type-description">{type.description}</p>
                 
-                <div className="speech-type-features">
-                  <h3>What's Included:</h3>
+                <div className="speech-type-features" style={{ borderLeftColor: type.color }}>
+                  <h3>Program Features:</h3>
                   <ul>
                     {type.features.map((feature, index) => (
                       <li key={index}>{feature}</li>
@@ -133,7 +134,7 @@ function SpeechTherapy({ onLogout }) {
                     handleTypeSelect(type.id);
                   }}
                 >
-                  Start {type.title}
+                  Begin Assessment
                 </button>
               </div>
             ))}

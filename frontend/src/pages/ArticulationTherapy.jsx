@@ -17,46 +17,46 @@ function ArticulationTherapy({ onLogout }) {
       id: 's',
       symbol: '/s/',
       name: 'S Sound',
-      description: 'Practice the "s" sound as in "sun", "sock", and "sea"',
+      description: 'Systematic practice for voiceless alveolar fricative production in initial, medial, and final positions',
       color: '#ce3630',
       examples: ['sun', 'sock', 'sip'],
-      icon: '🌞'
+      levels: 5
     },
     {
       id: 'r',
       symbol: '/r/',
       name: 'R Sound',
-      description: 'Practice the "r" sound as in "rabbit", "red", and "run"',
+      description: 'Structured intervention for retroflex approximant articulation across contextual complexity levels',
       color: '#479ac3',
       examples: ['rabbit', 'red', 'run'],
-      icon: '🐰'
+      levels: 5
     },
     {
       id: 'l',
       symbol: '/l/',
       name: 'L Sound',
-      description: 'Practice the "l" sound as in "lion", "leaf", and "lamp"',
+      description: 'Progressive training for lateral approximant sound production in varied linguistic contexts',
       color: '#e8b04e',
       examples: ['lion', 'leaf', 'lamp'],
-      icon: '🦁'
+      levels: 5
     },
     {
       id: 'k',
       symbol: '/k/',
       name: 'K Sound',
-      description: 'Practice the "k" sound as in "kite", "cat", and "car"',
+      description: 'Hierarchical practice for voiceless velar plosive articulation with increasing phonetic complexity',
       color: '#8e44ad',
       examples: ['kite', 'cat', 'car'],
-      icon: '🪁'
+      levels: 5
     },
     {
       id: 'th',
       symbol: '/th/',
       name: 'TH Sound',
-      description: 'Practice the "th" sound as in "think", "this", and "thumb"',
+      description: 'Sequential exercises for interdental fricative production in single words through connected speech',
       color: '#27ae60',
       examples: ['think', 'this', 'thumb'],
-      icon: '👍'
+      levels: 5
     }
   ];
 
@@ -90,12 +90,11 @@ function ArticulationTherapy({ onLogout }) {
       <main className="articulation-main">
         <div className="articulation-container">
           <div className="articulation-header-section">
-            <div className="articulation-icon">🗣️</div>
-            <h1 className="articulation-title">Articulation Therapy</h1>
-            <p className="articulation-subtitle">Sound Production Practice</p>
+            <h1 className="articulation-title">Articulation Therapy Program</h1>
+            <p className="articulation-subtitle">Evidence-Based Speech Sound Intervention</p>
             <p className="articulation-description">
-              Choose a target sound to practice. Each sound has 5 progressive levels: 
-              Sound → Syllable → Word → Phrase → Sentence
+              Select a target phoneme for systematic intervention. Each program includes five hierarchical levels 
+              progressing from isolated sound production through connected speech contexts.
             </p>
           </div>
 
@@ -106,23 +105,29 @@ function ArticulationTherapy({ onLogout }) {
                 key={sound.id}
                 className={`sound-card ${selectedSound === sound.id ? 'selected' : ''}`}
                 onClick={() => handleSoundSelect(sound.id)}
-                style={{ borderColor: sound.color }}
+                style={{ '--sound-color': sound.color }}
               >
-                <div className="sound-icon" style={{ color: sound.color }}>
-                  {sound.icon}
+                <div className="sound-header">
+                  <div className="sound-symbol-badge" style={{ color: sound.color, borderColor: sound.color }}>
+                    {sound.symbol}
+                  </div>
+                  <h3 className="sound-name">{sound.name}</h3>
                 </div>
-                <div className="sound-symbol" style={{ color: sound.color }}>
-                  {sound.symbol}
-                </div>
-                <h3 className="sound-name">{sound.name}</h3>
+                
                 <p className="sound-description">{sound.description}</p>
                 
-                <div className="sound-examples">
-                  <span className="examples-label">Examples:</span>
-                  <div className="examples-list">
-                    {sound.examples.map((example, index) => (
-                      <span key={index} className="example-word">{example}</span>
-                    ))}
+                <div className="sound-meta">
+                  <div className="meta-item">
+                    <span className="meta-label">Target Examples</span>
+                    <div className="examples-list">
+                      {sound.examples.map((example, index) => (
+                        <span key={index} className="example-word">{example}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="meta-item">
+                    <span className="meta-label">Intervention Levels</span>
+                    <span className="meta-value">{sound.levels} Progressive Stages</span>
                   </div>
                 </div>
 
@@ -134,37 +139,10 @@ function ArticulationTherapy({ onLogout }) {
                     handleSoundSelect(sound.id);
                   }}
                 >
-                  Start Practice
+                  Begin Assessment
                 </button>
               </div>
             ))}
-          </div>
-
-          {/* Info Section */}
-          <div className="articulation-info">
-            <h2>How It Works</h2>
-            <div className="info-steps">
-              <div className="info-step">
-                <div className="step-number">1</div>
-                <h3>Select a Sound</h3>
-                <p>Choose one of the 5 target sounds above</p>
-              </div>
-              <div className="info-step">
-                <div className="step-number">2</div>
-                <h3>Progress Through Levels</h3>
-                <p>Complete 5 levels from simple sounds to full sentences</p>
-              </div>
-              <div className="info-step">
-                <div className="step-number">3</div>
-                <h3>Record & Practice</h3>
-                <p>Record 2-3 trials per exercise and get instant feedback</p>
-              </div>
-              <div className="info-step">
-                <div className="step-number">4</div>
-                <h3>Unlock Next Level</h3>
-                <p>Score 90% or higher to unlock the next level</p>
-              </div>
-            </div>
           </div>
         </div>
       </main>

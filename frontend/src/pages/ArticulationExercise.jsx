@@ -10,55 +10,55 @@ const exerciseData = {
     name: 'S Sound',
     color: '#ce3630',
     levels: {
-      1: { name: 'Sound', items: ['s', 'sss', 'hiss'] },
+      1: { name: 'Sound', items: ['s'] },
       2: { name: 'Syllable', items: ['sa', 'se', 'si'] },
-      3: { name: 'Word', items: ['sun', 'sock', 'sip'] },
-      4: { name: 'Phrase', items: ['See the sun.', 'Sit down.', 'Pass the salt.'] },
-      5: { name: 'Sentence', items: ['Sam saw seven shiny shells.', 'The sun is very hot.', 'She sells sea shells.'] }
+      3: { name: 'Word', items: ['sun', 'sock'] },
+      4: { name: 'Phrase', items: ['See the sun.', 'Sit down.'] },
+      5: { name: 'Sentence', items: ['Sam saw seven shiny shells.', 'The sun is very hot.'] }
     }
   },
   r: {
     name: 'R Sound',
     color: '#479ac3',
     levels: {
-      1: { name: 'Sound', items: ['r', 'rrr', 'ra'] },
+      1: { name: 'Sound', items: ['r'] },
       2: { name: 'Syllable', items: ['ra', 're', 'ri'] },
-      3: { name: 'Word', items: ['rabbit', 'red', 'run'] },
-      4: { name: 'Phrase', items: ['Run to the road.', 'Read the book.', 'Red balloon.'] },
-      5: { name: 'Sentence', items: ['Rita rides the red rocket.', 'The rabbit raced around the yard.', 'Robert ran really fast.'] }
+      3: { name: 'Word', items: ['rabbit', 'red'] },
+      4: { name: 'Phrase', items: ['Run to the road.', 'Read the book.'] },
+      5: { name: 'Sentence', items: ['Rita rides the red rocket.', 'The rabbit raced around the yard.'] }
     }
   },
   l: {
     name: 'L Sound',
     color: '#e8b04e',
     levels: {
-      1: { name: 'Sound', items: ['l', 'la', 'lal'] },
+      1: { name: 'Sound', items: ['l'] },
       2: { name: 'Syllable', items: ['la', 'le', 'li'] },
-      3: { name: 'Word', items: ['lion', 'leaf', 'lamp'] },
-      4: { name: 'Phrase', items: ['Look at the lion.', 'Lift the box.', 'Light the lamp.'] },
-      5: { name: 'Sentence', items: ['Lily loves lemons.', 'The little lamb likes leaves.', 'Lay the blanket down.'] }
+      3: { name: 'Word', items: ['lion', 'leaf'] },
+      4: { name: 'Phrase', items: ['Look at the lion.', 'Lift the box.'] },
+      5: { name: 'Sentence', items: ['Lily loves lemons.', 'The little lamb likes leaves.'] }
     }
   },
   k: {
     name: 'K Sound',
     color: '#8e44ad',
     levels: {
-      1: { name: 'Sound', items: ['k', 'ka', 'ku'] },
+      1: { name: 'Sound', items: ['k'] },
       2: { name: 'Syllable', items: ['ka', 'ke', 'ki'] },
-      3: { name: 'Word', items: ['kite', 'cat', 'car'] },
-      4: { name: 'Phrase', items: ['Kick the ball.', 'Cook the rice.', 'Clean the cup.'] },
-      5: { name: 'Sentence', items: ['Keep the kite flying high.', 'The cat climbed the kitchen counter.', 'Kara kept a key in her pocket.'] }
+      3: { name: 'Word', items: ['kite', 'cat'] },
+      4: { name: 'Phrase', items: ['Kick the ball.', 'Cook the rice.'] },
+      5: { name: 'Sentence', items: ['Keep the kite flying high.', 'The cat climbed the kitchen counter.'] }
     }
   },
   th: {
     name: 'TH Sound',
     color: '#27ae60',
     levels: {
-      1: { name: 'Sound', items: ['th', 'thh', 'th-hold'] },
+      1: { name: 'Sound', items: ['th'] },
       2: { name: 'Syllable', items: ['tha', 'the', 'thi'] },
-      3: { name: 'Word', items: ['think', 'this', 'thumb'] },
-      4: { name: 'Phrase', items: ['Think about that.', 'This is the thumb.', 'They thank her.'] },
-      5: { name: 'Sentence', items: ['Those three thieves thought they were free.', 'This is my thumb.', 'The therapist taught them slowly.'] }
+      3: { name: 'Word', items: ['think', 'this'] },
+      4: { name: 'Phrase', items: ['Think about that.', 'This is the thumb.'] },
+      5: { name: 'Sentence', items: ['Those three thieves thought they were free.', 'This is my thumb.'] }
     }
   }
 };
@@ -71,7 +71,7 @@ function ArticulationExercise({ onLogout }) {
   const [currentItem, setCurrentItem] = useState(0);
   const [currentTrial, setCurrentTrial] = useState(1);
   const [trialScores, setTrialScores] = useState([]);
-  const [trialDetails, setTrialDetails] = useState([]); // Store detailed scores from Azure
+  const [trialDetails, setTrialDetails] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
@@ -88,17 +88,16 @@ function ArticulationExercise({ onLogout }) {
   const currentTarget = currentLevelData?.items[currentItem];
   const totalItems = currentLevelData?.items.length || 3;
   const maxTrials = 3;
-  const passThreshold = 0.90;
+  const passThreshold = 0.50;
 
   useEffect(() => {
-    // Initialize WaveSurfer for waveform display
     if (waveformRef.current && !waveSurferRef.current) {
       waveSurferRef.current = WaveSurfer.create({
         container: waveformRef.current,
         waveColor: soundData.color,
         progressColor: '#555',
         cursorColor: '#333',
-        height: 80,
+        height: 60,
         barWidth: 2,
         responsive: true
       });
@@ -117,10 +116,7 @@ function ArticulationExercise({ onLogout }) {
   };
 
   const startRecording = async () => {
-    // Prevent starting if already recording or processing
-    if (isRecording || isProcessing) {
-      return;
-    }
+    if (isRecording || isProcessing) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -135,9 +131,18 @@ function ArticulationExercise({ onLogout }) {
 
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        
+        // Check if audio was actually recorded
+        if (audioBlob.size === 0 || audioChunksRef.current.length === 0) {
+          console.error('No audio data recorded');
+          alert('Recording failed - no audio captured. Please try again.');
+          setIsRecording(false);
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
         setRecordedBlob(audioBlob);
         
-        // Display waveform
         if (waveSurferRef.current) {
           try {
             const url = URL.createObjectURL(audioBlob);
@@ -147,22 +152,19 @@ function ArticulationExercise({ onLogout }) {
           }
         }
 
-        // Process the recording
         await processRecording(audioBlob);
-        
-        // Stop all tracks to release microphone
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorderRef.current.start();
       setIsRecording(true);
 
-      // Auto-stop after 5 seconds
+      // Auto-stop after 10 seconds (longer time for phrases/sentences)
       setTimeout(() => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           stopRecording();
         }
-      }, 5000);
+      }, 10000);
 
     } catch (error) {
       console.error('Error accessing microphone:', error);
@@ -171,8 +173,10 @@ function ArticulationExercise({ onLogout }) {
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+    if (mediaRecorderRef.current) {
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
       setIsRecording(false);
     }
   };
@@ -181,11 +185,14 @@ function ArticulationExercise({ onLogout }) {
     setIsProcessing(true);
 
     try {
-      // Get user info for API call
+      // Double check audio blob is valid
+      if (!audioBlob || audioBlob.size === 0) {
+        throw new Error('Invalid audio recording');
+      }
+
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const token = localStorage.getItem('token');
 
-      // Create FormData to send audio file
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.wav');
       formData.append('patient_id', user.id || 'test-patient');
@@ -194,7 +201,6 @@ function ArticulationExercise({ onLogout }) {
       formData.append('target', currentTarget);
       formData.append('trial', currentTrial);
 
-      // Call backend API
       const response = await fetch('http://localhost:5000/api/articulation/record', {
         method: 'POST',
         headers: {
@@ -204,15 +210,14 @@ function ArticulationExercise({ onLogout }) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to process recording');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to process recording');
       }
 
       const data = await response.json();
       
-      // Use computed score from backend
       const score = data.scores?.computed_score || 0;
       
-      // Store detailed scores from Azure
       const details = {
         trial: currentTrial,
         computed_score: score,
@@ -230,7 +235,6 @@ function ArticulationExercise({ onLogout }) {
       setTrialScores(newTrialScores);
       setTrialDetails(newTrialDetails);
 
-      // Calculate average if all trials complete
       if (newTrialScores.length >= maxTrials) {
         const avg = newTrialScores.reduce((a, b) => a + b, 0) / newTrialScores.length;
         setAverageScore(avg);
@@ -240,7 +244,6 @@ function ArticulationExercise({ onLogout }) {
       console.error('Error processing recording:', error);
       alert('Failed to process recording. Using mock score for now.');
       
-      // Fallback to mock score if API fails
       const mockScore = 0.85 + Math.random() * 0.15;
       const newTrialScores = [...trialScores, mockScore];
       setTrialScores(newTrialScores);
@@ -254,22 +257,64 @@ function ArticulationExercise({ onLogout }) {
     setIsProcessing(false);
   };
 
+  // Phonetic pronunciation map - only for TH sound which needs special handling
+  const phoneticMap = {
+    // TH sound - prevent "tee aitch" pronunciation
+    'th': 'thuh',
+    
+    // Syllables - clear pronunciation
+    'sa': 'sah',
+    'se': 'seh',
+    'si': 'see',
+    
+    'ra': 'rah',
+    're': 'reh',
+    'ri': 'ree',
+    
+    'la': 'lah',
+    'le': 'leh',
+    'li': 'lee',
+    
+    'ka': 'kah',
+    'ke': 'keh',
+    'ki': 'kee',
+    
+    'tha': 'thah',
+    'the': 'thuh',
+    'thi': 'thee'
+  };
+
   const playModelAudio = () => {
-    // Use Web Speech API for text-to-speech
     if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
       window.speechSynthesis.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(currentTarget);
-      utterance.rate = 0.8; // Slower for clearer pronunciation
-      utterance.pitch = 1.0;
+      // Get phonetic representation if it exists, otherwise use original
+      const textToSpeak = phoneticMap[currentTarget.toLowerCase()] || currentTarget;
+      
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      
+      // For isolated sounds (level 1), use slower rate and emphasize the sound
+      if (currentLevel === 1) {
+        utterance.rate = 0.6;  // Very slow for isolated sounds
+        utterance.pitch = 1.1;  // Slightly higher pitch for clarity
+      } else if (currentLevel === 2) {
+        utterance.rate = 0.7;  // Slow for syllables
+        utterance.pitch = 1.0;
+      } else {
+        utterance.rate = 0.85;  // Near-normal for words/phrases/sentences
+        utterance.pitch = 1.0;
+      }
+      
       utterance.volume = 1.0;
       utterance.lang = 'en-US';
 
-      // Get available voices and prefer a female voice (often clearer for kids)
       const voices = window.speechSynthesis.getVoices();
       const preferredVoice = voices.find(voice => 
-        voice.name.includes('Female') || voice.name.includes('Zira') || voice.name.includes('Google US English')
+        voice.name.includes('Female') || 
+        voice.name.includes('Zira') || 
+        voice.name.includes('Google US English') ||
+        voice.name.includes('Microsoft') ||
+        voice.lang === 'en-US'
       );
       if (preferredVoice) {
         utterance.voice = preferredVoice;
@@ -282,23 +327,18 @@ function ArticulationExercise({ onLogout }) {
   };
 
   const handleNextItem = () => {
-    // RE-ENABLED: 90% pass threshold requirement
-    
     if (currentItem < totalItems - 1) {
-      // Move to next item in current level
       setCurrentItem(currentItem + 1);
       resetTrials();
     } else if (averageScore >= passThreshold) {
-      // All items complete and passed, move to next level
       if (currentLevel < 5) {
         setCurrentLevel(currentLevel + 1);
         setCurrentItem(0);
         setLevelProgress({ ...levelProgress, [currentLevel]: true });
         resetTrials();
-        alert(`🎉 Level ${currentLevel} Complete! Moving to Level ${currentLevel + 1}: ${soundData.levels[currentLevel + 1].name}`);
+        alert(`Level ${currentLevel} Complete! Moving to Level ${currentLevel + 1}: ${soundData.levels[currentLevel + 1].name}`);
       } else {
-        // All levels complete!
-        alert('🎉 Congratulations! You completed all levels for this sound!');
+        alert('Congratulations! You completed all levels for this sound!');
         navigate('/articulation');
       }
     }
@@ -319,7 +359,6 @@ function ArticulationExercise({ onLogout }) {
     if (currentTrial < maxTrials) {
       setCurrentTrial(currentTrial + 1);
       setRecordedBlob(null);
-      // Clear waveform for new recording
       if (waveSurferRef.current) {
         waveSurferRef.current.empty();
       }
@@ -343,9 +382,15 @@ function ArticulationExercise({ onLogout }) {
             <img src={images.logo} alt="CVAPed Logo" className="exercise-header-logo" />
             <img src={images.cvacareText} alt="CVAPed" className="exercise-header-text" />
           </div>
+          <div className="exercise-title-section">
+            <h1 className="exercise-sound-title">{soundData.name} Assessment</h1>
+            <div className="level-breadcrumb">
+              Level {currentLevel}: {currentLevelData.name} • Item {currentItem + 1}/{totalItems}
+            </div>
+          </div>
           <div className="exercise-nav">
             <button onClick={() => navigate('/articulation')} className="exercise-nav-btn">
-              Back to Sounds
+              ← Back
             </button>
             <button onClick={handleLogout} className="exercise-nav-btn logout">
               Logout
@@ -357,241 +402,302 @@ function ArticulationExercise({ onLogout }) {
       {/* Main Content */}
       <main className="exercise-main">
         <div className="exercise-container">
-          {/* Progress Header */}
-          <div className="exercise-progress-header">
-            <h1 className="exercise-sound-title" style={{ color: soundData.color }}>
-              {soundData.name} - Level {currentLevel}: {currentLevelData.name}
-            </h1>
-            <div className="level-indicators">
+          {/* Compact Progress Bar */}
+          <div className="progress-bar-container">
+            <div className="progress-levels">
               {[1, 2, 3, 4, 5].map(level => (
                 <div
                   key={level}
-                  className={`level-indicator ${level === currentLevel ? 'current' : ''} ${levelProgress[level] ? 'complete' : ''}`}
-                  style={{ 
-                    borderColor: level === currentLevel ? soundData.color : '#ddd',
-                    backgroundColor: levelProgress[level] ? soundData.color : 'white'
+                  className={`progress-level ${level === currentLevel ? 'active' : ''} ${level < currentLevel ? 'completed' : ''} ${level > currentLevel ? 'locked' : ''}`}
+                  style={{
+                    borderColor: level <= currentLevel ? soundData.color : '#e5e7eb',
+                    backgroundColor: level < currentLevel ? soundData.color : level === currentLevel ? 'white' : '#f9fafb',
+                    color: level < currentLevel ? 'white' : level === currentLevel ? soundData.color : '#9ca3af'
                   }}
                 >
-                  {level}
+                  <span className="level-num">{level}</span>
+                  <span className="level-name">{soundData.levels[level].name}</span>
                 </div>
               ))}
             </div>
-            <div className="item-progress">
-              Item {currentItem + 1} of {totalItems}
-            </div>
           </div>
 
-          {/* Exercise Card */}
+          {/* Exercise Card - Compact 2-Column Layout */}
           <div className="exercise-card">
-            <div className="target-display">
-              <h2>Practice Target:</h2>
-              <div className="target-text" style={{ color: soundData.color }}>
-                {currentTarget}
-              </div>
-              <button className="listen-btn" onClick={playModelAudio}>
-                🔊 Listen to Model
-              </button>
-            </div>
-
-            {/* Recording Section */}
-            <div className="recording-section">
-              <h3>Trial {currentTrial} of {maxTrials}</h3>
-              
-              <div className="waveform-container" ref={waveformRef}></div>
-
-              <div className="recording-controls">
-                {!isRecording && !isProcessing && needsMoreTrials && (
-                  <button
-                    className="record-btn"
-                    onClick={startRecording}
-                    style={{ backgroundColor: soundData.color }}
-                  >
-                    🎤 Start Recording
-                  </button>
-                )}
-
-                {isRecording && (
-                  <button
-                    className="record-btn recording"
-                    onClick={stopRecording}
-                  >
-                    ⏹️ Stop Recording
-                  </button>
-                )}
-
-                {isProcessing && (
-                  <div className="processing-indicator">
-                    <div className="spinner"></div>
-                    <span>Processing your pronunciation...</span>
+            <div className="exercise-grid">
+              {/* Left Column - Target & Recording */}
+              <div className="target-column">
+                <div className="target-section">
+                  <label className="section-label">Target Stimulus</label>
+                  <div className="target-text" style={{ color: soundData.color }}>
+                    "{currentTarget}"
                   </div>
-                )}
-              </div>
+                  <button className="model-btn" onClick={playModelAudio}>
+                    <span className="btn-icon">▶</span> Play Model Audio
+                  </button>
+                </div>
 
-              {/* Trial Scores - Compact & Kid-Friendly */}
-              {trialScores.length > 0 && (
-                <div className="trial-scores">
-                  <h4>📊 Your Scores:</h4>
+                <div className="recording-box">
+                  <div className="recording-header">
+                    <label className="section-label">Recording - Trial {currentTrial}/{maxTrials}</label>
+                  </div>
                   
-                  {/* Quick Score Pills */}
-                  <div className="score-pills">
-                    {trialDetails.map((detail, index) => (
-                      <div 
-                        key={index} 
-                        className={`score-pill ${detail.computed_score >= passThreshold ? 'pass' : 'practice'}`}
-                      >
-                        <div className="pill-trial">Try {index + 1}</div>
-                        <div className="pill-score">{(detail.computed_score * 100).toFixed(0)}%</div>
-                        <div className="pill-icon">{detail.computed_score >= passThreshold ? '🌟' : '💪'}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <div className="waveform-container" ref={waveformRef}></div>
 
-                  {/* Expandable Details */}
-                  {trialDetails.length > 0 && (
-                    <details className="score-details-expandable">
-                      <summary className="details-summary">
-                        � View Detailed Analysis
-                      </summary>
-                      <div className="details-content">
-                        {trialDetails.map((detail, index) => (
-                          <div key={index} className="detail-card-compact">
-                            <div className="detail-header-compact">
-                              Try {index + 1} • {(detail.computed_score * 100).toFixed(0)}%
-                            </div>
-                            <div className="circular-charts">
-                              <div className="chart-item">
-                                <svg className="circular-chart" viewBox="0 0 36 36">
-                                  <path className="circle-bg"
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <path className="circle"
-                                    strokeDasharray={`${detail.pronunciation_score * 100}, 100`}
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <text x="18" y="20.5" className="percentage">{(detail.pronunciation_score * 100).toFixed(0)}%</text>
-                                </svg>
-                                <div className="chart-label">Pronunciation</div>
-                              </div>
-                              <div className="chart-item">
-                                <svg className="circular-chart" viewBox="0 0 36 36">
-                                  <path className="circle-bg"
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <path className="circle"
-                                    strokeDasharray={`${detail.accuracy_score * 100}, 100`}
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <text x="18" y="20.5" className="percentage">{(detail.accuracy_score * 100).toFixed(0)}%</text>
-                                </svg>
-                                <div className="chart-label">Accuracy</div>
-                              </div>
-                              <div className="chart-item">
-                                <svg className="circular-chart" viewBox="0 0 36 36">
-                                  <path className="circle-bg"
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <path className="circle"
-                                    strokeDasharray={`${detail.completeness_score * 100}, 100`}
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <text x="18" y="20.5" className="percentage">{(detail.completeness_score * 100).toFixed(0)}%</text>
-                                </svg>
-                                <div className="chart-label">Completeness</div>
-                              </div>
-                              <div className="chart-item">
-                                <svg className="circular-chart" viewBox="0 0 36 36">
-                                  <path className="circle-bg"
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <path className="circle"
-                                    strokeDasharray={`${detail.fluency_score * 100}, 100`}
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                  />
-                                  <text x="18" y="20.5" className="percentage">{(detail.fluency_score * 100).toFixed(0)}%</text>
-                                </svg>
-                                <div className="chart-label">Fluency</div>
-                              </div>
-                            </div>
-                            {detail.transcription && (
-                              <div className="heard-text-compact">💬 "{detail.transcription}"</div>
-                            )}
-                          </div>
-                        ))}
+                  <div className="recording-controls">
+                    {!isRecording && !isProcessing && needsMoreTrials && (
+                      <button
+                        className="record-btn"
+                        onClick={startRecording}
+                        style={{ backgroundColor: soundData.color }}
+                      >
+                        <span className="btn-icon">●</span> Record Response
+                      </button>
+                    )}
+
+                    {isRecording && (
+                      <button
+                        className="record-btn recording"
+                        onClick={stopRecording}
+                      >
+                        <span className="btn-icon">■</span> Stop Recording
+                      </button>
+                    )}
+
+                    {isProcessing && (
+                      <div className="processing-indicator">
+                        <div className="spinner"></div>
+                        <span>Processing assessment...</span>
                       </div>
-                    </details>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Results & Actions */}
+              <div className="results-column">
+                {trialScores.length > 0 && (
+                  <div className="scores-section">
+                    <label className="section-label">Assessment Results</label>
+                    
+                    {/* Compact 4-Metric Progress Bars per Trial */}
+                    <div className="trials-compact">
+                      {trialDetails.map((detail, index) => (
+                        <div key={index} className="trial-metrics-card">
+                          <div className="trial-header">
+                            <span className="trial-num">Trial {index + 1}</span>
+                            <span className="trial-score" style={{ color: detail.computed_score >= passThreshold ? '#27ae60' : '#e67e22' }}>
+                              {(detail.computed_score * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="metrics-bars">
+                            <div className="metric-bar-row">
+                              <span className="metric-label">Pronunciation</span>
+                              <div className="metric-bar-bg">
+                                <div className="metric-bar-fill" style={{ width: `${detail.pronunciation_score * 100}%`, backgroundColor: '#3b82f6' }}></div>
+                              </div>
+                              <span className="metric-value">{(detail.pronunciation_score * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="metric-bar-row">
+                              <span className="metric-label">Accuracy</span>
+                              <div className="metric-bar-bg">
+                                <div className="metric-bar-fill" style={{ width: `${detail.accuracy_score * 100}%`, backgroundColor: '#8b5cf6' }}></div>
+                              </div>
+                              <span className="metric-value">{(detail.accuracy_score * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="metric-bar-row">
+                              <span className="metric-label">Completeness</span>
+                              <div className="metric-bar-bg">
+                                <div className="metric-bar-fill" style={{ width: `${detail.completeness_score * 100}%`, backgroundColor: '#10b981' }}></div>
+                              </div>
+                              <span className="metric-value">{(detail.completeness_score * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="metric-bar-row">
+                              <span className="metric-label">Fluency</span>
+                              <div className="metric-bar-bg">
+                                <div className="metric-bar-fill" style={{ width: `${detail.fluency_score * 100}%`, backgroundColor: '#f59e0b' }}></div>
+                              </div>
+                              <span className="metric-value">{(detail.fluency_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 4-Metric Line Chart */}
+                    {trialDetails.length > 1 && (
+                      <div className="chart-container">
+                        <div className="chart-header">
+                          <span className="chart-title">Metric Comparison Across Trials</span>
+                        </div>
+                        <div className="line-chart">
+                          <svg width="100%" height="140" viewBox="0 0 320 140">
+                            {/* Grid lines */}
+                            <line x1="50" y1="20" x2="300" y2="20" stroke="#f3f4f6" strokeWidth="1"/>
+                            <line x1="50" y1="45" x2="300" y2="45" stroke="#f3f4f6" strokeWidth="1"/>
+                            <line x1="50" y1="70" x2="300" y2="70" stroke="#f3f4f6" strokeWidth="1"/>
+                            <line x1="50" y1="95" x2="300" y2="95" stroke="#f3f4f6" strokeWidth="1"/>
+                            
+                            {/* Y-axis labels */}
+                            <text x="5" y="24" fontSize="9" fill="#9ca3af">100</text>
+                            <text x="12" y="49" fontSize="9" fill="#9ca3af">75</text>
+                            <text x="12" y="74" fontSize="9" fill="#9ca3af">50</text>
+                            <text x="12" y="99" fontSize="9" fill="#9ca3af">25</text>
+                            <text x="18" y="116" fontSize="9" fill="#9ca3af">0</text>
+                            
+                            {/* Pronunciation line */}
+                            <polyline
+                              points={trialDetails.map((detail, index) => {
+                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                                const y = 110 - (detail.pronunciation_score * 90);
+                                return `${x},${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#3b82f6"
+                              strokeWidth="2"
+                            />
+                            {/* Pronunciation points */}
+                            {trialDetails.map((detail, index) => {
+                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                              const y = 110 - (detail.pronunciation_score * 90);
+                              return <circle key={`p${index}`} cx={x} cy={y} r="4" fill="#3b82f6" stroke="white" strokeWidth="1.5"/>;
+                            })}
+                            
+                            {/* Accuracy line */}
+                            <polyline
+                              points={trialDetails.map((detail, index) => {
+                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                                const y = 110 - (detail.accuracy_score * 90);
+                                return `${x},${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#8b5cf6"
+                              strokeWidth="2"
+                            />
+                            {/* Accuracy points */}
+                            {trialDetails.map((detail, index) => {
+                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                              const y = 110 - (detail.accuracy_score * 90);
+                              return <circle key={`a${index}`} cx={x} cy={y} r="4" fill="#8b5cf6" stroke="white" strokeWidth="1.5"/>;
+                            })}
+                            
+                            {/* Completeness line */}
+                            <polyline
+                              points={trialDetails.map((detail, index) => {
+                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                                const y = 110 - (detail.completeness_score * 90);
+                                return `${x},${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#10b981"
+                              strokeWidth="2"
+                            />
+                            {/* Completeness points */}
+                            {trialDetails.map((detail, index) => {
+                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                              const y = 110 - (detail.completeness_score * 90);
+                              return <circle key={`c${index}`} cx={x} cy={y} r="4" fill="#10b981" stroke="white" strokeWidth="1.5"/>;
+                            })}
+                            
+                            {/* Fluency line */}
+                            <polyline
+                              points={trialDetails.map((detail, index) => {
+                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                                const y = 110 - (detail.fluency_score * 90);
+                                return `${x},${y}`;
+                              }).join(' ')}
+                              fill="none"
+                              stroke="#f59e0b"
+                              strokeWidth="2"
+                            />
+                            {/* Fluency points */}
+                            {trialDetails.map((detail, index) => {
+                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                              const y = 110 - (detail.fluency_score * 90);
+                              return <circle key={`f${index}`} cx={x} cy={y} r="4" fill="#f59e0b" stroke="white" strokeWidth="1.5"/>;
+                            })}
+                            
+                            {/* X-axis labels */}
+                            {trialDetails.map((detail, index) => {
+                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
+                              return (
+                                <text key={index} x={x} y="130" fontSize="10" fill="#6b7280" textAnchor="middle">T{index + 1}</text>
+                              );
+                            })}
+                          </svg>
+                        </div>
+                        <div className="chart-legend">
+                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#3b82f6' }}></span> Pronunciation</div>
+                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#8b5cf6' }}></span> Accuracy</div>
+                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#10b981' }}></span> Completeness</div>
+                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#f59e0b' }}></span> Fluency</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Average Score */}
+                    {averageScore !== null && (
+                      <div className="average-score-box" style={{ borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' }}>
+                        <div className="avg-row">
+                          <span className="avg-label">Average Score:</span>
+                          <span className="avg-value" style={{ color: averageScore >= passThreshold ? '#27ae60' : '#e67e22' }}>
+                            {(averageScore * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="avg-status" style={{ backgroundColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' }}>
+                          {averageScore >= passThreshold ? 'PASSED' : 'BELOW THRESHOLD'}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="action-section">
+                  {needsMoreTrials && trialScores.length > 0 && (
+                    <button
+                      className="action-btn secondary"
+                      onClick={handleRetry}
+                    >
+                      Record Trial {currentTrial + 1}
+                    </button>
                   )}
 
-                  {/* Average Score - Big & Clear */}
-                  {averageScore !== null && (
-                    <div className={`final-score ${averageScore >= passThreshold ? 'passed' : 'need-practice'}`}>
-                      <div className="final-label">Final Score</div>
-                      <div className="final-number">{(averageScore * 100).toFixed(0)}%</div>
-                      <div className="final-status">
-                        {averageScore >= passThreshold ? '🎉 Great Job!' : '💪 Keep Practicing!'}
-                      </div>
+                  {canProceed && (
+                    <button
+                      className="action-btn primary"
+                      onClick={handleNextItem}
+                      style={{ backgroundColor: soundData.color }}
+                    >
+                      {currentItem < totalItems - 1 ? 'Next Item →' : 'Complete Level →'}
+                    </button>
+                  )}
+
+                  {failedItem && (
+                    <button
+                      className="action-btn retry"
+                      onClick={resetTrials}
+                      style={{ borderColor: soundData.color, color: soundData.color }}
+                    >
+                      ↻ Retry This Item
+                    </button>
+                  )}
+
+                  {canProceed && (
+                    <div className="status-message success">
+                      ✓ Assessment passed. Proceed to next item.
+                    </div>
+                  )}
+
+                  {failedItem && (
+                    <div className="status-message warning">
+                      ⚠ Score below 80%. Retry recommended.
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Feedback Messages */}
-              {canProceed && (
-                <div className="feedback-message success">
-                  🎉 Great job! You scored {(averageScore * 100).toFixed(0)}%!
-                </div>
-              )}
-
-              {failedItem && (
-                <div className="feedback-message warning">
-                  Keep practicing! Try to pronounce the sound more clearly.
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="action-buttons">
-                {needsMoreTrials && trialScores.length > 0 && (
-                  <button
-                    className="action-btn secondary"
-                    onClick={handleRetry}
-                  >
-                    Try Again (Trial {currentTrial + 1})
-                  </button>
-                )}
-
-                {/* Show Next button only if passed (90%+) */}
-                {canProceed && (
-                  <button
-                    className="action-btn primary"
-                    onClick={handleNextItem}
-                    style={{ backgroundColor: soundData.color }}
-                  >
-                    {currentItem < totalItems - 1 ? 'Next Item →' : 'Complete Level →'}
-                  </button>
-                )}
-
-                {failedItem && (
-                  <button
-                    className="action-btn therapist"
-                    onClick={() => alert('Therapist review requested. Your therapist will review your recordings.')}
-                  >
-                    Request Therapist Review
-                  </button>
-                )}
               </div>
             </div>
-          </div>
-
-          {/* Instructions */}
-          <div className="instructions-card">
-            <h3>Instructions:</h3>
-            <ol>
-              <li>Click "Listen to Model" to hear the correct pronunciation</li>
-              <li>Click "Start Recording" and say the target clearly</li>
-              <li>Complete 3 trials for this item</li>
-              <li><strong>Score 90% or higher average</strong> to move to the next item</li>
-              <li>Complete all 3 items to unlock the next level</li>
-              <li><strong>📊 Azure scores show:</strong> Pronunciation, Accuracy, Completeness, and Fluency</li>
-            </ol>
           </div>
         </div>
       </main>

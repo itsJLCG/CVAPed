@@ -42,6 +42,25 @@ export const authService = {
     return response.data;
   },
 
+  // Firebase OAuth login
+  firebaseAuth: async (firebaseData) => {
+    const response = await api.post('/auth/firebase', firebaseData);
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  // Complete profile after OAuth login
+  completeProfile: async (profileData) => {
+    const response = await api.post('/auth/complete-profile', profileData);
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

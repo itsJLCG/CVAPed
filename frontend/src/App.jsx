@@ -4,6 +4,7 @@ import { ToastProvider } from './components/ToastContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import CompleteProfile from './pages/CompleteProfile';
 import Dashboard from './pages/Dashboard';
 import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
@@ -57,7 +58,13 @@ function App() {
             <Route 
               path="/register" 
               element={
-                isAuthenticated ? <Navigate to="/therapy-selection" /> : <Register />
+                isAuthenticated ? <Navigate to="/therapy-selection" /> : <Register onLogin={handleLogin} />
+              } 
+            />
+            <Route 
+              path="/complete-profile" 
+              element={
+                isAuthenticated ? <CompleteProfile onLogin={handleLogin} /> : <Navigate to="/register" />
               } 
             />
             <Route 

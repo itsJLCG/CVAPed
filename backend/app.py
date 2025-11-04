@@ -8,9 +8,15 @@ import datetime
 from functools import wraps
 import os
 from dotenv import load_dotenv
+import firebase_admin
+from firebase_admin import credentials, auth
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize Firebase Admin SDK
+cred = credentials.Certificate('cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json')
+firebase_admin.initialize_app(cred)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key')
@@ -56,7 +62,7 @@ def register():
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['email', 'password', 'firstName', 'lastName']
+        required_fields = ['email', 'password', 'firstName', 'lastName', 'therapyType', 'patientType']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'message': f'{field} is required'}), 400
@@ -65,7 +71,9 @@ def register():
         password = data['password']
         first_name = data['firstName']
         last_name = data['lastName']
-        role = 'user'  # Default role for all new registrations
+        therapy_type = data['therapyType']  # 'speech' or 'physical'
+        patient_type = data['patientType']  # 'myself', 'child', 'dependent'
+        role = 'patient'  # Default role for all new registrations
         
         # Check if user already exists
         if users_collection.find_one({'email': email}):
@@ -74,16 +82,61 @@ def register():
         # Hash password
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
         
-        # Create user document
+        # Create base user document
         user = {
             'email': email,
             'password': hashed_password,
             'firstName': first_name,
             'lastName': last_name,
             'role': role,
+            'therapyType': therapy_type,
+            'patientType': patient_type,
             'createdAt': datetime.datetime.utcnow(),
             'updatedAt': datetime.datetime.utcnow()
         }
+        
+        # Add therapy-specific fields
+        if therapy_type == 'speech' and patient_type == 'child':
+            # Speech Therapy - Pediatric Patient
+            child_required = ['childFirstName', 'childLastName', 'childDateOfBirth', 'childGender']
+            parent_required = ['parentFirstName', 'parentLastName', 'parentEmail', 'parentPhone', 'relationshipWithChild']
+            
+            for field in child_required:
+                if field not in data or not data[field]:
+                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+            
+            for field in parent_required:
+                if field not in data or not data[field]:
+                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+            
+            user['childInfo'] = {
+                'firstName': data['childFirstName'],
+                'lastName': data['childLastName'],
+                'dateOfBirth': data['childDateOfBirth'],
+                'gender': data['childGender']
+            }
+            
+            user['parentInfo'] = {
+                'firstName': data['parentFirstName'],
+                'lastName': data['parentLastName'],
+                'email': data['parentEmail'],
+                'phone': data['parentPhone'],
+                'relationship': data['relationshipWithChild']
+            }
+        
+        elif therapy_type == 'physical':
+            # Physical Therapy - Stroke Patient
+            patient_required = ['patientFirstName', 'patientLastName', 'patientGender']
+            
+            for field in patient_required:
+                if field not in data or not data[field]:
+                    return jsonify({'message': f'{field} is required for physical therapy'}), 400
+            
+            user['patientInfo'] = {
+                'firstName': data['patientFirstName'],
+                'lastName': data['patientLastName'],
+                'gender': data['patientGender']
+            }
         
         # Insert user into database
         result = users_collection.insert_one(user)
@@ -102,7 +155,9 @@ def register():
                 'email': email,
                 'firstName': first_name,
                 'lastName': last_name,
-                'role': role
+                'role': role,
+                'therapyType': therapy_type,
+                'patientType': patient_type
             }
         }), 201
         
@@ -151,6 +206,195 @@ def login():
         
     except Exception as e:
         return jsonify({'message': 'Login failed', 'error': str(e)}), 500
+
+@app.route('/api/auth/firebase', methods=['POST'])
+def firebase_auth():
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data.get('firebaseToken'):
+            return jsonify({'message': 'Firebase token is required'}), 400
+        
+        firebase_token = data['firebaseToken']
+        
+        # Verify Firebase token
+        try:
+            decoded_token = auth.verify_id_token(firebase_token)
+            firebase_uid = decoded_token['uid']
+            firebase_email = decoded_token.get('email', '').lower()
+        except Exception as e:
+            return jsonify({'message': 'Invalid Firebase token', 'error': str(e)}), 401
+        
+        # Check if user exists by Firebase UID
+        user = users_collection.find_one({'providerId': firebase_uid})
+        
+        if user:
+            # Existing user - return user data
+            token = jwt.encode({
+                'user_id': str(user['_id']),
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            }, app.config['SECRET_KEY'], algorithm="HS256")
+            
+            return jsonify({
+                'message': 'Login successful',
+                'token': token,
+                'user': {
+                    'id': str(user['_id']),
+                    'email': user['email'],
+                    'firstName': user['firstName'],
+                    'lastName': user['lastName'],
+                    'role': user.get('role', 'patient'),
+                    'isProfileComplete': user.get('isProfileComplete', True),
+                    'therapyType': user.get('therapyType'),
+                    'patientType': user.get('patientType')
+                }
+            }), 200
+        
+        # New user - create account with incomplete profile
+        email = data.get('email', firebase_email)
+        first_name = data.get('firstName', '')
+        last_name = data.get('lastName', '')
+        profile_picture = data.get('profilePicture', '')
+        provider = data.get('provider', 'unknown')
+        
+        # Check if email already exists (from regular registration)
+        if users_collection.find_one({'email': email}):
+            return jsonify({'message': 'Email already registered. Please login with password.'}), 409
+        
+        # Create new user with incomplete profile
+        new_user = {
+            'email': email,
+            'firstName': first_name,
+            'lastName': last_name,
+            'role': 'patient',
+            'provider': provider,
+            'providerId': firebase_uid,
+            'profilePicture': profile_picture,
+            'isProfileComplete': False,
+            'createdAt': datetime.datetime.utcnow(),
+            'updatedAt': datetime.datetime.utcnow()
+        }
+        
+        result = users_collection.insert_one(new_user)
+        
+        # Generate token
+        token = jwt.encode({
+            'user_id': str(result.inserted_id),
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+        
+        return jsonify({
+            'message': 'User created successfully',
+            'token': token,
+            'user': {
+                'id': str(result.inserted_id),
+                'email': email,
+                'firstName': first_name,
+                'lastName': last_name,
+                'role': 'patient',
+                'isProfileComplete': False
+            }
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'message': 'Firebase authentication failed', 'error': str(e)}), 500
+
+@app.route('/api/auth/complete-profile', methods=['POST'])
+@token_required
+def complete_profile(current_user):
+    try:
+        data = request.get_json()
+        
+        # Check if profile is already complete
+        if current_user.get('isProfileComplete', False):
+            return jsonify({'message': 'Profile is already complete'}), 400
+        
+        # Validate required fields
+        required_fields = ['therapyType', 'patientType']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'message': f'{field} is required'}), 400
+        
+        therapy_type = data['therapyType']
+        patient_type = data['patientType']
+        
+        # Prepare update data
+        update_data = {
+            'therapyType': therapy_type,
+            'patientType': patient_type,
+            'isProfileComplete': True,
+            'updatedAt': datetime.datetime.utcnow()
+        }
+        
+        # Add therapy-specific fields
+        if therapy_type == 'speech' and patient_type == 'child':
+            # Speech Therapy - Pediatric Patient
+            child_required = ['childFirstName', 'childLastName', 'childDateOfBirth', 'childGender']
+            parent_required = ['parentFirstName', 'parentLastName', 'parentEmail', 'parentPhone', 'relationshipWithChild']
+            
+            for field in child_required:
+                if field not in data or not data[field]:
+                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+            
+            for field in parent_required:
+                if field not in data or not data[field]:
+                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+            
+            update_data['childInfo'] = {
+                'firstName': data['childFirstName'],
+                'lastName': data['childLastName'],
+                'dateOfBirth': data['childDateOfBirth'],
+                'gender': data['childGender']
+            }
+            
+            update_data['parentInfo'] = {
+                'firstName': data['parentFirstName'],
+                'lastName': data['parentLastName'],
+                'email': data['parentEmail'],
+                'phone': data['parentPhone'],
+                'relationship': data['relationshipWithChild']
+            }
+        
+        elif therapy_type == 'physical':
+            # Physical Therapy - Stroke Patient
+            patient_required = ['patientFirstName', 'patientLastName', 'patientGender']
+            
+            for field in patient_required:
+                if field not in data or not data[field]:
+                    return jsonify({'message': f'{field} is required for physical therapy'}), 400
+            
+            update_data['patientInfo'] = {
+                'firstName': data['patientFirstName'],
+                'lastName': data['patientLastName'],
+                'gender': data['patientGender']
+            }
+        
+        # Update user profile
+        users_collection.update_one(
+            {'_id': current_user['_id']},
+            {'$set': update_data}
+        )
+        
+        # Get updated user
+        updated_user = users_collection.find_one({'_id': current_user['_id']})
+        
+        return jsonify({
+            'message': 'Profile completed successfully',
+            'user': {
+                'id': str(updated_user['_id']),
+                'email': updated_user['email'],
+                'firstName': updated_user['firstName'],
+                'lastName': updated_user['lastName'],
+                'role': updated_user.get('role', 'patient'),
+                'isProfileComplete': True,
+                'therapyType': updated_user['therapyType'],
+                'patientType': updated_user['patientType']
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': 'Profile completion failed', 'error': str(e)}), 500
 
 @app.route('/api/user', methods=['GET'])
 @token_required

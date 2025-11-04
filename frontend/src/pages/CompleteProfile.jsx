@@ -1,18 +1,12 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/api';
-import { signInWithGoogle, signInWithFacebook } from '../services/firebase';
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './Auth.css';
 
-function Register({ onLogin }) {
+function CompleteProfile({ onLogin }) {
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
     therapyType: '',
     patientType: '',
     // Pediatric Speech Therapy fields
@@ -31,12 +25,36 @@ function Register({ onLogin }) {
     patientGender: '',
   });
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [copyParentInfo, setCopyParentInfo] = useState(false);
   const [copyPatientInfo, setCopyPatientInfo] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
   const navigate = useNavigate();
   const toast = useToast();
+
+  useEffect(() => {
+    // Get stored user info from OAuth login
+    const storedUser = authService.getStoredUser();
+    if (!storedUser) {
+      navigate('/register');
+      return;
+    }
+    
+    if (storedUser.isProfileComplete) {
+      navigate('/therapy-selection');
+      return;
+    }
+
+    setUserInfo(storedUser);
+    
+    // Pre-fill with user info from OAuth
+    setFormData(prev => ({
+      ...prev,
+      parentEmail: storedUser.email,
+      parentFirstName: storedUser.firstName,
+      parentLastName: storedUser.lastName,
+    }));
+  }, [navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -44,19 +62,18 @@ function Register({ onLogin }) {
       [e.target.name]: e.target.value,
     });
     setError('');
-    setSuccess('');
   };
 
   const handleCopyParentInfo = (e) => {
     const checked = e.target.checked;
     setCopyParentInfo(checked);
     
-    if (checked) {
+    if (checked && userInfo) {
       setFormData(prev => ({
         ...prev,
-        parentFirstName: prev.firstName,
-        parentLastName: prev.lastName,
-        parentEmail: prev.email,
+        parentFirstName: userInfo.firstName,
+        parentLastName: userInfo.lastName,
+        parentEmail: userInfo.email,
       }));
     } else {
       setFormData(prev => ({
@@ -72,11 +89,11 @@ function Register({ onLogin }) {
     const checked = e.target.checked;
     setCopyPatientInfo(checked);
     
-    if (checked) {
+    if (checked && userInfo) {
       setFormData(prev => ({
         ...prev,
-        patientFirstName: prev.firstName,
-        patientLastName: prev.lastName,
+        patientFirstName: userInfo.firstName,
+        patientLastName: userInfo.lastName,
       }));
     } else {
       setFormData(prev => ({
@@ -91,25 +108,6 @@ function Register({ onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setSuccess('');
-
-    // Validate passwords match
-    if (formData.password !== formData.confirmPassword) {
-      const errorMsg = 'Passwords do not match';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      setLoading(false);
-      return;
-    }
-
-    // Validate password length
-    if (formData.password.length < 6) {
-      const errorMsg = 'Password must be at least 6 characters long';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      setLoading(false);
-      return;
-    }
 
     // Validate therapy type and patient type
     if (!formData.therapyType) {
@@ -158,24 +156,23 @@ function Register({ onLogin }) {
     }
 
     try {
-      const { confirmPassword, ...registerData } = formData;
-      await authService.register(registerData);
+      const response = await authService.completeProfile(formData);
       
-      // Clear token and user data from localStorage (don't auto-login)
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
-      // Show success message
-      const successMsg = 'Registration successful! Please login with your credentials.';
-      setSuccess(successMsg);
-      toast.success(successMsg, 4000);
-      
-      // Redirect to login page after 2 seconds
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
+      // Backend returns { message, user } on success
+      if (response.user) {
+        toast.success('Profile completed successfully!');
+        // Update authentication state
+        if (onLogin) {
+          onLogin();
+        }
+        navigate('/therapy-selection');
+      } else {
+        const errorMsg = response.message || 'Failed to complete profile';
+        setError(errorMsg);
+        toast.error(errorMsg);
+      }
     } catch (err) {
-      const errorMsg = err.response?.data?.message || 'Registration failed. Please try again.';
+      const errorMsg = err.response?.data?.message || 'Failed to complete profile. Please try again.';
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -183,107 +180,9 @@ function Register({ onLogin }) {
     }
   };
 
-  // Handle Google Sign-In
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    setError('');
-    
-    const result = await signInWithGoogle();
-    
-    if (result.success) {
-      const user = result.user;
-      
-      try {
-        const response = await authService.firebaseAuth({
-          firebaseToken: result.token,
-          email: user.email,
-          firstName: user.displayName?.split(' ')[0] || '',
-          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
-          profilePicture: user.photoURL,
-          provider: 'google',
-          providerId: user.uid
-        });
-
-        // Backend returns token and user on success
-        if (response.token && response.user) {
-          // Update authentication state
-          if (onLogin) onLogin();
-          
-          // Check if profile is complete
-          if (!response.user.isProfileComplete) {
-            toast.success('Account created! Please complete your profile.');
-            navigate('/complete-profile');
-          } else {
-            toast.success('Successfully signed in with Google!');
-            navigate('/therapy-selection');
-          }
-        } else {
-          setError(response.message || 'Authentication failed');
-          toast.error(response.message || 'Authentication failed');
-        }
-      } catch (err) {
-        const errorMsg = err.response?.data?.message || 'Failed to authenticate with server';
-        setError(errorMsg);
-        toast.error(errorMsg);
-      }
-    } else {
-      setError(result.error);
-      toast.error(result.error);
-    }
-    
-    setLoading(false);
-  };
-
-  // Handle Facebook Sign-In
-  const handleFacebookSignIn = async () => {
-    setLoading(true);
-    setError('');
-    
-    const result = await signInWithFacebook();
-    
-    if (result.success) {
-      const user = result.user;
-      
-      try {
-        const response = await authService.firebaseAuth({
-          firebaseToken: result.token,
-          email: user.email,
-          firstName: user.displayName?.split(' ')[0] || '',
-          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
-          profilePicture: user.photoURL,
-          provider: 'facebook',
-          providerId: user.uid
-        });
-
-        // Backend returns token and user on success
-        if (response.token && response.user) {
-          // Update authentication state
-          if (onLogin) onLogin();
-          
-          // Check if profile is complete
-          if (!response.user.isProfileComplete) {
-            toast.success('Account created! Please complete your profile.');
-            navigate('/complete-profile');
-          } else {
-            toast.success('Successfully signed in with Facebook!');
-            navigate('/therapy-selection');
-          }
-        } else {
-          setError(response.message || 'Authentication failed');
-          toast.error(response.message || 'Authentication failed');
-        }
-      } catch (err) {
-        const errorMsg = err.response?.data?.message || 'Failed to authenticate with server';
-        setError(errorMsg);
-        toast.error(errorMsg);
-      }
-    } else {
-      setError(result.error);
-      toast.error(result.error);
-    }
-    
-    setLoading(false);
-  };
+  if (!userInfo) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="auth-page">
@@ -293,10 +192,6 @@ function Register({ onLogin }) {
           <div className="auth-nav-left">
             <img src={images.logo} alt="CVAPed Logo" className="auth-nav-logo" />
             <img src={images.cvacareText} alt="CVAPed" className="auth-nav-text" />
-          </div>
-          <div className="auth-nav-right">
-            <Link to="/" className="auth-nav-link">Home</Link>
-            <Link to="/login" className="auth-nav-btn">Login</Link>
           </div>
         </div>
       </nav>
@@ -309,136 +204,24 @@ function Register({ onLogin }) {
             <div className="auth-image-wrapper">
               <img src={images.imageBig} alt="CVAPed" className="auth-main-image" />
               <div className="auth-image-overlay">
-                <h2>Join CVAPed Today</h2>
-                <p>Start your journey to better health and wellness management</p>
+                <h2>Complete Your Profile</h2>
+                <p>Just a few more details to personalize your experience</p>
               </div>
             </div>
           </div>
 
-          {/* Right Side - Register Form */}
+          {/* Right Side - Profile Completion Form */}
           <div className="auth-right">
             <div className="auth-form-wrapper">
               <div className="auth-form-header">
-                <h1>Create Account</h1>
-                <p>Sign up to get started with CVAPed.</p>
+                <h1>Welcome, {userInfo.firstName}!</h1>
+                <p>Please complete your profile to continue</p>
               </div>
 
-              {/* OAuth Buttons */}
-              <div className="oauth-section">
-                <button
-                  type="button"
-                  className="oauth-btn google-btn"
-                  onClick={handleGoogleSignIn}
-                  disabled={loading}
-                >
-                  <svg className="oauth-icon" viewBox="0 0 24 24" width="20" height="20">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  Continue with Google
-                </button>
-
-                {/* Facebook Login - Hidden until app review complete */}
-                {/* <button
-                  type="button"
-                  className="oauth-btn facebook-btn"
-                  onClick={handleFacebookSignIn}
-                  disabled={loading}
-                >
-                  <svg className="oauth-icon" viewBox="0 0 24 24" width="20" height="20">
-                    <path fill="#fff" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                  Continue with Facebook
-                </button> */}
-              </div>
-
-              <div className="auth-divider">
-                <span>OR</span>
-              </div>
+              {error && <div className="error-alert">{error}</div>}
 
               <form className="auth-form" onSubmit={handleSubmit}>
-                {/* Step 1: Basic Account Information */}
-                <div className="form-section">
-                  <h3 className="form-section-title">Account Information</h3>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="firstName">First Name</label>
-                      <input
-                        type="text"
-                        id="firstName"
-                        name="firstName"
-                        value={formData.firstName}
-                        onChange={handleChange}
-                        required
-                        placeholder="First name"
-                        autoComplete="given-name"
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="lastName">Last Name</label>
-                      <input
-                        type="text"
-                        id="lastName"
-                        name="lastName"
-                        value={formData.lastName}
-                        onChange={handleChange}
-                        required
-                        placeholder="Last name"
-                        autoComplete="family-name"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="email">Email Address</label>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                      placeholder="Enter your email"
-                      autoComplete="email"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="password">Password</label>
-                    <input
-                      type="password"
-                      id="password"
-                      name="password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      required
-                      placeholder="Enter your password"
-                      minLength="6"
-                      autoComplete="new-password"
-                    />
-                    <small className="form-hint">Minimum 6 characters</small>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="confirmPassword">Confirm Password</label>
-                    <input
-                      type="password"
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      required
-                      placeholder="Confirm your password"
-                      minLength="6"
-                      autoComplete="new-password"
-                    />
-                  </div>
-                </div>
-
-                {/* Step 2: Therapy Type Selection */}
+                {/* Step 1: Therapy Type Selection */}
                 <div className="form-section">
                   <h3 className="form-section-title">Therapy Type</h3>
                   <div className="form-group">
@@ -476,7 +259,7 @@ function Register({ onLogin }) {
                   </div>
                 </div>
 
-                {/* Step 3: Patient Type Selection */}
+                {/* Step 2: Patient Type Selection */}
                 {formData.therapyType && (
                   <div className="form-section">
                     <h3 className="form-section-title">Who is this account for?</h3>
@@ -600,7 +383,7 @@ function Register({ onLogin }) {
                             checked={copyParentInfo}
                             onChange={handleCopyParentInfo}
                           />
-                          <span>Use my registration information as parent info</span>
+                          <span>Use my account information as parent info</span>
                         </label>
                       </div>
 
@@ -744,16 +527,8 @@ function Register({ onLogin }) {
                 )}
 
                 <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Creating Account...' : 'Create Account'}
+                  {loading ? 'Completing Profile...' : 'Complete Profile'}
                 </button>
-
-                <div className="auth-divider">
-                  <span>Already have an account?</span>
-                </div>
-
-                <Link to="/login" className="btn btn-secondary">
-                  Login
-                </Link>
               </form>
             </div>
           </div>
@@ -766,15 +541,10 @@ function Register({ onLogin }) {
           <div className="footer-left">
             <p>&copy; 2025 CVAPed. All rights reserved.</p>
           </div>
-          <div className="footer-right">
-            <a href="#privacy">Privacy Policy</a>
-            <a href="#terms">Terms of Service</a>
-            <a href="#contact">Contact Us</a>
-          </div>
         </div>
       </footer>
     </div>
   );
 }
 
-export default Register;
+export default CompleteProfile;

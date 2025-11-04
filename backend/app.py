@@ -31,6 +31,8 @@ if not MONGO_URI:
 client = MongoClient(MONGO_URI)
 db = client['CVACare']
 users_collection = db['users']
+articulation_progress_collection = db['articulation_progress']
+articulation_trials_collection = db['articulation_trials']
 
 # Token required decorator
 def token_required(f):
@@ -505,6 +507,10 @@ def record_articulation(current_user):
         
         audio_file = request.files['audio']
         target = request.form.get('target', '').strip()
+        sound_id = request.form.get('sound_id', '').strip()
+        level = int(request.form.get('level', 1))
+        item_index = int(request.form.get('item_index', 0))
+        trial = int(request.form.get('trial', 1))
         
         if not target:
             return jsonify({'success': False, 'message': 'Target text is required'}), 400
@@ -587,6 +593,27 @@ def record_articulation(current_user):
             
             print(f"Azure Assessment - Target: '{target}' | Said: '{transcription}' | Score: {computed_score:.2f}")
             print(f"Detailed: Accuracy={accuracy:.2f}, Pronunciation={pronunciation:.2f}, Completeness={completeness:.2f}, Fluency={fluency:.2f}")
+            
+            # Save trial data to database
+            trial_data = {
+                'user_id': str(current_user['_id']),
+                'sound_id': sound_id,
+                'level': level,
+                'item_index': item_index,
+                'target': target,
+                'trial': trial,
+                'scores': {
+                    'accuracy_score': round(accuracy, 3),
+                    'pronunciation_score': round(pronunciation, 3),
+                    'completeness_score': round(completeness, 3),
+                    'fluency_score': round(fluency, 3),
+                    'computed_score': round(computed_score, 3)
+                },
+                'transcription': transcription,
+                'feedback': feedback,
+                'timestamp': datetime.datetime.utcnow()
+            }
+            articulation_trials_collection.insert_one(trial_data)
             
             return jsonify({
                 'success': True,
@@ -682,29 +709,171 @@ def get_exercises(current_user, sound_id, level):
     except Exception as e:
         return jsonify({'success': False, 'message': 'Failed to get exercises', 'error': str(e)}), 500
 
-@app.route('/api/articulation/progress/<patient_id>/<sound_id>', methods=['GET'])
+@app.route('/api/articulation/progress', methods=['POST'])
 @token_required
-def get_progress(current_user, patient_id, sound_id):
-    """Mock endpoint for getting patient progress"""
+def save_progress(current_user):
+    """Save user's articulation progress"""
     try:
-        # Mock progress data (replace with MongoDB queries)
+        data = request.get_json()
+        
+        user_id = str(current_user['_id'])
+        sound_id = data.get('sound_id')
+        level = data.get('level')
+        item_index = data.get('item_index')
+        completed = data.get('completed', False)
+        average_score = data.get('average_score', 0)
+        trial_details = data.get('trial_details', [])
+        
+        # Find or create progress document
+        progress_doc = articulation_progress_collection.find_one({
+            'user_id': user_id,
+            'sound_id': sound_id
+        })
+        
+        if not progress_doc:
+            # Create new progress document
+            progress_doc = {
+                'user_id': user_id,
+                'sound_id': sound_id,
+                'levels': {},
+                'created_at': datetime.datetime.utcnow(),
+                'updated_at': datetime.datetime.utcnow()
+            }
+        
+        # Update level progress
+        level_key = str(level)
+        if level_key not in progress_doc.get('levels', {}):
+            progress_doc.setdefault('levels', {})[level_key] = {'items': {}}
+        
+        # Update item progress
+        item_key = str(item_index)
+        progress_doc['levels'][level_key]['items'][item_key] = {
+            'completed': completed,
+            'average_score': average_score,
+            'trial_details': trial_details,
+            'last_attempt': datetime.datetime.utcnow()
+        }
+        
+        # Check if level is complete (all items completed)
+        level_data = progress_doc['levels'][level_key]
+        # Determine total items for this level (1 for level 1, 3 for level 2, 2 for others)
+        if level == 1:
+            total_items = 1
+        elif level == 2:
+            total_items = 3
+        else:
+            total_items = 2
+            
+        completed_items = sum(1 for item in level_data.get('items', {}).values() if item.get('completed', False))
+        level_data['is_complete'] = completed_items >= total_items
+        level_data['completed_items'] = completed_items
+        level_data['total_items'] = total_items
+        
+        progress_doc['updated_at'] = datetime.datetime.utcnow()
+        
+        # Upsert progress document
+        articulation_progress_collection.update_one(
+            {'user_id': user_id, 'sound_id': sound_id},
+            {'$set': progress_doc},
+            upsert=True
+        )
+        
         return jsonify({
             'success': True,
-            'patient_id': patient_id,
-            'sound_id': sound_id,
-            'current_level': 1,
-            'level_scores': {
-                '1': None,
-                '2': None,
-                '3': None,
-                '4': None,
-                '5': None
-            },
-            'total_attempts': 0
+            'message': 'Progress saved successfully',
+            'progress': progress_doc
         }), 200
         
     except Exception as e:
+        import traceback
+        print(f"Error saving progress: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+
+@app.route('/api/articulation/progress/<sound_id>', methods=['GET'])
+@token_required
+def get_progress(current_user, sound_id):
+    """Get user's articulation progress for a specific sound"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        progress_doc = articulation_progress_collection.find_one({
+            'user_id': user_id,
+            'sound_id': sound_id
+        })
+        
+        if not progress_doc:
+            # Return empty progress
+            return jsonify({
+                'success': True,
+                'sound_id': sound_id,
+                'current_level': 1,
+                'current_item': 0,
+                'levels': {},
+                'has_progress': False
+            }), 200
+        
+        # Determine current level and item
+        current_level = 1
+        current_item = 0
+        
+        # Find the first incomplete level
+        for level_num in range(1, 6):
+            level_key = str(level_num)
+            level_data = progress_doc.get('levels', {}).get(level_key, {})
+            
+            if not level_data.get('is_complete', False):
+                current_level = level_num
+                
+                # Find first incomplete item in this level
+                items = level_data.get('items', {})
+                for item_idx in range(10):  # Max 10 items per level
+                    item_key = str(item_idx)
+                    if item_key not in items or not items[item_key].get('completed', False):
+                        current_item = item_idx
+                        break
+                break
+        
+        # Remove MongoDB _id from response
+        if '_id' in progress_doc:
+            del progress_doc['_id']
+        
+        return jsonify({
+            'success': True,
+            'sound_id': sound_id,
+            'current_level': current_level,
+            'current_item': current_item,
+            'levels': progress_doc.get('levels', {}),
+            'has_progress': True
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error getting progress: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+
+@app.route('/api/articulation/progress/all', methods=['GET'])
+@token_required
+def get_all_progress(current_user):
+    """Get user's progress across all sounds"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        all_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        
+        # Remove MongoDB _id from each document
+        for progress in all_progress:
+            if '_id' in progress:
+                del progress['_id']
+        
+        return jsonify({
+            'success': True,
+            'progress': all_progress
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Failed to get all progress', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { images } from '../assets/images';
 import WaveSurfer from 'wavesurfer.js';
+import { articulationService } from '../services/api';
 import './ArticulationExercise.css';
 
 // Exercise data for all 5 sounds
@@ -77,6 +78,7 @@ function ArticulationExercise({ onLogout }) {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [averageScore, setAverageScore] = useState(null);
   const [levelProgress, setLevelProgress] = useState({ 1: false, 2: false, 3: false, 4: false, 5: false });
+  const [isLoadingProgress, setIsLoadingProgress] = useState(true);
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -88,7 +90,38 @@ function ArticulationExercise({ onLogout }) {
   const currentTarget = currentLevelData?.items[currentItem];
   const totalItems = currentLevelData?.items.length || 3;
   const maxTrials = 3;
-  const passThreshold = 0.50;
+  const passThreshold = 0.80;
+
+  // Load progress when component mounts
+  useEffect(() => {
+    const loadProgress = async () => {
+      try {
+        const progressData = await articulationService.getProgress(soundId);
+        
+        if (progressData.success && progressData.has_progress) {
+          console.log('Loaded progress:', progressData);
+          
+          // Set current level and item from saved progress
+          setCurrentLevel(progressData.current_level);
+          setCurrentItem(progressData.current_item);
+          
+          // Update level progress
+          const newLevelProgress = { 1: false, 2: false, 3: false, 4: false, 5: false };
+          Object.keys(progressData.levels || {}).forEach(levelKey => {
+            const levelNum = parseInt(levelKey);
+            newLevelProgress[levelNum] = progressData.levels[levelKey].is_complete || false;
+          });
+          setLevelProgress(newLevelProgress);
+        }
+      } catch (error) {
+        console.error('Error loading progress:', error);
+      } finally {
+        setIsLoadingProgress(false);
+      }
+    };
+
+    loadProgress();
+  }, [soundId]);
 
   useEffect(() => {
     if (waveformRef.current && !waveSurferRef.current) {
@@ -198,6 +231,7 @@ function ArticulationExercise({ onLogout }) {
       formData.append('patient_id', user.id || 'test-patient');
       formData.append('sound_id', soundId);
       formData.append('level', currentLevel);
+      formData.append('item_index', currentItem);
       formData.append('target', currentTarget);
       formData.append('trial', currentTrial);
 
@@ -326,7 +360,34 @@ function ArticulationExercise({ onLogout }) {
     }
   };
 
-  const handleNextItem = () => {
+  const saveProgressToServer = async (completed = false) => {
+    try {
+      await articulationService.saveProgress({
+        sound_id: soundId,
+        level: currentLevel,
+        item_index: currentItem,
+        completed: completed,
+        average_score: averageScore,
+        trial_details: trialDetails.map(d => ({
+          trial: d.trial,
+          computed_score: d.computed_score,
+          pronunciation_score: d.pronunciation_score,
+          accuracy_score: d.accuracy_score,
+          completeness_score: d.completeness_score,
+          fluency_score: d.fluency_score,
+          transcription: d.transcription
+        }))
+      });
+      console.log('Progress saved successfully');
+    } catch (error) {
+      console.error('Error saving progress:', error);
+    }
+  };
+
+  const handleNextItem = async () => {
+    // Save progress for current item before moving
+    await saveProgressToServer(averageScore >= passThreshold);
+
     if (currentItem < totalItems - 1) {
       setCurrentItem(currentItem + 1);
       resetTrials();
@@ -371,6 +432,24 @@ function ArticulationExercise({ onLogout }) {
 
   if (!soundData) {
     return <div>Sound not found</div>;
+  }
+
+  if (isLoadingProgress) {
+    return (
+      <div className="articulation-exercise-page">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          flexDirection: 'column',
+          gap: '1rem'
+        }}>
+          <div style={{ fontSize: '1.5rem', color: '#2c3e50' }}>Loading your progress...</div>
+          <div style={{ fontSize: '1rem', color: '#6b7280' }}>Please wait</div>
+        </div>
+      </div>
+    );
   }
 
   return (

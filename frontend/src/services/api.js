@@ -77,4 +77,22 @@ export const authService = {
   },
 };
 
+// Articulation Progress API
+export const articulationService = {
+  saveProgress: async (progressData) => {
+    const response = await api.post('/articulation/progress', progressData);
+    return response.data;
+  },
+
+  getProgress: async (soundId) => {
+    const response = await api.get(`/articulation/progress/${soundId}`);
+    return response.data;
+  },
+
+  getAllProgress: async () => {
+    const response = await api.get('/articulation/progress/all');
+    return response.data;
+  },
+};
+
 export default api;

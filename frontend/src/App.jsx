@@ -12,6 +12,7 @@ import SpeechTherapy from './pages/SpeechTherapy';
 import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
 import LanguageTherapy from './pages/LanguageTherapy';
+import FluencyTherapy from './pages/FluencyTherapy';
 import Profile from './pages/Profile';
 import './App.css';
 
@@ -109,6 +110,12 @@ function App() {
               path="/language-therapy" 
               element={
                 isAuthenticated ? <LanguageTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/fluency-therapy" 
+              element={
+                isAuthenticated ? <FluencyTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

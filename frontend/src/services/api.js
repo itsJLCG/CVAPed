@@ -121,4 +121,17 @@ export const languageService = {
   },
 };
 
+// Fluency Therapy Progress API
+export const fluencyService = {
+  saveProgress: async (progressData) => {
+    const response = await api.post('/fluency/progress', progressData);
+    return response.data;
+  },
+
+  getProgress: async () => {
+    const response = await api.get('/fluency/progress');
+    return response.data;
+  },
+};
+
 export default api;

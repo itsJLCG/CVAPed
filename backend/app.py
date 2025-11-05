@@ -14,6 +14,11 @@ from firebase_admin import credentials, auth
 # Load environment variables from .env file
 load_dotenv()
 
+# Helper function for timezone-aware UTC datetime
+def utc_now():
+    """Returns current UTC time as timezone-aware datetime"""
+    return datetime.datetime.now(datetime.timezone.utc)
+
 # Initialize Firebase Admin SDK
 cred = credentials.Certificate('cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json')
 firebase_admin.initialize_app(cred)
@@ -1262,6 +1267,385 @@ def get_all_language_progress(current_user):
         
     except Exception as e:
         return jsonify({'success': False, 'message': 'Failed to get all language progress', 'error': str(e)}), 500
+
+# Fluency Therapy Collections
+fluency_progress_collection = db['fluency_progress']
+fluency_trials_collection = db['fluency_trials']
+
+@app.route('/api/fluency/assess', methods=['POST'])
+@token_required
+def assess_fluency(current_user):
+    """Assess fluency using Azure Speech-to-Text with word-level timing"""
+    try:
+        import azure.cognitiveservices.speech as speechsdk
+        import tempfile
+        import os as os_module
+        import time
+        
+        # Get audio file
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            return jsonify({'success': False, 'message': 'No audio file provided'}), 400
+        
+        # Get exercise parameters
+        target_text = request.form.get('target_text', '')
+        expected_duration = float(request.form.get('expected_duration', 10))
+        exercise_type = request.form.get('exercise_type', '')
+        
+        # Azure Speech Config
+        speech_key = os.getenv('AZURE_SPEECH_KEY')
+        service_region = os.getenv('AZURE_SPEECH_REGION')
+        
+        if not speech_key or not service_region or speech_key == 'YOUR_AZURE_SPEECH_KEY_HERE':
+            # Return mock data if Azure is not configured
+            print("Warning: Azure not configured, returning mock fluency data")
+            return jsonify({
+                'success': True,
+                'transcription': target_text,
+                'speaking_rate': 120,
+                'fluency_score': 85,
+                'pause_count': 1,
+                'disfluencies': 0,
+                'duration': expected_duration,
+                'word_count': len(target_text.split()),
+                'feedback': 'Good job! (Note: Using mock data - configure Azure for real assessment)',
+                'pauses': [],
+                'words': []
+            }), 200
+        
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+        speech_config.speech_recognition_language = "en-US"
+        speech_config.request_word_level_timestamps()  # Enable word timing
+        
+        # Save audio to temporary file (same simple approach as language therapy)
+        audio_bytes = audio_file.read()
+        
+        # Create temporary file for WAV audio
+        temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+        temp_wav_path = temp_wav.name
+        temp_wav.close()
+        
+        try:
+            # Write the WAV audio directly (frontend already converts to WAV)
+            with open(temp_wav_path, 'wb') as f:
+                f.write(audio_bytes)
+            
+            print(f"Fluency assessment - Audio file: {temp_wav_path}, size: {len(audio_bytes)} bytes")
+            
+            # Create Azure audio config
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_wav_path)
+            speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+            
+            # Perform speech recognition with detailed results
+            result = speech_recognizer.recognize_once_async().get()
+            
+            # Release resources
+            del speech_recognizer
+            del audio_config
+            
+            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                transcription = result.text
+                
+                # Get detailed timing information
+                import json
+                words = []
+                pauses = []
+                disfluencies = 0
+                
+                try:
+                    detailed_result = json.loads(result.json)
+                    
+                    # Extract word timings
+                    if 'NBest' in detailed_result and len(detailed_result['NBest']) > 0:
+                        nbest = detailed_result['NBest'][0]
+                        if 'Words' in nbest:
+                            word_list = nbest['Words']
+                except Exception as json_error:
+                    print(f"Warning: Could not parse detailed results: {json_error}")
+                    # Fall back to simple word count from transcription
+                    word_list = []
+                
+                if word_list:
+                    prev_end_time = 0
+                    prev_word = None
+                    
+                    for i, word_info in enumerate(word_list):
+                        word = word_info.get('Word', '')
+                        offset = word_info.get('Offset', 0) / 10000000  # Convert to seconds
+                        duration = word_info.get('Duration', 0) / 10000000
+                        
+                        words.append({
+                            'word': word,
+                            'offset': offset,
+                            'duration': duration
+                        })
+                        
+                        # Detect pauses (silence > 300ms between words)
+                        if i > 0:
+                            pause_duration = offset - prev_end_time
+                            if pause_duration > 0.3:  # 300ms threshold
+                                pauses.append({
+                                    'position': i,
+                                    'duration': pause_duration
+                                })
+                        
+                        # Detect repetitions (same word repeated consecutively)
+                        if prev_word and word.lower() == prev_word.lower():
+                            disfluencies += 1
+                        
+                        # Detect prolongations (word duration > 1.5x expected)
+                        expected_word_duration = len(word) * 0.1  # Rough estimate
+                        if duration > expected_word_duration * 1.5:
+                            disfluencies += 1
+                        
+                        prev_end_time = offset + duration
+                        prev_word = word
+                
+                # Calculate metrics
+                total_words = len(words) if words else len(transcription.split())
+                total_duration = words[-1]['offset'] + words[-1]['duration'] if words else expected_duration
+                
+                # Speaking rate (WPM)
+                speaking_rate = int((total_words / total_duration) * 60) if total_duration > 0 else 0
+                
+                # Pause count
+                pause_count = len(pauses)
+                
+                # Calculate fluency score (0-100)
+                # Factors: speaking rate, pauses, disfluencies
+                
+                # Ideal speaking rate: 120-150 WPM
+                rate_score = 100
+                if speaking_rate < 80 or speaking_rate > 180:
+                    rate_score = max(0, 100 - abs(speaking_rate - 120))
+                
+                # Pause penalty: -5 points per excessive pause
+                pause_penalty = min(30, pause_count * 5)
+                
+                # Disfluency penalty: -10 points per disfluency
+                disfluency_penalty = min(40, disfluencies * 10)
+                
+                fluency_score = max(0, min(100, rate_score - pause_penalty - disfluency_penalty))
+                
+                # Generate feedback
+                if fluency_score >= 90:
+                    feedback = "Excellent fluency! Your speech was smooth and natural."
+                elif fluency_score >= 75:
+                    feedback = "Good fluency! Keep practicing to improve smoothness."
+                elif fluency_score >= 60:
+                    feedback = "Fair fluency. Try to reduce pauses and speak more steadily."
+                else:
+                    feedback = "Keep practicing. Focus on breathing and speaking slowly."
+                
+                print(f"Fluency Assessment Results:")
+                print(f"  Transcription: {transcription}")
+                print(f"  Words: {total_words}, Duration: {total_duration:.2f}s")
+                print(f"  Speaking Rate: {speaking_rate} WPM")
+                print(f"  Pauses: {pause_count}, Disfluencies: {disfluencies}")
+                print(f"  Fluency Score: {fluency_score}")
+                
+                # Clean up temp file
+                try:
+                    if os.path.exists(temp_wav_path):
+                        os.unlink(temp_wav_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file: {cleanup_error}")
+                
+                return jsonify({
+                    'success': True,
+                    'transcription': transcription,
+                    'speaking_rate': speaking_rate,
+                    'fluency_score': fluency_score,
+                    'pause_count': pause_count,
+                    'disfluencies': disfluencies,
+                    'duration': round(total_duration, 1),
+                    'word_count': total_words,
+                    'feedback': feedback,
+                    'pauses': pauses[:5],  # Return first 5 pauses for analysis
+                    'words': words[:20]  # Return first 20 words for analysis
+                }), 200
+            
+            elif result.reason == speechsdk.ResultReason.NoMatch:
+                try:
+                    if os.path.exists(temp_wav_path):
+                        os.unlink(temp_wav_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file: {cleanup_error}")
+                    
+                return jsonify({
+                    'success': False,
+                    'message': 'No speech could be recognized. Please try speaking more clearly.'
+                }), 400
+            
+            else:
+                try:
+                    if os.path.exists(temp_wav_path):
+                        os.unlink(temp_wav_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file: {cleanup_error}")
+                    
+                return jsonify({
+                    'success': False,
+                    'message': 'Speech recognition failed. Please try again.'
+                }), 400
+                
+        except Exception as e:
+            try:
+                if os.path.exists(temp_wav_path):
+                    os.unlink(temp_wav_path)
+            except Exception as cleanup_error:
+                print(f"Warning: Could not delete temp file: {cleanup_error}")
+            raise e
+            
+    except Exception as e:
+        import traceback
+        print(f"Error assessing fluency: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Assessment failed', 'error': str(e)}), 500
+
+@app.route('/api/fluency/progress', methods=['POST'])
+@token_required
+def save_fluency_progress(current_user):
+    """Save user's fluency therapy progress"""
+    try:
+        data = request.get_json()
+        
+        user_id = str(current_user['_id'])
+        level = data.get('level')
+        exercise_index = data.get('exercise_index')
+        exercise_id = data.get('exercise_id')
+        speaking_rate = data.get('speaking_rate', 0)
+        fluency_score = data.get('fluency_score', 0)
+        pause_count = data.get('pause_count', 0)
+        disfluencies = data.get('disfluencies', 0)
+        passed = data.get('passed', False)
+        
+        # Find or create progress document
+        progress_doc = fluency_progress_collection.find_one({'user_id': user_id})
+        
+        if not progress_doc:
+            progress_doc = {
+                'user_id': user_id,
+                'levels': {},
+                'created_at': utc_now(),
+                'updated_at': utc_now()
+            }
+        
+        # Update level progress
+        level_key = str(level)
+        if level_key not in progress_doc.get('levels', {}):
+            progress_doc.setdefault('levels', {})[level_key] = {'exercises': {}}
+        
+        # Update exercise progress
+        exercise_key = str(exercise_index)
+        progress_doc['levels'][level_key]['exercises'][exercise_key] = {
+            'exercise_id': exercise_id,
+            'completed': True,
+            'speaking_rate': speaking_rate,
+            'fluency_score': fluency_score,
+            'pause_count': pause_count,
+            'disfluencies': disfluencies,
+            'passed': passed,
+            'last_attempt': utc_now()
+        }
+        
+        progress_doc['updated_at'] = utc_now()
+        
+        # Save trial data
+        trial_data = {
+            'user_id': user_id,
+            'level': level,
+            'exercise_index': exercise_index,
+            'exercise_id': exercise_id,
+            'speaking_rate': speaking_rate,
+            'fluency_score': fluency_score,
+            'pause_count': pause_count,
+            'disfluencies': disfluencies,
+            'passed': passed,
+            'timestamp': utc_now()
+        }
+        fluency_trials_collection.insert_one(trial_data)
+        
+        # Upsert progress document
+        fluency_progress_collection.update_one(
+            {'user_id': user_id},
+            {'$set': progress_doc},
+            upsert=True
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Fluency progress saved successfully'
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error saving fluency progress: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+
+@app.route('/api/fluency/progress', methods=['GET'])
+@token_required
+def get_fluency_progress(current_user):
+    """Get user's fluency therapy progress"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        progress_doc = fluency_progress_collection.find_one({'user_id': user_id})
+        
+        if not progress_doc:
+            return jsonify({
+                'success': True,
+                'current_level': 1,
+                'current_exercise': 0,
+                'levels': {},
+                'has_progress': False
+            }), 200
+        
+        # Determine current level and exercise
+        current_level = 1
+        current_exercise = 0
+        
+        for level_num in range(1, 6):
+            level_key = str(level_num)
+            level_data = progress_doc.get('levels', {}).get(level_key, {})
+            exercises = level_data.get('exercises', {})
+            
+            if not exercises:
+                current_level = level_num
+                current_exercise = 0
+                break
+            
+            # Find incomplete exercise in this level
+            level_complete = True
+            for ex_idx in range(10):  # Max 10 exercises per level
+                ex_key = str(ex_idx)
+                if ex_key not in exercises:
+                    current_level = level_num
+                    current_exercise = ex_idx
+                    level_complete = False
+                    break
+            
+            if not level_complete:
+                break
+        
+        # Remove MongoDB _id
+        if '_id' in progress_doc:
+            del progress_doc['_id']
+        
+        return jsonify({
+            'success': True,
+            'current_level': current_level,
+            'current_exercise': current_exercise,
+            'levels': progress_doc.get('levels', {}),
+            'has_progress': True
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error getting fluency progress: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

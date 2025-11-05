@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { images } from '../assets/images';
-import { authService, articulationService, languageService } from '../services/api';
+import { authService, articulationService, languageService, fluencyService } from '../services/api';
 import './Profile.css';
 
 function Profile({ onLogout }) {
@@ -9,6 +9,7 @@ function Profile({ onLogout }) {
   const [user, setUser] = useState(null);
   const [allProgress, setAllProgress] = useState([]);
   const [languageProgress, setLanguageProgress] = useState([]);
+  const [fluencyProgress, setFluencyProgress] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
@@ -41,6 +42,12 @@ function Profile({ onLogout }) {
       const languageProgressResponse = await languageService.getAllProgress();
       if (languageProgressResponse.success) {
         setLanguageProgress(languageProgressResponse.progress);
+      }
+
+      // Load fluency therapy progress data
+      const fluencyProgressResponse = await fluencyService.getProgress();
+      if (fluencyProgressResponse.success) {
+        setFluencyProgress(fluencyProgressResponse);
       }
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -428,6 +435,120 @@ function Profile({ onLogout }) {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Fluency Therapy Progress Card */}
+          <div className="profile-card">
+            <div className="card-header">
+              <h2 className="card-title">Fluency Therapy Progress</h2>
+            </div>
+            <div className="card-body">
+              {!fluencyProgress || !fluencyProgress.has_progress ? (
+                <div className="no-progress">
+                  <p>No fluency therapy progress recorded yet.</p>
+                  <p className="no-progress-hint">Start fluency therapy exercises to track your speaking flow!</p>
+                  <button 
+                    onClick={() => navigate('/speech-therapy')} 
+                    className="btn-start-therapy"
+                  >
+                    Start Fluency Therapy
+                  </button>
+                </div>
+              ) : (
+                <div className="fluency-progress-container">
+                  {/* Level Progress */}
+                  <div className="fluency-levels">
+                    {[1, 2, 3, 4, 5].map((levelNum) => {
+                      const levelData = fluencyProgress.levels[String(levelNum)] || {};
+                      const exercises = levelData.exercises || {};
+                      const completedCount = Object.keys(exercises).length;
+                      const totalExercises = levelNum <= 3 ? 5 : (levelNum === 4 ? 3 : 3);
+                      const percentage = Math.round((completedCount / totalExercises) * 100);
+                      const isComplete = completedCount === totalExercises;
+                      const isCurrent = fluencyProgress.current_level === levelNum;
+                      
+                      const levelColors = {
+                        1: '#e8b04e',
+                        2: '#479ac3',
+                        3: '#ce3630',
+                        4: '#8e44ad',
+                        5: '#27ae60'
+                      };
+                      
+                      const levelNames = {
+                        1: 'Breathing & Words',
+                        2: 'Short Phrases',
+                        3: 'Complete Sentences',
+                        4: 'Reading Passages',
+                        5: 'Spontaneous Speech'
+                      };
+                      
+                      return (
+                        <div key={levelNum} className={`fluency-level-item ${isCurrent ? 'current' : ''} ${isComplete ? 'complete' : ''}`}>
+                          <div className="fluency-level-header">
+                            <div className="fluency-level-info">
+                              <div 
+                                className="fluency-level-badge"
+                                style={{ backgroundColor: levelColors[levelNum] }}
+                              >
+                                {isComplete ? '✓' : levelNum}
+                              </div>
+                              <div className="fluency-level-details">
+                                <h3 className="fluency-level-name">
+                                  Level {levelNum}: {levelNames[levelNum]}
+                                </h3>
+                                <p className="fluency-level-stats">
+                                  {completedCount} of {totalExercises} exercises completed
+                                  {isCurrent && !isComplete && ' • Currently practicing'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="fluency-percentage" style={{ color: levelColors[levelNum] }}>
+                              {percentage}%
+                            </div>
+                          </div>
+                          <div className="progress-bar-container">
+                            <div 
+                              className="progress-bar-fill"
+                              style={{ 
+                                width: `${percentage}%`,
+                                backgroundColor: levelColors[levelNum]
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Fluency Stats */}
+                  <div className="fluency-stats">
+                    <div className="fluency-stat">
+                      <span className="stat-icon">🎯</span>
+                      <span className="stat-text">
+                        Level {fluencyProgress.current_level === 6 ? '5 Complete!' : fluencyProgress.current_level}
+                      </span>
+                    </div>
+                    <div className="fluency-stat">
+                      <span className="stat-icon">📈</span>
+                      <span className="stat-text">
+                        {Object.values(fluencyProgress.levels).reduce((total, level) => 
+                          total + Object.keys(level.exercises || {}).length, 0
+                        )} Total Exercises
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => navigate('/fluency-therapy')}
+                    className="btn-continue"
+                    style={{ borderColor: '#667eea', color: '#667eea' }}
+                  >
+                    {fluencyProgress.current_level > 5 ? '✓ Completed!' : 'Continue Practice →'}
+                  </button>
                 </div>
               )}
             </div>

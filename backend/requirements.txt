@@ -7,6 +7,7 @@ python-dotenv==1.0.0
 dnspython
 librosa
 soundfile
+scipy
 pydub
 azure-cognitiveservices-speech
 firebase-admin==7.1.0

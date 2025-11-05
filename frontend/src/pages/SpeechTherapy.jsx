@@ -70,9 +70,8 @@ function SpeechTherapy({ onLogout }) {
       navigate('/articulation');
     } else if (typeId === 'language') {
       navigate('/language-therapy');
-    } else {
-      // TODO: Navigate to fluency page
-      // navigate(`/speech-therapy/${typeId}`);
+    } else if (typeId === 'fluency') {
+      navigate('/fluency-therapy');
     }
   };
 

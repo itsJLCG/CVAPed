@@ -170,6 +170,30 @@ function Landing() {
               <p className="team-role">City Mayor</p>
             </div>
 
+            {/* Medical Team */}
+            <div className="team-card medical">
+              <div className="team-image-placeholder">👤</div>
+              <h3>Dr. Noel Nathaniel C. Napa</h3>
+              <p className="team-credentials">MD, FPARM, DPARM</p>
+              <p className="team-role">Physical Medicine and Rehabilitation Unit</p>
+              <p className="team-position">Head/Physiatrist</p>
+            </div>
+
+            <div className="team-card medical">
+              <div className="team-image-placeholder">👤</div>
+              <h3>Ms. Christine Joy R. Cabardo</h3>
+              <p className="team-credentials">PTRP</p>
+              <p className="team-role">Physical Medicine and Rehabilitation Unit</p>
+              <p className="team-position">Chief Physical Therapist</p>
+            </div>
+
+            {/* Thesis Adviser */}
+            <div className="team-card special">
+              <div className="team-image-placeholder">👤</div>
+              <h3>Sir. Nestor R. Valdez</h3>
+              <p className="team-role">Thesis Adviser</p>
+            </div>
+
             {/* Developers */}
             <div className="team-card">
               <div className="team-image-placeholder">👤</div>
@@ -195,29 +219,7 @@ function Landing() {
               <p className="team-role">Developer</p>
             </div>
 
-            {/* Thesis Adviser */}
-            <div className="team-card special">
-              <div className="team-image-placeholder">👤</div>
-              <h3>Sir. Nestor R. Valdez</h3>
-              <p className="team-role">Thesis Adviser</p>
-            </div>
-
-            {/* Medical Team */}
-            <div className="team-card medical">
-              <div className="team-image-placeholder">👤</div>
-              <h3>Dr. Noel Nathaniel C. Napa</h3>
-              <p className="team-credentials">MD, FPARM, DPARM</p>
-              <p className="team-role">Physical Medicine and Rehabilitation Unit</p>
-              <p className="team-position">Head/Physiatrist</p>
-            </div>
-
-            <div className="team-card medical">
-              <div className="team-image-placeholder">👤</div>
-              <h3>Ms. Christine Joy R. Cabardo</h3>
-              <p className="team-credentials">PTRP</p>
-              <p className="team-role">Physical Medicine and Rehabilitation Unit</p>
-              <p className="team-position">Chief Physical Therapist</p>
-            </div>
+            
           </div>
         </div>
       </section>

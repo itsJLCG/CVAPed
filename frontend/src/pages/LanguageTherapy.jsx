@@ -216,8 +216,9 @@ const languageExercises = {
     description: 'Communication & Expression',
     color: '#8b5cf6',
     exercises: [
+      // Picture Description (5 exercises)
       {
-        id: 'picture-description',
+        id: 'description-1',
         type: 'description',
         level: 1,
         instruction: 'Look at the picture and describe what you see.',
@@ -226,7 +227,44 @@ const languageExercises = {
         minWords: 5
       },
       {
-        id: 'sentence-formation',
+        id: 'description-2',
+        type: 'description',
+        level: 1,
+        instruction: 'Describe this scene in your own words.',
+        prompt: '☀️🌊🏖️',
+        expectedKeywords: ['sun', 'beach', 'water', 'ocean', 'sand'],
+        minWords: 5
+      },
+      {
+        id: 'description-3',
+        type: 'description',
+        level: 1,
+        instruction: 'Tell me what you see in this picture.',
+        prompt: '🐶🎾🏃',
+        expectedKeywords: ['dog', 'ball', 'running', 'playing', 'pet'],
+        minWords: 5
+      },
+      {
+        id: 'description-4',
+        type: 'description',
+        level: 1,
+        instruction: 'Describe what is happening here.',
+        prompt: '🍎🍌🍊',
+        expectedKeywords: ['fruit', 'food', 'apple', 'banana', 'orange'],
+        minWords: 5
+      },
+      {
+        id: 'description-5',
+        type: 'description',
+        level: 1,
+        instruction: 'What do you see in this picture?',
+        prompt: '🚗🛣️🌆',
+        expectedKeywords: ['car', 'road', 'buildings', 'driving', 'street'],
+        minWords: 5
+      },
+      // Sentence Formation (5 exercises)
+      {
+        id: 'sentence-1',
         type: 'sentence',
         level: 2,
         instruction: 'Use these words to make a sentence: "boy, ball, playing"',
@@ -235,12 +273,85 @@ const languageExercises = {
         minWords: 4
       },
       {
-        id: 'story-retell',
+        id: 'sentence-2',
+        type: 'sentence',
+        level: 2,
+        instruction: 'Make a sentence with: "cat, sleeping, couch"',
+        prompt: 'Words: cat, sleeping, couch',
+        expectedKeywords: ['cat', 'sleeping', 'couch'],
+        minWords: 4
+      },
+      {
+        id: 'sentence-3',
+        type: 'sentence',
+        level: 2,
+        instruction: 'Create a sentence using: "girl, book, reading"',
+        prompt: 'Words: girl, book, reading',
+        expectedKeywords: ['girl', 'book', 'reading'],
+        minWords: 4
+      },
+      {
+        id: 'sentence-4',
+        type: 'sentence',
+        level: 2,
+        instruction: 'Form a sentence with: "mom, cooking, kitchen"',
+        prompt: 'Words: mom, cooking, kitchen',
+        expectedKeywords: ['mom', 'cooking', 'kitchen'],
+        minWords: 4
+      },
+      {
+        id: 'sentence-5',
+        type: 'sentence',
+        level: 2,
+        instruction: 'Make a sentence using: "children, park, running"',
+        prompt: 'Words: children, park, running',
+        expectedKeywords: ['children', 'park', 'running'],
+        minWords: 4
+      },
+      // Story Retell (5 exercises)
+      {
+        id: 'retell-1',
         type: 'retell',
         level: 3,
         instruction: 'Listen to the story and retell it in your own words.',
         story: 'A little bird wanted to fly. It tried many times but failed. The bird did not give up. Finally, it flew high in the sky.',
         expectedKeywords: ['bird', 'fly', 'tried', 'sky'],
+        minWords: 10
+      },
+      {
+        id: 'retell-2',
+        type: 'retell',
+        level: 3,
+        instruction: 'Listen carefully and retell this story.',
+        story: 'Tim found a lost puppy in the park. The puppy was scared and hungry. Tim took the puppy home and gave it food. His family decided to keep the puppy.',
+        expectedKeywords: ['puppy', 'park', 'food', 'home', 'family'],
+        minWords: 10
+      },
+      {
+        id: 'retell-3',
+        type: 'retell',
+        level: 3,
+        instruction: 'Retell this story in your own words.',
+        story: 'Sara wanted to bake a cake for her mother. She mixed flour, eggs, and sugar. She put it in the oven. When it was ready, her mother was very happy.',
+        expectedKeywords: ['cake', 'bake', 'mother', 'oven', 'happy'],
+        minWords: 10
+      },
+      {
+        id: 'retell-4',
+        type: 'retell',
+        level: 3,
+        instruction: 'Listen to the story and tell it back to me.',
+        story: 'A small seed fell on the ground. Rain came and the seed got wet. The sun shined and the seed started to grow. Soon it became a big tree.',
+        expectedKeywords: ['seed', 'rain', 'sun', 'grow', 'tree'],
+        minWords: 10
+      },
+      {
+        id: 'retell-5',
+        type: 'retell',
+        level: 3,
+        instruction: 'Retell what happened in this story.',
+        story: 'Jack went to the library to find a book. He searched for a long time. Finally, he found an interesting book about space. He read it all night.',
+        expectedKeywords: ['library', 'book', 'space', 'read', 'found'],
         minWords: 10
       }
     ]
@@ -281,8 +392,33 @@ function LanguageTherapy({ onLogout }) {
       const progressData = await languageService.getProgress(mode);
       if (progressData.success && progressData.has_progress) {
         // Resume from where user left off
-        setCurrentExerciseIndex(progressData.current_exercise);
-        console.log(`Resuming ${mode} therapy from exercise ${progressData.current_exercise}`);
+        const totalExercises = languageExercises[mode].exercises.length;
+        
+        // Check if user completed all exercises
+        if (progressData.current_exercise >= totalExercises) {
+          console.log(`${mode} therapy completed! Showing results.`);
+          
+          // Load all exercise results from progress data
+          const results = [];
+          for (let i = 0; i < totalExercises; i++) {
+            const exerciseData = progressData.exercises[i];
+            if (exerciseData) {
+              results.push({
+                type: mode,
+                correct: exerciseData.is_correct,
+                score: exerciseData.score || (exerciseData.is_correct ? 1 : 0),
+                transcription: exerciseData.user_answer || exerciseData.transcription
+              });
+            }
+          }
+          
+          setExerciseResults(results);
+          setCurrentExerciseIndex(0);
+          setShowResults(true);
+        } else {
+          setCurrentExerciseIndex(progressData.current_exercise);
+          console.log(`Resuming ${mode} therapy from exercise ${progressData.current_exercise}`);
+        }
       } else {
         // Start from beginning
         setCurrentExerciseIndex(0);
@@ -425,6 +561,85 @@ function LanguageTherapy({ onLogout }) {
     }
   };
 
+  // Convert audio blob to WAV format using Web Audio API
+  const convertToWav = async (audioBlob) => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    
+    // Convert to WAV format (16-bit PCM, 16kHz, mono)
+    const sampleRate = 16000;
+    const numChannels = 1;
+    const length = audioBuffer.duration * sampleRate;
+    const wavBuffer = audioContext.createBuffer(numChannels, length, sampleRate);
+    
+    // Downsample and convert to mono
+    const channelData = audioBuffer.getChannelData(0);
+    const wavData = wavBuffer.getChannelData(0);
+    const step = audioBuffer.sampleRate / sampleRate;
+    
+    for (let i = 0; i < length; i++) {
+      const index = Math.floor(i * step);
+      wavData[i] = channelData[index];
+    }
+    
+    // Create WAV file
+    const wavBlob = await audioBufferToWav(wavBuffer);
+    await audioContext.close();
+    
+    return wavBlob;
+  };
+  
+  // Convert AudioBuffer to WAV Blob
+  const audioBufferToWav = (buffer) => {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    
+    const data = new Float32Array(buffer.length);
+    buffer.copyFromChannel(data, 0);
+    
+    const dataLength = data.length * bytesPerSample;
+    const bufferLength = 44 + dataLength;
+    const arrayBuffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(arrayBuffer);
+    
+    // Write WAV header
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, bufferLength - 8, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+    
+    // Write audio data
+    let offset = 44;
+    for (let i = 0; i < data.length; i++) {
+      const sample = Math.max(-1, Math.min(1, data[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+    
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
+
   // Handle Expressive Exercise Recording
   const startRecording = async () => {
     try {
@@ -438,10 +653,20 @@ function LanguageTherapy({ onLogout }) {
         }
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        setRecordedBlob(audioBlob);
-        processExpressiveResponse(audioBlob);
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        try {
+          // Convert to proper WAV format
+          const wavBlob = await convertToWav(audioBlob);
+          setRecordedBlob(wavBlob);
+          processExpressiveResponse(wavBlob);
+        } catch (error) {
+          console.error('Error converting audio:', error);
+          // Fallback: try with original blob
+          setRecordedBlob(audioBlob);
+          processExpressiveResponse(audioBlob);
+        }
         
         stream.getTracks().forEach(track => track.stop());
       };
@@ -545,6 +770,12 @@ function LanguageTherapy({ onLogout }) {
   };
 
   const handleNext = () => {
+    // Don't allow next if exercise not completed
+    if (!feedback) {
+      alert('Please complete the current exercise before moving to the next one.');
+      return;
+    }
+    
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
     if (speechTimeoutRef.current) {
@@ -791,7 +1022,7 @@ function LanguageTherapy({ onLogout }) {
           <div className="language-title-section">
             <h1 className="language-exercise-title">{modeData.name} Assessment</h1>
             <div className="language-breadcrumb">
-              Exercise {currentExerciseIndex + 1} of {currentExercises.length} • Level {currentExercise.level}
+              Exercise {currentExerciseIndex + 1} of {currentExercises.length} • Level {currentExercise?.level || 1}
             </div>
           </div>
           <div className="language-nav">
@@ -812,6 +1043,36 @@ function LanguageTherapy({ onLogout }) {
       <main className="language-main">
         <div className="language-container">
           <div className="exercise-card">
+            {/* Progress Indicator */}
+            <div className="exercise-progress">
+              <div className="progress-header">
+                <span className="progress-label">Exercise Progress</span>
+                <span className="progress-count">{currentExerciseIndex + 1} / {currentExercises.length}</span>
+              </div>
+              <div className="progress-dots">
+                {currentExercises.map((_, index) => {
+                  const isCompleted = index < currentExerciseIndex || (index === currentExerciseIndex && feedback);
+                  const isCurrent = index === currentExerciseIndex;
+                  const isLocked = index > currentExerciseIndex;
+                  
+                  return (
+                    <div 
+                      key={index}
+                      className={`progress-dot ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''} ${isLocked ? 'locked' : ''}`}
+                      style={{
+                        backgroundColor: isCompleted ? modeData.color : (isCurrent ? '#fff' : '#e5e7eb'),
+                        borderColor: isCurrent ? modeData.color : (isCompleted ? modeData.color : '#e5e7eb')
+                      }}
+                      title={`Exercise ${index + 1}${isLocked ? ' (Locked)' : ''}`}
+                    >
+                      {isCompleted && <span className="dot-check">✓</span>}
+                      {isLocked && <span className="dot-lock">🔒</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Speaking Indicator */}
             {isSpeaking && (
               <div className="speaking-indicator">
@@ -1008,10 +1269,16 @@ function LanguageTherapy({ onLogout }) {
                     ↻ Try Again
                   </button>
                   <button 
-                    className="feedback-btn next"
+                    className={`feedback-btn next ${!feedback ? 'locked' : ''}`}
                     onClick={handleNext}
-                    style={{ backgroundColor: modeData.color }}
+                    style={{ 
+                      backgroundColor: feedback ? modeData.color : '#9ca3af',
+                      cursor: feedback ? 'pointer' : 'not-allowed',
+                      opacity: feedback ? 1 : 0.6
+                    }}
+                    title={!feedback ? 'Complete the exercise first' : ''}
                   >
+                    {!feedback && '🔒 '}
                     {currentExerciseIndex < currentExercises.length - 1 ? 'Next Exercise →' : 'View Results →'}
                   </button>
                 </div>

@@ -6,6 +6,37 @@
   background: #f8f9fa;
 }
 
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 1.5rem;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-state p {
+  font-size: 1.125rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
 /* Header */
 .language-header {
   background: white;
@@ -847,6 +878,103 @@
   margin: 0;
   font-size: 0.85rem;
   font-weight: 500;
+}
+
+/* Exercise Progress Indicator */
+.exercise-progress {
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  border: 2px solid #e5e7eb;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.progress-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #2c3e50;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.progress-count {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #3b82f6;
+}
+
+.progress-dots {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.progress-dot {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.progress-dot.completed {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.progress-dot.current {
+  transform: scale(1.15);
+  border-width: 4px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.progress-dot.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dot-check {
+  color: white;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.dot-lock {
+  font-size: 0.9rem;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.6);
+  }
+}
+
+/* Locked button styling */
+.feedback-btn.locked {
+  position: relative;
+}
+
+.feedback-btn.locked:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Responsive Design */

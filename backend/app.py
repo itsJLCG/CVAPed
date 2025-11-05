@@ -963,24 +963,34 @@ def assess_expressive_language(current_user):
         speech_config.speech_recognition_language = "en-US"
         
         # Save audio to temporary file
-        audio_bytes = audio_file.read()
-        audio_stream = io.BytesIO(audio_bytes)
-        
-        # Create audio config from stream
-        audio_config = speechsdk.audio.AudioConfig(stream=speechsdk.audio.PushAudioInputStream())
-        
-        # Use the audio bytes directly
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
-            temp_audio.write(audio_bytes)
-            temp_audio_path = temp_audio.name
+        audio_bytes = audio_file.read()
+        
+        # Create temporary file for WAV audio
+        temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+        temp_wav_path = temp_wav.name
+        temp_wav.close()
         
         try:
-            audio_config = speechsdk.audio.AudioConfig(filename=temp_audio_path)
+            # Write the WAV audio directly (frontend now converts to WAV)
+            with open(temp_wav_path, 'wb') as f:
+                f.write(audio_bytes)
+            
+            print(f"Audio file saved: {temp_wav_path}, size: {len(audio_bytes)} bytes")
+            
+            # Create Azure audio config with the WAV file
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_wav_path)
             speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
             
             # Perform speech recognition
             result = speech_recognizer.recognize_once()
+            
+            # Close/release the recognizer to free the file
+            del speech_recognizer
+            del audio_config
+            
+            import os as os_module
+            import time
             
             if result.reason == speechsdk.ResultReason.RecognizedSpeech:
                 transcription = result.text
@@ -1012,9 +1022,13 @@ def assess_expressive_language(current_user):
                 else:
                     feedback = "Your response needs improvement. Try to include more relevant information."
                 
-                # Clean up temp file
-                import os as os_module
-                os_module.unlink(temp_audio_path)
+                # Wait a bit for file handle to be released, then clean up
+                time.sleep(0.1)
+                try:
+                    if os_module.path.exists(temp_wav_path):
+                        os_module.unlink(temp_wav_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file: {cleanup_error}")
                 
                 return jsonify({
                     'success': True,
@@ -1026,28 +1040,43 @@ def assess_expressive_language(current_user):
                 }), 200
             
             elif result.reason == speechsdk.ResultReason.NoMatch:
-                # Clean up temp file
-                import os as os_module
-                os_module.unlink(temp_audio_path)
+                # Wait a bit for file handle to be released, then clean up
+                time.sleep(0.1)
+                try:
+                    if os_module.path.exists(temp_wav_path):
+                        os_module.unlink(temp_wav_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file: {cleanup_error}")
+                    
                 return jsonify({
                     'success': False,
                     'message': 'No speech could be recognized. Please try speaking more clearly.'
                 }), 400
             
             else:
-                # Clean up temp file
-                import os as os_module
-                os_module.unlink(temp_audio_path)
+                # Wait a bit for file handle to be released, then clean up
+                time.sleep(0.1)
+                try:
+                    if os_module.path.exists(temp_wav_path):
+                        os_module.unlink(temp_wav_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file: {cleanup_error}")
+                    
                 return jsonify({
                     'success': False,
                     'message': 'Speech recognition failed. Please try again.'
                 }), 400
                 
         except Exception as e:
-            # Clean up temp file
+            # Wait a bit for file handle to be released, then clean up
             import os as os_module
-            if os_module.path.exists(temp_audio_path):
-                os_module.unlink(temp_audio_path)
+            import time
+            time.sleep(0.1)
+            try:
+                if os_module.path.exists(temp_wav_path):
+                    os_module.unlink(temp_wav_path)
+            except Exception as cleanup_error:
+                print(f"Warning: Could not delete temp file: {cleanup_error}")
             raise e
             
     except Exception as e:

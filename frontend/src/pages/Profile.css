@@ -463,6 +463,35 @@
   color: white !important;
 }
 
+/* Language Therapy Stats */
+.language-stats {
+  display: flex;
+  gap: 2rem;
+  padding: 1rem 0;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.language-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+}
+
+.stat-icon {
+  font-size: 1.25rem;
+}
+
+.stat-text {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.95rem;
+}
+
 /* Statistics */
 .stats-grid {
   display: grid;

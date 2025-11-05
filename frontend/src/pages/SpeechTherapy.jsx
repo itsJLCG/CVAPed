@@ -68,8 +68,10 @@ function SpeechTherapy({ onLogout }) {
     // Navigate to specific therapy type page
     if (typeId === 'articulation') {
       navigate('/articulation');
+    } else if (typeId === 'language') {
+      navigate('/language-therapy');
     } else {
-      // TODO: Navigate to language and fluency pages
+      // TODO: Navigate to fluency page
       // navigate(`/speech-therapy/${typeId}`);
     }
   };

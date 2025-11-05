@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { images } from '../assets/images';
-import { authService, articulationService } from '../services/api';
+import { authService, articulationService, languageService } from '../services/api';
 import './Profile.css';
 
 function Profile({ onLogout }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [allProgress, setAllProgress] = useState([]);
+  const [languageProgress, setLanguageProgress] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
@@ -30,10 +31,16 @@ function Profile({ onLogout }) {
         email: storedUser.email || ''
       });
 
-      // Load progress data
+      // Load articulation progress data
       const progressResponse = await articulationService.getAllProgress();
       if (progressResponse.success) {
         setAllProgress(progressResponse.progress);
+      }
+
+      // Load language therapy progress data
+      const languageProgressResponse = await languageService.getAllProgress();
+      if (languageProgressResponse.success) {
+        setLanguageProgress(languageProgressResponse.progress);
       }
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -343,6 +350,89 @@ function Profile({ onLogout }) {
             </div>
           </div>
 
+          {/* Language Therapy Progress Card */}
+          <div className="profile-card">
+            <div className="card-header">
+              <h2 className="card-title">Language Therapy Progress</h2>
+            </div>
+            <div className="card-body">
+              {languageProgress.length === 0 ? (
+                <div className="no-progress">
+                  <p>No language therapy progress recorded yet.</p>
+                  <p className="no-progress-hint">Start language therapy exercises to track your progress!</p>
+                  <button 
+                    onClick={() => navigate('/speech-therapy')} 
+                    className="btn-start-therapy"
+                  >
+                    Start Language Therapy
+                  </button>
+                </div>
+              ) : (
+                <div className="progress-list">
+                  {languageProgress.map((modeProgress) => {
+                    const percentage = Math.round((modeProgress.correct_exercises / modeProgress.total_exercises) * 100) || 0;
+                    const modeColor = modeProgress.mode === 'receptive' ? '#3b82f6' : '#8b5cf6';
+                    const modeName = modeProgress.mode === 'receptive' ? 'Receptive Language' : 'Expressive Language';
+                    
+                    return (
+                      <div key={modeProgress.mode} className="progress-item">
+                        <div className="progress-item-header">
+                          <div className="progress-sound-info">
+                            <div 
+                              className="progress-sound-badge"
+                              style={{ backgroundColor: modeColor }}
+                            >
+                              {modeProgress.mode === 'receptive' ? '👂' : '💬'}
+                            </div>
+                            <div className="progress-sound-details">
+                              <h3 className="progress-sound-name">
+                                {modeName}
+                              </h3>
+                              <p className="progress-sound-stats">
+                                {modeProgress.completed_exercises} of {modeProgress.total_exercises} exercises completed
+                                {' • '}
+                                {Math.round(modeProgress.accuracy * 100)}% accuracy
+                              </p>
+                            </div>
+                          </div>
+                          <div className="progress-percentage" style={{ color: modeColor }}>
+                            {percentage}%
+                          </div>
+                        </div>
+                        <div className="progress-bar-container">
+                          <div 
+                            className="progress-bar-fill"
+                            style={{ 
+                              width: `${percentage}%`,
+                              backgroundColor: modeColor
+                            }}
+                          ></div>
+                        </div>
+                        <div className="language-stats">
+                          <div className="language-stat">
+                            <span className="stat-icon">✓</span>
+                            <span className="stat-text">{modeProgress.correct_exercises} Correct</span>
+                          </div>
+                          <div className="language-stat">
+                            <span className="stat-icon">📊</span>
+                            <span className="stat-text">{Math.round(modeProgress.accuracy * 100)}% Accuracy</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => navigate('/language-therapy')}
+                          className="btn-continue"
+                          style={{ borderColor: modeColor, color: modeColor }}
+                        >
+                          Continue Practice →
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Statistics Card */}
           <div className="profile-card">
             <div className="card-header">
@@ -364,13 +454,11 @@ function Profile({ onLogout }) {
                 </div>
                 <div className="stat-item">
                   <div className="stat-value">
-                    {allProgress.reduce((total, sound) => {
-                      return total + Object.values(sound.levels || {}).reduce((sum, level) => {
-                        return sum + (level.completed_items || 0);
-                      }, 0);
+                    {languageProgress.reduce((total, mode) => {
+                      return total + (mode.completed_exercises || 0);
                     }, 0)}
                   </div>
-                  <div className="stat-label">Total Items Completed</div>
+                  <div className="stat-label">Language Exercises</div>
                 </div>
                 <div className="stat-item">
                   <div className="stat-value">

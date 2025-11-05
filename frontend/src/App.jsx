@@ -11,6 +11,7 @@ import PhysicalTherapy from './pages/PhysicalTherapy';
 import SpeechTherapy from './pages/SpeechTherapy';
 import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
+import LanguageTherapy from './pages/LanguageTherapy';
 import Profile from './pages/Profile';
 import './App.css';
 
@@ -102,6 +103,12 @@ function App() {
               path="/articulation/:soundId" 
               element={
                 isAuthenticated ? <ArticulationExercise onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/language-therapy" 
+              element={
+                isAuthenticated ? <LanguageTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

@@ -103,4 +103,22 @@ export const articulationService = {
   },
 };
 
+// Language Therapy Progress API
+export const languageService = {
+  saveProgress: async (progressData) => {
+    const response = await api.post('/language/progress', progressData);
+    return response.data;
+  },
+
+  getProgress: async (mode) => {
+    const response = await api.get(`/language/progress/${mode}`);
+    return response.data;
+  },
+
+  getAllProgress: async () => {
+    const response = await api.get('/language/progress/all');
+    return response.data;
+  },
+};
+
 export default api;

@@ -33,6 +33,8 @@ db = client['CVACare']
 users_collection = db['users']
 articulation_progress_collection = db['articulation_progress']
 articulation_trials_collection = db['articulation_trials']
+language_progress_collection = db['language_progress']
+language_trials_collection = db['language_trials']
 
 # Token required decorator
 def token_required(f):
@@ -926,6 +928,311 @@ def get_all_progress(current_user):
         
     except Exception as e:
         return jsonify({'success': False, 'message': 'Failed to get all progress', 'error': str(e)}), 500
+
+@app.route('/api/language/assess-expressive', methods=['POST'])
+@token_required
+def assess_expressive_language(current_user):
+    """Assess expressive language using Azure Speech-to-Text and Text Analytics"""
+    try:
+        import azure.cognitiveservices.speech as speechsdk
+        import io
+        import wave
+        
+        # Get audio file
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            return jsonify({'success': False, 'message': 'No audio file provided'}), 400
+        
+        # Get exercise parameters
+        exercise_id = request.form.get('exercise_id')
+        exercise_type = request.form.get('exercise_type')
+        expected_keywords_str = request.form.get('expected_keywords', '[]')
+        min_words = int(request.form.get('min_words', 5))
+        
+        import json
+        expected_keywords = json.loads(expected_keywords_str)
+        
+        # Azure Speech Config
+        speech_key = os.getenv('AZURE_SPEECH_KEY')
+        service_region = os.getenv('AZURE_SPEECH_REGION')
+        
+        if not speech_key or not service_region:
+            return jsonify({'success': False, 'message': 'Azure credentials not configured'}), 500
+        
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+        speech_config.speech_recognition_language = "en-US"
+        
+        # Save audio to temporary file
+        audio_bytes = audio_file.read()
+        audio_stream = io.BytesIO(audio_bytes)
+        
+        # Create audio config from stream
+        audio_config = speechsdk.audio.AudioConfig(stream=speechsdk.audio.PushAudioInputStream())
+        
+        # Use the audio bytes directly
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            temp_audio.write(audio_bytes)
+            temp_audio_path = temp_audio.name
+        
+        try:
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_audio_path)
+            speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+            
+            # Perform speech recognition
+            result = speech_recognizer.recognize_once()
+            
+            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                transcription = result.text
+                
+                # Basic text analysis (word count, keyword matching)
+                words = transcription.lower().split()
+                word_count = len(words)
+                
+                # Check for expected keywords
+                keywords_found = []
+                for keyword in expected_keywords:
+                    if keyword.lower() in transcription.lower():
+                        keywords_found.append(keyword)
+                
+                # Calculate score
+                keyword_score = len(keywords_found) / len(expected_keywords) if expected_keywords else 0
+                word_count_score = min(word_count / min_words, 1.0)
+                
+                # Overall score (weighted average)
+                overall_score = (keyword_score * 0.7) + (word_count_score * 0.3)
+                
+                # Generate feedback
+                if overall_score >= 0.9:
+                    feedback = "Excellent! Your response was complete and covered all expected points."
+                elif overall_score >= 0.7:
+                    feedback = "Good job! Your response was mostly complete."
+                elif overall_score >= 0.5:
+                    feedback = "Fair response. Try to include more details."
+                else:
+                    feedback = "Your response needs improvement. Try to include more relevant information."
+                
+                # Clean up temp file
+                import os as os_module
+                os_module.unlink(temp_audio_path)
+                
+                return jsonify({
+                    'success': True,
+                    'transcription': transcription,
+                    'key_phrases': keywords_found,
+                    'word_count': word_count,
+                    'score': overall_score,
+                    'feedback': feedback
+                }), 200
+            
+            elif result.reason == speechsdk.ResultReason.NoMatch:
+                # Clean up temp file
+                import os as os_module
+                os_module.unlink(temp_audio_path)
+                return jsonify({
+                    'success': False,
+                    'message': 'No speech could be recognized. Please try speaking more clearly.'
+                }), 400
+            
+            else:
+                # Clean up temp file
+                import os as os_module
+                os_module.unlink(temp_audio_path)
+                return jsonify({
+                    'success': False,
+                    'message': 'Speech recognition failed. Please try again.'
+                }), 400
+                
+        except Exception as e:
+            # Clean up temp file
+            import os as os_module
+            if os_module.path.exists(temp_audio_path):
+                os_module.unlink(temp_audio_path)
+            raise e
+            
+    except Exception as e:
+        import traceback
+        print(f"Error assessing expressive language: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Assessment failed', 'error': str(e)}), 500
+
+# Language Therapy Progress Endpoints
+@app.route('/api/language/progress', methods=['POST'])
+@token_required
+def save_language_progress(current_user):
+    """Save user's language therapy progress"""
+    try:
+        data = request.get_json()
+        
+        user_id = str(current_user['_id'])
+        mode = data.get('mode')  # 'receptive' or 'expressive'
+        exercise_index = data.get('exercise_index')
+        exercise_id = data.get('exercise_id')
+        is_correct = data.get('is_correct', False)
+        score = data.get('score', 0)
+        user_answer = data.get('user_answer')
+        transcription = data.get('transcription')
+        
+        # Find or create progress document
+        progress_doc = language_progress_collection.find_one({
+            'user_id': user_id,
+            'mode': mode
+        })
+        
+        if not progress_doc:
+            # Create new progress document
+            progress_doc = {
+                'user_id': user_id,
+                'mode': mode,
+                'exercises': {},
+                'created_at': datetime.datetime.utcnow(),
+                'updated_at': datetime.datetime.utcnow()
+            }
+        
+        # Update exercise progress
+        exercise_key = str(exercise_index)
+        progress_doc.setdefault('exercises', {})[exercise_key] = {
+            'exercise_id': exercise_id,
+            'completed': True,
+            'is_correct': is_correct,
+            'score': score,
+            'user_answer': user_answer,
+            'transcription': transcription,
+            'last_attempt': datetime.datetime.utcnow()
+        }
+        
+        # Calculate overall progress
+        exercises = progress_doc.get('exercises', {})
+        total_exercises = len(exercises)
+        completed_exercises = sum(1 for ex in exercises.values() if ex.get('completed', False))
+        correct_exercises = sum(1 for ex in exercises.values() if ex.get('is_correct', False))
+        
+        progress_doc['total_exercises'] = total_exercises
+        progress_doc['completed_exercises'] = completed_exercises
+        progress_doc['correct_exercises'] = correct_exercises
+        progress_doc['accuracy'] = (correct_exercises / completed_exercises) if completed_exercises > 0 else 0
+        progress_doc['updated_at'] = datetime.datetime.utcnow()
+        
+        # Save trial data
+        trial_data = {
+            'user_id': user_id,
+            'mode': mode,
+            'exercise_index': exercise_index,
+            'exercise_id': exercise_id,
+            'is_correct': is_correct,
+            'score': score,
+            'user_answer': user_answer,
+            'transcription': transcription,
+            'timestamp': datetime.datetime.utcnow()
+        }
+        language_trials_collection.insert_one(trial_data)
+        
+        # Upsert progress document
+        language_progress_collection.update_one(
+            {'user_id': user_id, 'mode': mode},
+            {'$set': progress_doc},
+            upsert=True
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Progress saved successfully',
+            'progress': {
+                'completed_exercises': completed_exercises,
+                'total_exercises': total_exercises,
+                'accuracy': progress_doc['accuracy']
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error saving language progress: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+
+@app.route('/api/language/progress/<mode>', methods=['GET'])
+@token_required
+def get_language_progress(current_user, mode):
+    """Get user's language therapy progress for a specific mode"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        progress_doc = language_progress_collection.find_one({
+            'user_id': user_id,
+            'mode': mode
+        })
+        
+        if not progress_doc:
+            # Return empty progress
+            return jsonify({
+                'success': True,
+                'mode': mode,
+                'current_exercise': 0,
+                'exercises': {},
+                'has_progress': False,
+                'completed_exercises': 0,
+                'total_exercises': 0,
+                'accuracy': 0
+            }), 200
+        
+        # Determine current exercise (first incomplete)
+        current_exercise = 0
+        exercises = progress_doc.get('exercises', {})
+        
+        # Find the first incomplete exercise or continue from last completed
+        max_index = -1
+        for ex_key in exercises.keys():
+            try:
+                index = int(ex_key)
+                if index > max_index:
+                    max_index = index
+            except:
+                pass
+        
+        current_exercise = max_index + 1 if max_index >= 0 else 0
+        
+        # Remove MongoDB _id from response
+        if '_id' in progress_doc:
+            del progress_doc['_id']
+        
+        return jsonify({
+            'success': True,
+            'mode': mode,
+            'current_exercise': current_exercise,
+            'exercises': progress_doc.get('exercises', {}),
+            'has_progress': True,
+            'completed_exercises': progress_doc.get('completed_exercises', 0),
+            'total_exercises': progress_doc.get('total_exercises', 0),
+            'accuracy': progress_doc.get('accuracy', 0)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error getting language progress: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+
+@app.route('/api/language/progress/all', methods=['GET'])
+@token_required
+def get_all_language_progress(current_user):
+    """Get user's progress across all language therapy modes"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        all_progress = list(language_progress_collection.find({'user_id': user_id}))
+        
+        # Remove MongoDB _id from each document
+        for progress in all_progress:
+            if '_id' in progress:
+                del progress['_id']
+        
+        return jsonify({
+            'success': True,
+            'progress': all_progress
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Failed to get all language progress', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

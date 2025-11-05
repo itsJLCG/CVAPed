@@ -68,6 +68,17 @@
   box-shadow: 0 4px 12px rgba(71, 154, 195, 0.3);
 }
 
+.speech-types-nav-btn.profile {
+  background: white;
+  color: var(--color-secondary);
+  border: 2px solid var(--color-secondary);
+}
+
+.speech-types-nav-btn.profile:hover {
+  background: var(--color-secondary);
+  color: white;
+}
+
 .speech-types-nav-btn.logout {
   background: var(--color-primary);
 }

@@ -79,6 +79,9 @@ function ArticulationTherapy({ onLogout }) {
             <button onClick={() => navigate('/speech-therapy')} className="articulation-nav-btn">
               Back to Speech Therapy
             </button>
+            <button onClick={() => navigate('/profile')} className="articulation-nav-btn profile">
+              My Profile
+            </button>
             <button onClick={handleLogout} className="articulation-nav-btn logout">
               Logout
             </button>

@@ -414,6 +414,58 @@ def get_user(current_user):
     except Exception as e:
         return jsonify({'message': 'Failed to get user', 'error': str(e)}), 500
 
+@app.route('/api/user/update', methods=['PUT'])
+@token_required
+def update_user(current_user):
+    try:
+        data = request.get_json()
+        
+        # Prepare update data
+        update_data = {
+            'updatedAt': datetime.datetime.utcnow()
+        }
+        
+        # Allow updating specific fields
+        allowed_fields = ['firstName', 'lastName', 'email']
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
+        
+        # If email is being updated, check if it's already taken
+        if 'email' in update_data:
+            existing_user = users_collection.find_one({
+                'email': update_data['email'].lower(),
+                '_id': {'$ne': current_user['_id']}
+            })
+            if existing_user:
+                return jsonify({'message': 'Email already in use'}), 409
+            update_data['email'] = update_data['email'].lower()
+        
+        # Update user
+        users_collection.update_one(
+            {'_id': current_user['_id']},
+            {'$set': update_data}
+        )
+        
+        # Get updated user
+        updated_user = users_collection.find_one({'_id': current_user['_id']})
+        
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'user': {
+                'id': str(updated_user['_id']),
+                'email': updated_user['email'],
+                'firstName': updated_user['firstName'],
+                'lastName': updated_user['lastName'],
+                'role': updated_user.get('role', 'patient'),
+                'therapyType': updated_user.get('therapyType'),
+                'patientType': updated_user.get('patientType')
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': 'Failed to update profile', 'error': str(e)}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'healthy', 'message': 'CVACare API is running'}), 200

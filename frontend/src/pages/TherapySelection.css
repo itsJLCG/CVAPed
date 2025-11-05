@@ -45,6 +45,32 @@
   object-fit: contain;
 }
 
+/* Header Actions */
+.therapy-header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.therapy-profile-btn {
+  padding: 10px 24px;
+  background: white;
+  color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.therapy-profile-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.2);
+}
+
 /* Logout Button */
 .therapy-logout-btn {
   padding: 10px 24px;

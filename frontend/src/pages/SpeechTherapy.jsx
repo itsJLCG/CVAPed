@@ -87,6 +87,9 @@ function SpeechTherapy({ onLogout }) {
             <button onClick={() => navigate('/therapy-selection')} className="speech-types-nav-btn">
               Back to Therapies
             </button>
+            <button onClick={() => navigate('/profile')} className="speech-types-nav-btn profile">
+              My Profile
+            </button>
             <button onClick={handleLogout} className="speech-types-nav-btn logout">
               Logout
             </button>

@@ -75,6 +75,14 @@ export const authService = {
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   },
+
+  updateProfile: async (userData) => {
+    const response = await api.put('/user/update', userData);
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
 };
 
 // Articulation Progress API

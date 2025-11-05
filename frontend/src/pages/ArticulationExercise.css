@@ -85,6 +85,17 @@
   border-color: #d1d5db;
 }
 
+.exercise-nav-btn.profile {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.exercise-nav-btn.profile:hover {
+  background: #3b82f6;
+  color: white;
+}
+
 .exercise-nav-btn.logout {
   border-color: #ce3630;
   color: #ce3630;
@@ -99,11 +110,13 @@
 .exercise-main {
   flex: 1;
   padding: 1.5rem 1rem;
+  overflow: visible;
 }
 
 .exercise-container {
   max-width: 1200px;
   margin: 0 auto;
+  overflow: visible;
 }
 
 /* Compact Progress Bar */
@@ -113,12 +126,18 @@
   border-radius: 10px;
   margin-bottom: 1.5rem;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 
 .progress-levels {
   display: flex;
   gap: 0.75rem;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .progress-level {

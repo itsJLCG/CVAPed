@@ -68,6 +68,17 @@
   box-shadow: 0 4px 12px rgba(206, 54, 48, 0.3);
 }
 
+.articulation-nav-btn.profile {
+  background: white;
+  color: var(--color-primary);
+  border: 2px solid var(--color-primary);
+}
+
+.articulation-nav-btn.profile:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
 .articulation-nav-btn.logout {
   background: #555;
 }

@@ -90,7 +90,7 @@ function ArticulationExercise({ onLogout }) {
   const currentTarget = currentLevelData?.items[currentItem];
   const totalItems = currentLevelData?.items.length || 3;
   const maxTrials = 3;
-  const passThreshold = 0.80;
+  const passThreshold = 0.50;
 
   // Load progress when component mounts
   useEffect(() => {
@@ -470,6 +470,9 @@ function ArticulationExercise({ onLogout }) {
           <div className="exercise-nav">
             <button onClick={() => navigate('/articulation')} className="exercise-nav-btn">
               ← Back
+            </button>
+            <button onClick={() => navigate('/profile')} className="exercise-nav-btn profile">
+              My Profile
             </button>
             <button onClick={handleLogout} className="exercise-nav-btn logout">
               Logout

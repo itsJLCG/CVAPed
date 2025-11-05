@@ -29,9 +29,14 @@ function TherapySelection({ onLogout }) {
             <img src={images.logo} alt="CVAPed Logo" className="therapy-header-logo" />
             <img src={images.cvacareText} alt="CVAPed" className="therapy-header-text" />
           </div>
-          <button onClick={handleLogout} className="therapy-logout-btn">
-            Logout
-          </button>
+          <div className="therapy-header-actions">
+            <button onClick={() => navigate('/profile')} className="therapy-profile-btn">
+              My Profile
+            </button>
+            <button onClick={handleLogout} className="therapy-logout-btn">
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 

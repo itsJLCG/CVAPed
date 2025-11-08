@@ -476,6 +476,14 @@ function FluencyTherapy({ onLogout }) {
     setResults(null);
     setAudioBlob(null);
     setRecordingTime(0);
+    setHasCompletedBreathing(false); // Reset breathing state
+    setIsBreathing(false);
+    setBreathingCount(0);
+    setBreathingPhase('');
+    setBreathingTimer(0);
+    setHasPlayedAudio(false); // Reset audio play state
+    setShowSpeakingIndicator(false); // Reset speaking indicator
+    setIsRecording(false); // Reset recording state
   };
 
   const showFinalResults = () => {

@@ -13,6 +13,10 @@ from firebase_admin import credentials, auth
 
 # Import fluency CRUD blueprint
 from fluency_crud import fluency_bp, init_fluency_crud
+# Import language CRUD blueprint
+from language_crud import language_bp, init_language_crud
+# Import receptive CRUD blueprint
+from receptive_crud import receptive_bp, init_receptive_crud
 
 # Load environment variables from .env file
 load_dotenv()
@@ -47,6 +51,14 @@ language_trials_collection = db['language_trials']
 # Register fluency CRUD blueprint
 app.register_blueprint(fluency_bp)
 init_fluency_crud(db)
+
+# Register language CRUD blueprint
+app.register_blueprint(language_bp)
+init_language_crud(db, app.config['SECRET_KEY'])
+
+# Register receptive CRUD blueprint
+app.register_blueprint(receptive_bp)
+init_receptive_crud(db, app.config['SECRET_KEY'])
 
 # Token required decorator
 def token_required(f):
@@ -160,6 +172,7 @@ def register():
         # Generate token
         token = jwt.encode({
             'user_id': str(result.inserted_id),
+            'role': role,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
@@ -205,6 +218,7 @@ def login():
         # Generate token
         token = jwt.encode({
             'user_id': str(user['_id']),
+            'role': user.get('role', 'patient'),
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
@@ -249,6 +263,7 @@ def firebase_auth():
             # Existing user - return user data
             token = jwt.encode({
                 'user_id': str(user['_id']),
+                'role': user.get('role', 'patient'),
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
             }, app.config['SECRET_KEY'], algorithm="HS256")
             
@@ -297,6 +312,7 @@ def firebase_auth():
         # Generate token
         token = jwt.encode({
             'user_id': str(result.inserted_id),
+            'role': 'patient',
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
         }, app.config['SECRET_KEY'], algorithm="HS256")
         

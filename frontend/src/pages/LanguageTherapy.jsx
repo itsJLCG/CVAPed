@@ -1,365 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { images } from '../assets/images';
-import { languageService } from '../services/api';
+import { languageService, languageExerciseService, receptiveExerciseService } from '../services/api';
 import './LanguageTherapy.css';
 
-// Language Therapy Exercise Data
+// Language Therapy mode metadata (exercises loaded from database)
 const languageExercises = {
   receptive: {
     name: 'Receptive Language',
     description: 'Understanding & Comprehension',
-    color: '#3b82f6',
-    exercises: [
-      // Level 1: Vocabulary Matching (5 items)
-      {
-        id: 'vocab-1',
-        type: 'vocabulary',
-        level: 1,
-        instruction: 'Listen to the word and select the correct picture.',
-        target: 'apple',
-        options: [
-          { id: 1, text: 'Apple', image: '🍎', correct: true },
-          { id: 2, text: 'Banana', image: '🍌', correct: false },
-          { id: 3, text: 'Orange', image: '🍊', correct: false },
-          { id: 4, text: 'Grape', image: '🍇', correct: false }
-        ]
-      },
-      {
-        id: 'vocab-2',
-        type: 'vocabulary',
-        level: 1,
-        instruction: 'Listen to the word and select the correct picture.',
-        target: 'dog',
-        options: [
-          { id: 1, text: 'Cat', image: '🐱', correct: false },
-          { id: 2, text: 'Dog', image: '🐶', correct: true },
-          { id: 3, text: 'Bird', image: '🐦', correct: false },
-          { id: 4, text: 'Fish', image: '🐟', correct: false }
-        ]
-      },
-      {
-        id: 'vocab-3',
-        type: 'vocabulary',
-        level: 1,
-        instruction: 'Listen to the word and select the correct picture.',
-        target: 'car',
-        options: [
-          { id: 1, text: 'Bus', image: '🚌', correct: false },
-          { id: 2, text: 'Bicycle', image: '🚲', correct: false },
-          { id: 3, text: 'Car', image: '🚗', correct: true },
-          { id: 4, text: 'Train', image: '🚂', correct: false }
-        ]
-      },
-      {
-        id: 'vocab-4',
-        type: 'vocabulary',
-        level: 1,
-        instruction: 'Listen to the word and select the correct picture.',
-        target: 'book',
-        options: [
-          { id: 1, text: 'Book', image: '📖', correct: true },
-          { id: 2, text: 'Pencil', image: '✏️', correct: false },
-          { id: 3, text: 'Paper', image: '📄', correct: false },
-          { id: 4, text: 'Bag', image: '🎒', correct: false }
-        ]
-      },
-      {
-        id: 'vocab-5',
-        type: 'vocabulary',
-        level: 1,
-        instruction: 'Listen to the word and select the correct picture.',
-        target: 'sun',
-        options: [
-          { id: 1, text: 'Moon', image: '🌙', correct: false },
-          { id: 2, text: 'Star', image: '⭐', correct: false },
-          { id: 3, text: 'Sun', image: '☀️', correct: true },
-          { id: 4, text: 'Cloud', image: '☁️', correct: false }
-        ]
-      },
-      // Level 2: Following Directions (5 items)
-      {
-        id: 'directions-1',
-        type: 'directions',
-        level: 2,
-        instruction: 'Follow the direction: "Point to the blue circle."',
-        target: 'blue circle',
-        options: [
-          { id: 1, text: 'Red Square', shape: '🟥', correct: false },
-          { id: 2, text: 'Blue Circle', shape: '🔵', correct: true },
-          { id: 3, text: 'Green Triangle', shape: '🟩', correct: false },
-          { id: 4, text: 'Yellow Star', shape: '⭐', correct: false }
-        ]
-      },
-      {
-        id: 'directions-2',
-        type: 'directions',
-        level: 2,
-        instruction: 'Follow the direction: "Point to the red square."',
-        target: 'red square',
-        options: [
-          { id: 1, text: 'Red Square', shape: '🟥', correct: true },
-          { id: 2, text: 'Blue Circle', shape: '🔵', correct: false },
-          { id: 3, text: 'Green Diamond', shape: '🔶', correct: false },
-          { id: 4, text: 'Purple Heart', shape: '💜', correct: false }
-        ]
-      },
-      {
-        id: 'directions-3',
-        type: 'directions',
-        level: 2,
-        instruction: 'Follow the direction: "Point to the yellow star."',
-        target: 'yellow star',
-        options: [
-          { id: 1, text: 'Blue Circle', shape: '🔵', correct: false },
-          { id: 2, text: 'Yellow Star', shape: '⭐', correct: true },
-          { id: 3, text: 'Red Heart', shape: '❤️', correct: false },
-          { id: 4, text: 'Green Square', shape: '🟩', correct: false }
-        ]
-      },
-      {
-        id: 'directions-4',
-        type: 'directions',
-        level: 2,
-        instruction: 'Follow the direction: "Point to the green square."',
-        target: 'green square',
-        options: [
-          { id: 1, text: 'Red Square', shape: '🟥', correct: false },
-          { id: 2, text: 'Yellow Circle', shape: '🟡', correct: false },
-          { id: 3, text: 'Green Square', shape: '🟩', correct: true },
-          { id: 4, text: 'Blue Star', shape: '💙', correct: false }
-        ]
-      },
-      {
-        id: 'directions-5',
-        type: 'directions',
-        level: 2,
-        instruction: 'Follow the direction: "Point to the purple heart."',
-        target: 'purple heart',
-        options: [
-          { id: 1, text: 'Red Heart', shape: '❤️', correct: false },
-          { id: 2, text: 'Purple Heart', shape: '💜', correct: true },
-          { id: 3, text: 'Yellow Star', shape: '⭐', correct: false },
-          { id: 4, text: 'Blue Circle', shape: '🔵', correct: false }
-        ]
-      },
-      // Level 3: Sentence Comprehension (5 items)
-      {
-        id: 'comprehension-1',
-        type: 'comprehension',
-        level: 3,
-        instruction: 'Listen: "The cat is sleeping under the table." What is the cat doing?',
-        target: 'sleeping',
-        options: [
-          { id: 1, text: 'Eating', correct: false },
-          { id: 2, text: 'Sleeping', correct: true },
-          { id: 3, text: 'Running', correct: false },
-          { id: 4, text: 'Playing', correct: false }
-        ]
-      },
-      {
-        id: 'comprehension-2',
-        type: 'comprehension',
-        level: 3,
-        instruction: 'Listen: "The boy is playing with a red ball." What color is the ball?',
-        target: 'red',
-        options: [
-          { id: 1, text: 'Blue', correct: false },
-          { id: 2, text: 'Red', correct: true },
-          { id: 3, text: 'Green', correct: false },
-          { id: 4, text: 'Yellow', correct: false }
-        ]
-      },
-      {
-        id: 'comprehension-3',
-        type: 'comprehension',
-        level: 3,
-        instruction: 'Listen: "Mom is cooking dinner in the kitchen." Where is Mom?',
-        target: 'kitchen',
-        options: [
-          { id: 1, text: 'Bedroom', correct: false },
-          { id: 2, text: 'Kitchen', correct: true },
-          { id: 3, text: 'Garden', correct: false },
-          { id: 4, text: 'Bathroom', correct: false }
-        ]
-      },
-      {
-        id: 'comprehension-4',
-        type: 'comprehension',
-        level: 3,
-        instruction: 'Listen: "The bird is flying high in the sky." Where is the bird?',
-        target: 'sky',
-        options: [
-          { id: 1, text: 'Tree', correct: false },
-          { id: 2, text: 'Sky', correct: true },
-          { id: 3, text: 'Ground', correct: false },
-          { id: 4, text: 'Water', correct: false }
-        ]
-      },
-      {
-        id: 'comprehension-5',
-        type: 'comprehension',
-        level: 3,
-        instruction: 'Listen: "Dad is reading a book to the children." What is Dad doing?',
-        target: 'reading',
-        options: [
-          { id: 1, text: 'Reading', correct: true },
-          { id: 2, text: 'Writing', correct: false },
-          { id: 3, text: 'Singing', correct: false },
-          { id: 4, text: 'Dancing', correct: false }
-        ]
-      }
-    ]
+    color: '#3b82f6'
   },
   expressive: {
     name: 'Expressive Language',
     description: 'Communication & Expression',
-    color: '#8b5cf6',
-    exercises: [
-      // Picture Description (5 exercises)
-      {
-        id: 'description-1',
-        type: 'description',
-        level: 1,
-        instruction: 'Look at the picture and describe what you see.',
-        prompt: '🏠🌳👨‍👩‍👧',
-        expectedKeywords: ['house', 'tree', 'family', 'people', 'home'],
-        minWords: 5
-      },
-      {
-        id: 'description-2',
-        type: 'description',
-        level: 1,
-        instruction: 'Describe this scene in your own words.',
-        prompt: '☀️🌊🏖️',
-        expectedKeywords: ['sun', 'beach', 'water', 'ocean', 'sand'],
-        minWords: 5
-      },
-      {
-        id: 'description-3',
-        type: 'description',
-        level: 1,
-        instruction: 'Tell me what you see in this picture.',
-        prompt: '🐶🎾🏃',
-        expectedKeywords: ['dog', 'ball', 'running', 'playing', 'pet'],
-        minWords: 5
-      },
-      {
-        id: 'description-4',
-        type: 'description',
-        level: 1,
-        instruction: 'Describe what is happening here.',
-        prompt: '🍎🍌🍊',
-        expectedKeywords: ['fruit', 'food', 'apple', 'banana', 'orange'],
-        minWords: 5
-      },
-      {
-        id: 'description-5',
-        type: 'description',
-        level: 1,
-        instruction: 'What do you see in this picture?',
-        prompt: '🚗🛣️🌆',
-        expectedKeywords: ['car', 'road', 'buildings', 'driving', 'street'],
-        minWords: 5
-      },
-      // Sentence Formation (5 exercises)
-      {
-        id: 'sentence-1',
-        type: 'sentence',
-        level: 2,
-        instruction: 'Use these words to make a sentence: "boy, ball, playing"',
-        prompt: 'Words: boy, ball, playing',
-        expectedKeywords: ['boy', 'ball', 'playing'],
-        minWords: 4
-      },
-      {
-        id: 'sentence-2',
-        type: 'sentence',
-        level: 2,
-        instruction: 'Make a sentence with: "cat, sleeping, couch"',
-        prompt: 'Words: cat, sleeping, couch',
-        expectedKeywords: ['cat', 'sleeping', 'couch'],
-        minWords: 4
-      },
-      {
-        id: 'sentence-3',
-        type: 'sentence',
-        level: 2,
-        instruction: 'Create a sentence using: "girl, book, reading"',
-        prompt: 'Words: girl, book, reading',
-        expectedKeywords: ['girl', 'book', 'reading'],
-        minWords: 4
-      },
-      {
-        id: 'sentence-4',
-        type: 'sentence',
-        level: 2,
-        instruction: 'Form a sentence with: "mom, cooking, kitchen"',
-        prompt: 'Words: mom, cooking, kitchen',
-        expectedKeywords: ['mom', 'cooking', 'kitchen'],
-        minWords: 4
-      },
-      {
-        id: 'sentence-5',
-        type: 'sentence',
-        level: 2,
-        instruction: 'Make a sentence using: "children, park, running"',
-        prompt: 'Words: children, park, running',
-        expectedKeywords: ['children', 'park', 'running'],
-        minWords: 4
-      },
-      // Story Retell (5 exercises)
-      {
-        id: 'retell-1',
-        type: 'retell',
-        level: 3,
-        instruction: 'Listen to the story and retell it in your own words.',
-        story: 'A little bird wanted to fly. It tried many times but failed. The bird did not give up. Finally, it flew high in the sky.',
-        expectedKeywords: ['bird', 'fly', 'tried', 'sky'],
-        minWords: 10
-      },
-      {
-        id: 'retell-2',
-        type: 'retell',
-        level: 3,
-        instruction: 'Listen carefully and retell this story.',
-        story: 'Tim found a lost puppy in the park. The puppy was scared and hungry. Tim took the puppy home and gave it food. His family decided to keep the puppy.',
-        expectedKeywords: ['puppy', 'park', 'food', 'home', 'family'],
-        minWords: 10
-      },
-      {
-        id: 'retell-3',
-        type: 'retell',
-        level: 3,
-        instruction: 'Retell this story in your own words.',
-        story: 'Sara wanted to bake a cake for her mother. She mixed flour, eggs, and sugar. She put it in the oven. When it was ready, her mother was very happy.',
-        expectedKeywords: ['cake', 'bake', 'mother', 'oven', 'happy'],
-        minWords: 10
-      },
-      {
-        id: 'retell-4',
-        type: 'retell',
-        level: 3,
-        instruction: 'Listen to the story and tell it back to me.',
-        story: 'A small seed fell on the ground. Rain came and the seed got wet. The sun shined and the seed started to grow. Soon it became a big tree.',
-        expectedKeywords: ['seed', 'rain', 'sun', 'grow', 'tree'],
-        minWords: 10
-      },
-      {
-        id: 'retell-5',
-        type: 'retell',
-        level: 3,
-        instruction: 'Retell what happened in this story.',
-        story: 'Jack went to the library to find a book. He searched for a long time. Finally, he found an interesting book about space. He read it all night.',
-        expectedKeywords: ['library', 'book', 'space', 'read', 'found'],
-        minWords: 10
-      }
-    ]
+    color: '#8b5cf6'
   }
 };
 
 function LanguageTherapy({ onLogout }) {
   const navigate = useNavigate();
+  
+  // State for exercises - both will be loaded from database
+  const [expressiveExercises, setExpressiveExercises] = useState([]);
+  const [receptiveExercises, setReceptiveExercises] = useState([]);
+  const [isLoadingExercises, setIsLoadingExercises] = useState(false);
   
   const [therapyMode, setTherapyMode] = useState(null); // 'receptive' or 'expressive'
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -372,10 +37,93 @@ function LanguageTherapy({ onLogout }) {
   const [showResults, setShowResults] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hasPlayedAudio, setHasPlayedAudio] = useState(false);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const speechTimeoutRef = useRef(null);
+
+  // Load expressive exercises from database when component mounts
+  useEffect(() => {
+    const loadExpressiveExercises = async () => {
+      setIsLoadingExercises(true);
+      try {
+        const response = await languageExerciseService.getActive('expressive');
+        console.log('Loading expressive exercises from database:', response);
+        
+        if (response && response.success && response.exercises_by_level) {
+          // Transform grouped data to flat array format
+          const exercisesArray = [];
+          Object.entries(response.exercises_by_level).forEach(([level, levelData]) => {
+            if (levelData.exercises && Array.isArray(levelData.exercises)) {
+              levelData.exercises.forEach(ex => {
+                exercisesArray.push({
+                  id: ex.exercise_id,
+                  type: ex.type,
+                  level: ex.level,
+                  instruction: ex.instruction,
+                  prompt: ex.prompt,
+                  expectedKeywords: ex.expected_keywords || [],
+                  minWords: ex.min_words || 5,
+                  story: ex.story || undefined
+                });
+              });
+            }
+          });
+          
+          console.log(`Loaded ${exercisesArray.length} expressive exercises from database`);
+          setExpressiveExercises(exercisesArray);
+        }
+      } catch (error) {
+        console.error('Failed to load expressive exercises:', error);
+        // Keep empty array on error
+      } finally {
+        setIsLoadingExercises(false);
+      }
+    };
+
+    loadExpressiveExercises();
+  }, []);
+
+  // Load receptive exercises from database when component mounts
+  useEffect(() => {
+    const loadReceptiveExercises = async () => {
+      setIsLoadingExercises(true);
+      try {
+        const response = await receptiveExerciseService.getActive();
+        console.log('Loading receptive exercises from database:', response);
+        
+        if (response && response.success && response.exercises_by_level) {
+          // Transform grouped data to flat array format
+          const exercisesArray = [];
+          Object.entries(response.exercises_by_level).forEach(([level, levelData]) => {
+            if (levelData.exercises && Array.isArray(levelData.exercises)) {
+              levelData.exercises.forEach(ex => {
+                exercisesArray.push({
+                  id: ex.exercise_id,
+                  type: ex.type,
+                  level: ex.level,
+                  instruction: ex.instruction,
+                  target: ex.target,
+                  options: ex.options || []
+                });
+              });
+            }
+          });
+          
+          console.log(`Loaded ${exercisesArray.length} receptive exercises from database`);
+          setReceptiveExercises(exercisesArray);
+        }
+      } catch (error) {
+        console.error('Failed to load receptive exercises:', error);
+        // Keep empty array on error
+      } finally {
+        setIsLoadingExercises(false);
+      }
+    };
+
+    loadReceptiveExercises();
+  }, []);
 
   const handleLogout = () => {
     onLogout();
@@ -386,13 +134,22 @@ function LanguageTherapy({ onLogout }) {
     setTherapyMode(mode);
     setExerciseResults([]);
     setShowResults(false);
+    setHasPlayedAudio(false); // Reset audio flag when selecting mode
+    setIsLoadingProgress(true); // Mark that we're loading progress
     
     // Load progress from backend
     try {
       const progressData = await languageService.getProgress(mode);
+      console.log('Progress data for', mode, ':', progressData);
+      
       if (progressData.success && progressData.has_progress) {
         // Resume from where user left off
-        const totalExercises = languageExercises[mode].exercises.length;
+        const totalExercises = mode === 'expressive' 
+          ? expressiveExercises.length 
+          : receptiveExercises.length;
+        
+        console.log('Total exercises available:', totalExercises);
+        console.log('Current exercise from progress:', progressData.current_exercise);
         
         // Check if user completed all exercises
         if (progressData.current_exercise >= totalExercises) {
@@ -422,14 +179,20 @@ function LanguageTherapy({ onLogout }) {
       } else {
         // Start from beginning
         setCurrentExerciseIndex(0);
+        console.log(`Starting ${mode} therapy from beginning`);
       }
     } catch (error) {
       console.error('Error loading progress:', error);
       setCurrentExerciseIndex(0);
+    } finally {
+      setIsLoadingProgress(false); // Done loading progress
     }
   };
 
-  const currentExercises = therapyMode ? languageExercises[therapyMode].exercises : [];
+  // Get current exercises based on mode
+  const currentExercises = therapyMode 
+    ? (therapyMode === 'expressive' ? expressiveExercises : receptiveExercises)
+    : [];
   const currentExercise = currentExercises[currentExerciseIndex];
 
   // Text-to-Speech for instructions with visual feedback
@@ -479,9 +242,27 @@ function LanguageTherapy({ onLogout }) {
 
   // Auto-play audio when exercise loads (Receptive only)
   useEffect(() => {
+    // Don't play audio while we're still loading progress
+    if (isLoadingProgress) {
+      console.log('Skipping audio - still loading progress');
+      return;
+    }
+    
     if (therapyMode === 'receptive' && currentExercise && !hasPlayedAudio && !feedback) {
       // Play instruction first
       const playInstructions = async () => {
+        console.log('Playing audio for exercise:', {
+          index: currentExerciseIndex,
+          id: currentExercise.id,
+          type: currentExercise.type,
+          target: currentExercise.target
+        });
+        
+        // Cancel any ongoing speech first
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+        
         // Wait a moment for page to settle
         await new Promise(resolve => setTimeout(resolve, 500));
         
@@ -501,6 +282,7 @@ function LanguageTherapy({ onLogout }) {
           targetText = currentExercise.target;
         }
         
+        console.log('Speaking target text:', targetText);
         await speakText(targetText, 2);
         setHasPlayedAudio(true);
       };
@@ -514,7 +296,7 @@ function LanguageTherapy({ onLogout }) {
         clearTimeout(speechTimeoutRef.current);
       }
     };
-  }, [therapyMode, currentExerciseIndex, currentExercise, hasPlayedAudio, feedback]);
+  }, [therapyMode, currentExerciseIndex, currentExercise, hasPlayedAudio, feedback, isLoadingProgress]);
 
   // Text-to-Speech for manual play button
   const speakInstruction = (text) => {
@@ -866,8 +648,13 @@ function LanguageTherapy({ onLogout }) {
                 <button 
                   className="mode-btn" 
                   style={{ backgroundColor: languageExercises.receptive.color }}
+                  disabled={isLoadingExercises || receptiveExercises.length === 0}
                 >
-                  Begin Receptive Assessment
+                  {isLoadingExercises 
+                    ? 'Loading Exercises...' 
+                    : receptiveExercises.length === 0 
+                      ? 'No Exercises Available' 
+                      : 'Begin Receptive Assessment'}
                 </button>
               </div>
 
@@ -886,8 +673,13 @@ function LanguageTherapy({ onLogout }) {
                 <button 
                   className="mode-btn" 
                   style={{ backgroundColor: languageExercises.expressive.color }}
+                  disabled={isLoadingExercises || expressiveExercises.length === 0}
                 >
-                  Begin Expressive Assessment
+                  {isLoadingExercises 
+                    ? 'Loading Exercises...' 
+                    : expressiveExercises.length === 0 
+                      ? 'No Exercises Available' 
+                      : 'Begin Expressive Assessment'}
                 </button>
               </div>
             </div>

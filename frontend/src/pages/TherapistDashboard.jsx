@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminService, authService, fluencyExerciseService } from '../services/api';
+import { adminService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService } from '../services/api';
 import { images } from '../assets/images';
 import './AdminDashboard.css';
 
@@ -29,6 +29,53 @@ function TherapistDashboard({ onLogout }) {
     breathing: true,
     is_active: false
   });
+
+  // Language exercise states
+  const [showLanguageLevels, setShowLanguageLevels] = useState(false);
+  const [languageExercises, setLanguageExercises] = useState({});
+  const [editingLanguageExercise, setEditingLanguageExercise] = useState(null);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  
+  // Initialize new language exercise based on mode
+  const getDefaultLanguageExercise = (mode) => {
+    if (mode === 'receptive') {
+      return {
+        mode: 'receptive',
+        level: 1,
+        level_name: 'Vocabulary',
+        level_color: '#3b82f6',
+        exercise_id: '',
+        type: 'vocabulary',
+        instruction: '',
+        target: '',
+        options: [
+          { id: 1, text: '', image: '', correct: false },
+          { id: 2, text: '', image: '', correct: false },
+          { id: 3, text: '', image: '', correct: false },
+          { id: 4, text: '', image: '', correct: false }
+        ],
+        order: 1,
+        is_active: true
+      };
+    } else {
+      return {
+        mode: 'expressive',
+        level: 1,
+        level_name: 'Picture Description',
+        level_color: '#8b5cf6',
+        exercise_id: '',
+        type: 'description',
+        instruction: '',
+        prompt: '',
+        expected_keywords: [],
+        min_words: 5,
+        story: '',
+        is_active: false
+      };
+    }
+  };
+  
+  const [newLanguageExercise, setNewLanguageExercise] = useState(getDefaultLanguageExercise('expressive'));
 
   // Load exercises from database and group by level
   const loadFluencyExercises = async () => {
@@ -146,6 +193,161 @@ function TherapistDashboard({ onLogout }) {
     }
   };
 
+  // ============= LANGUAGE EXERCISE CRUD FUNCTIONS =============
+  
+  const loadLanguageExercises = async () => {
+    try {
+      // Use the appropriate service based on mode
+      const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
+      const response = activeSub === 'receptive' 
+        ? await service.getAll()  // receptive doesn't need mode parameter
+        : await service.getAll(activeSub);  // expressive needs mode parameter
+      
+      if (response.success) {
+        // Group exercises by level
+        const grouped = {};
+        response.exercises.forEach(ex => {
+          const level = ex.level;
+          if (!grouped[level]) {
+            // Determine level metadata based on mode
+            let levelName, levelColor;
+            if (activeSub === 'receptive') {
+              // Receptive levels
+              if (level === 1) {
+                levelName = 'Vocabulary';
+                levelColor = '#3b82f6';
+              } else if (level === 2) {
+                levelName = 'Directions';
+                levelColor = '#3b82f6';
+              } else if (level === 3) {
+                levelName = 'Comprehension';
+                levelColor = '#3b82f6';
+              } else {
+                levelName = `Level ${level}`;
+                levelColor = '#3b82f6';
+              }
+            } else {
+              // Expressive levels (from database)
+              levelName = ex.level_name || `Level ${level}`;
+              levelColor = ex.level_color || '#8b5cf6';
+            }
+            
+            grouped[level] = {
+              name: levelName,
+              color: levelColor,
+              exercises: []
+            };
+          }
+          
+          grouped[level].exercises.push({
+            _id: ex._id,
+            id: ex.exercise_id,
+            type: ex.type,
+            instruction: ex.instruction,
+            prompt: ex.prompt,
+            target: ex.target || '',
+            options: ex.options || [],
+            expectedKeywords: ex.expected_keywords,
+            minWords: ex.min_words,
+            story: ex.story,
+            is_active: ex.is_active,
+            order: ex.order
+          });
+        });
+        
+        // Sort exercises within each level by order
+        Object.values(grouped).forEach(level => {
+          level.exercises.sort((a, b) => a.order - b.order);
+        });
+        
+        setLanguageExercises(grouped);
+      }
+    } catch (error) {
+      console.error('Failed to load language exercises:', error);
+    }
+  };
+
+  const handleSeedLanguageExercises = async () => {
+    const modeText = activeSub === 'receptive' ? 'receptive' : 'expressive';
+    if (!window.confirm(`This will seed the database with default ${modeText} language exercises. Continue?`)) return;
+    try {
+      const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
+      const response = await service.seedDefault();
+      if (response.success) {
+        alert(`Successfully seeded ${response.count} exercises!`);
+        loadLanguageExercises();
+      }
+    } catch (error) {
+      alert('Failed to seed exercises: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleCreateLanguageExercise = async () => {
+    try {
+      const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
+      
+      // Prepare data based on mode
+      let exerciseData = { ...newLanguageExercise };
+      if (activeSub === 'expressive' && typeof exerciseData.expected_keywords === 'string') {
+        // Convert comma-separated string to array
+        exerciseData.expected_keywords = exerciseData.expected_keywords
+          .split(',')
+          .map(k => k.trim())
+          .filter(k => k);
+      }
+      
+      const response = await service.create(exerciseData);
+      if (response.success) {
+        setShowLanguageModal(false);
+        setNewLanguageExercise(getDefaultLanguageExercise(activeSub));
+        loadLanguageExercises();
+        alert('Exercise created successfully!');
+      }
+    } catch (error) {
+      alert('Failed to create exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleUpdateLanguageExercise = async () => {
+    try {
+      const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
+      const response = await service.update(editingLanguageExercise._id, editingLanguageExercise);
+      if (response.success) {
+        setEditingLanguageExercise(null);
+        loadLanguageExercises();
+        alert('Exercise updated successfully!');
+      }
+    } catch (error) {
+      alert('Failed to update exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleDeleteLanguageExercise = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this exercise?')) return;
+    try {
+      const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
+      const response = await service.delete(id);
+      if (response.success) {
+        loadLanguageExercises();
+        alert('Exercise deleted successfully!');
+      }
+    } catch (error) {
+      alert('Failed to delete exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleToggleLanguageActive = async (id) => {
+    try {
+      const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
+      const response = await service.toggleActive(id);
+      if (response.success) {
+        loadLanguageExercises();
+      }
+    } catch (error) {
+      alert('Failed to toggle exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
   useEffect(() => {
     const stored = authService.getStoredUser();
     setUser(stored);
@@ -160,13 +362,16 @@ function TherapistDashboard({ onLogout }) {
   useEffect(() => {
     // Load therapy data when switching tabs
     if (activeTab === 'articulation') loadArticulation();
-    if (activeTab === 'language') loadLanguage(activeSub);
+    if (activeTab === 'language') {
+      loadLanguage(activeSub); // Load patient session data
+      if (showLanguageLevels) loadLanguageExercises(); // Load exercises for CRUD
+    }
     if (activeTab === 'fluency') {
       loadFluency(); // Load patient session data
       if (showFluencyLevels) loadFluencyExercises(); // Load exercises for CRUD
     }
     if (activeTab === 'physical') loadPhysical();
-  }, [activeTab, activeSub, showFluencyLevels]);
+  }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels]);
 
   const loadOverview = async () => {
     setLoading(true);
@@ -366,11 +571,11 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
-          {(activeTab === 'articulation' || activeTab === 'language' || activeTab === 'physical') && (
+          {(activeTab === 'articulation' || activeTab === 'physical') && (
             <div className="therapy-management">
               <div className="users-header">
                 <div className="users-title-section">
-                  <h2>{activeTab === 'articulation' ? 'Articulation Sessions' : activeTab === 'language' ? `Language - ${activeSub}` : 'Physical Sessions'}</h2>
+                  <h2>{activeTab === 'articulation' ? 'Articulation Sessions' : 'Physical Sessions'}</h2>
                 </div>
                 <div className="users-actions">
                   <input type="text" placeholder="Search by user..." className="search-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -409,6 +614,152 @@ function TherapistDashboard({ onLogout }) {
               <div className="table-footer">
                 <div className="table-info">Showing {filtered.length} of {therapyData.length}</div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'language' && (
+            <div className="therapy-management">
+              <div className="users-header">
+                <div className="users-title-section">
+                  <h2>Language Therapy - {activeSub === 'receptive' ? 'Receptive' : 'Expressive'}</h2>
+                  <p className="users-subtitle">Therapy levels and exercises for patient assignments</p>
+                </div>
+                <div className="users-actions">
+                  <button 
+                    className={`tab-btn ${showLanguageLevels ? 'active' : ''}`}
+                    onClick={() => setShowLanguageLevels(true)}
+                  >
+                    📚 Exercise Levels
+                  </button>
+                  <button 
+                    className={`tab-btn ${!showLanguageLevels ? 'active' : ''}`}
+                    onClick={() => setShowLanguageLevels(false)}
+                  >
+                    📊 Patient Sessions
+                  </button>
+                </div>
+              </div>
+
+              {showLanguageLevels ? (
+                <div className="fluency-levels-container">
+                  <div className="users-actions" style={{ padding: '0 24px 16px', gap: '8px', display: 'flex' }}>
+                    <button className="primary-btn" onClick={handleSeedLanguageExercises}>
+                      🌱 Seed Default Exercises
+                    </button>
+                    <button className="primary-btn" onClick={() => {
+                      setNewLanguageExercise(getDefaultLanguageExercise(activeSub));
+                      setShowLanguageModal(true);
+                    }}>
+                      ➕ New Exercise
+                    </button>
+                  </div>
+                  
+                  {Object.keys(languageExercises).length === 0 ? (
+                    <div className="no-data" style={{ padding: '40px', textAlign: 'center' }}>
+                      <p>No exercises found. Click "Seed Default Exercises" to get started.</p>
+                    </div>
+                  ) : (
+                    Object.entries(languageExercises).map(([level, data]) => (
+                      <div key={level} className="level-section">
+                        <div className="level-header" style={{ borderLeftColor: data.color }}>
+                          <h3 style={{ color: data.color }}>Level {level}: {data.name}</h3>
+                          <span className="exercise-count">{data.exercises.length} exercises</span>
+                        </div>
+                        <div className="exercises-grid">
+                          {data.exercises.map((exercise, idx) => (
+                            <div key={exercise._id} className="exercise-card" style={{ opacity: exercise.is_active ? 1 : 0.6 }}>
+                              <div className="exercise-header">
+                                <span className="exercise-number">#{idx + 1}</span>
+                                <span className="exercise-type" style={{ background: `${data.color}20`, color: data.color }}>
+                                  {exercise.type}
+                                </span>
+                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                    <input 
+                                      type="checkbox" 
+                                      checked={exercise.is_active}
+                                      onChange={() => handleToggleLanguageActive(exercise._id)}
+                                      style={{ cursor: 'pointer' }}
+                                    />
+                                    Active
+                                  </label>
+                                  <button 
+                                    className="icon-btn" 
+                                    onClick={() => setEditingLanguageExercise(exercise)}
+                                    title="Edit exercise"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    className="icon-btn danger" 
+                                    onClick={() => handleDeleteLanguageExercise(exercise._id)}
+                                    title="Delete exercise"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="exercise-content">
+                                <p className="exercise-instruction">{exercise.instruction}</p>
+                                <div className="exercise-target">
+                                  <strong>Prompt:</strong> "{exercise.prompt}"
+                                </div>
+                                {exercise.story && (
+                                  <div className="exercise-target" style={{ marginTop: '8px' }}>
+                                    <strong>Story:</strong> {exercise.story.substring(0, 80)}...
+                                  </div>
+                                )}
+                                <div className="exercise-meta">
+                                  <span className="duration">📝 {exercise.minWords} words</span>
+                                  <span className="breathing-badge">🔑 {exercise.expectedKeywords?.length || 0} keywords</span>
+                                  {!exercise.is_active && <span className="inactive-badge">👁️ Hidden from patients</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="users-actions" style={{ padding: '0 24px 16px' }}>
+                    <input type="text" placeholder="Search by user..." className="search-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  </div>
+                  <div className="table-container">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>User</th>
+                          <th>Exercise Type</th>
+                          <th>Score</th>
+                          <th>Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length > 0 ? (
+                          filtered.map(item => (
+                            <tr key={item.id}>
+                              <td>{item.user_name}<br/><small>{item.user_email}</small></td>
+                              <td><span className="badge primary">{item.exercise_type || '—'}</span></td>
+                              <td><span className="stat-number">{item.score || '—'}</span></td>
+                              <td>{formatDate(item.created_at)}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className="no-data">{searchTerm ? 'No results' : 'No language sessions available'}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="table-footer">
+                    <div className="table-info">Showing {filtered.length} of {therapyData.length} sessions</div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -742,6 +1093,420 @@ function TherapistDashboard({ onLogout }) {
             <div className="modal-footer">
               <button className="secondary-btn" onClick={() => setEditingExercise(null)}>Cancel</button>
               <button className="primary-btn" onClick={handleUpdateExercise}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Language Exercise Modal */}
+      {showLanguageModal && (
+        <div className="modal-overlay" onClick={() => setShowLanguageModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create New {activeSub === 'receptive' ? 'Receptive' : 'Expressive'} Language Exercise</h2>
+              <button className="modal-close" onClick={() => setShowLanguageModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Mode</label>
+                <input 
+                  type="text" 
+                  value={activeSub === 'receptive' ? 'Receptive' : 'Expressive'}
+                  disabled
+                  style={{ background: '#f5f5f5', cursor: 'not-allowed' }}
+                />
+              </div>
+              <div className="form-group">
+                <label>Level</label>
+                <select 
+                  value={newLanguageExercise.level} 
+                  onChange={(e) => {
+                    const level = parseInt(e.target.value);
+                    let levelData;
+                    if (activeSub === 'receptive') {
+                      levelData = {
+                        1: { name: 'Vocabulary', color: '#3b82f6', type: 'vocabulary' },
+                        2: { name: 'Directions', color: '#3b82f6', type: 'directions' },
+                        3: { name: 'Comprehension', color: '#3b82f6', type: 'comprehension' }
+                      };
+                    } else {
+                      levelData = {
+                        1: { name: 'Picture Description', color: '#8b5cf6', type: 'description' },
+                        2: { name: 'Sentence Formation', color: '#ec4899', type: 'sentence' },
+                        3: { name: 'Story Retell', color: '#f59e0b', type: 'retell' }
+                      };
+                    }
+                    setNewLanguageExercise({ 
+                      ...newLanguageExercise, 
+                      level, 
+                      level_name: levelData[level].name,
+                      level_color: levelData[level].color,
+                      type: levelData[level].type
+                    });
+                  }}
+                >
+                  {activeSub === 'receptive' ? (
+                    <>
+                      <option value={1}>Level 1 - Vocabulary</option>
+                      <option value={2}>Level 2 - Directions</option>
+                      <option value={3}>Level 3 - Comprehension</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value={1}>Level 1 - Picture Description</option>
+                      <option value={2}>Level 2 - Sentence Formation</option>
+                      <option value={3}>Level 3 - Story Retell</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Exercise ID (unique identifier)</label>
+                <input 
+                  type="text" 
+                  value={newLanguageExercise.exercise_id}
+                  onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, exercise_id: e.target.value })}
+                  placeholder={activeSub === 'receptive' ? 'e.g., vocab-6, directions-8' : 'e.g., description-6, sentence-8'}
+                />
+              </div>
+              <div className="form-group">
+                <label>Type</label>
+                <select 
+                  value={newLanguageExercise.type}
+                  onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, type: e.target.value })}
+                >
+                  {activeSub === 'receptive' ? (
+                    <>
+                      <option value="vocabulary">Vocabulary</option>
+                      <option value="directions">Directions</option>
+                      <option value="comprehension">Comprehension</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="description">Description</option>
+                      <option value="sentence">Sentence</option>
+                      <option value="retell">Retell</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Instruction</label>
+                <textarea 
+                  value={newLanguageExercise.instruction}
+                  onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, instruction: e.target.value })}
+                  placeholder="Instructions for the patient..."
+                  rows={3}
+                />
+              </div>
+              
+              {/* Receptive-specific fields */}
+              {activeSub === 'receptive' && (
+                <>
+                  <div className="form-group">
+                    <label>Target (word/phrase to match)</label>
+                    <input 
+                      type="text" 
+                      value={newLanguageExercise.target}
+                      onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, target: e.target.value })}
+                      placeholder="e.g., apple, ball, turn right"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Options (4 choices - mark one as correct)</label>
+                    {newLanguageExercise.options.map((option, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                        <span style={{ width: '30px' }}>{idx + 1}.</span>
+                        <input 
+                          type="text" 
+                          placeholder="Text"
+                          value={option.text}
+                          onChange={(e) => {
+                            const newOptions = [...newLanguageExercise.options];
+                            newOptions[idx].text = e.target.value;
+                            setNewLanguageExercise({ ...newLanguageExercise, options: newOptions });
+                          }}
+                          style={{ flex: '1' }}
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Emoji"
+                          value={option.image}
+                          onChange={(e) => {
+                            const newOptions = [...newLanguageExercise.options];
+                            newOptions[idx].image = e.target.value;
+                            setNewLanguageExercise({ ...newLanguageExercise, options: newOptions });
+                          }}
+                          style={{ width: '80px' }}
+                        />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                          <input 
+                            type="radio" 
+                            name="correct-option"
+                            checked={option.correct}
+                            onChange={() => {
+                              const newOptions = newLanguageExercise.options.map((opt, i) => ({
+                                ...opt,
+                                correct: i === idx
+                              }));
+                              setNewLanguageExercise({ ...newLanguageExercise, options: newOptions });
+                            }}
+                          />
+                          Correct
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="form-group">
+                    <label>Order</label>
+                    <input 
+                      type="number" 
+                      value={newLanguageExercise.order}
+                      onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, order: parseInt(e.target.value) })}
+                      min={1}
+                    />
+                  </div>
+                </>
+              )}
+              
+              {/* Expressive-specific fields */}
+              {activeSub === 'expressive' && (
+                <>
+                  <div className="form-group">
+                    <label>Prompt (emoji or words)</label>
+                    <textarea 
+                      value={newLanguageExercise.prompt}
+                      onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, prompt: e.target.value })}
+                      placeholder="e.g., 🏠🌳👨‍👩‍👧 or 'Words: boy, ball, playing'"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Expected Keywords (comma-separated)</label>
+                    <input 
+                      type="text" 
+                      value={newLanguageExercise.expected_keywords}
+                      onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, expected_keywords: e.target.value })}
+                      placeholder="house, tree, family"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Minimum Words</label>
+                    <input 
+                      type="number" 
+                      value={newLanguageExercise.min_words}
+                      onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, min_words: parseInt(e.target.value) })}
+                      min={1}
+                    />
+                  </div>
+                  {newLanguageExercise.type === 'retell' && (
+                    <div className="form-group">
+                      <label>Story (for retell exercises)</label>
+                      <textarea 
+                        value={newLanguageExercise.story}
+                        onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, story: e.target.value })}
+                        placeholder="A short story for the patient to retell..."
+                        rows={4}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={newLanguageExercise.is_active}
+                    onChange={(e) => setNewLanguageExercise({ ...newLanguageExercise, is_active: e.target.checked })}
+                  />
+                  Active (visible to patients)
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowLanguageModal(false)}>Cancel</button>
+              <button className="primary-btn" onClick={handleCreateLanguageExercise}>Create Exercise</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Language Exercise Modal */}
+      {editingLanguageExercise && (
+        <div className="modal-overlay" onClick={() => setEditingLanguageExercise(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit {activeSub === 'receptive' ? 'Receptive' : 'Expressive'} Language Exercise</h2>
+              <button className="modal-close" onClick={() => setEditingLanguageExercise(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Exercise ID</label>
+                <input 
+                  type="text" 
+                  value={editingLanguageExercise.exercise_id}
+                  onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, exercise_id: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Type</label>
+                <select 
+                  value={editingLanguageExercise.type}
+                  onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, type: e.target.value })}
+                >
+                  {activeSub === 'receptive' ? (
+                    <>
+                      <option value="vocabulary">Vocabulary</option>
+                      <option value="directions">Directions</option>
+                      <option value="comprehension">Comprehension</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="description">Description</option>
+                      <option value="sentence">Sentence</option>
+                      <option value="retell">Retell</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Instruction</label>
+                <textarea 
+                  value={editingLanguageExercise.instruction}
+                  onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, instruction: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              
+              {/* Receptive-specific fields */}
+              {activeSub === 'receptive' && (
+                <>
+                  <div className="form-group">
+                    <label>Target (word/phrase to match)</label>
+                    <input 
+                      type="text" 
+                      value={editingLanguageExercise.target || ''}
+                      onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, target: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Options (4 choices - mark one as correct)</label>
+                    {(editingLanguageExercise.options || []).map((option, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                        <span style={{ width: '30px' }}>{idx + 1}.</span>
+                        <input 
+                          type="text" 
+                          placeholder="Text"
+                          value={option.text}
+                          onChange={(e) => {
+                            const newOptions = [...editingLanguageExercise.options];
+                            newOptions[idx].text = e.target.value;
+                            setEditingLanguageExercise({ ...editingLanguageExercise, options: newOptions });
+                          }}
+                          style={{ flex: '1' }}
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Emoji"
+                          value={option.image}
+                          onChange={(e) => {
+                            const newOptions = [...editingLanguageExercise.options];
+                            newOptions[idx].image = e.target.value;
+                            setEditingLanguageExercise({ ...editingLanguageExercise, options: newOptions });
+                          }}
+                          style={{ width: '80px' }}
+                        />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                          <input 
+                            type="radio" 
+                            name="edit-correct-option"
+                            checked={option.correct}
+                            onChange={() => {
+                              const newOptions = editingLanguageExercise.options.map((opt, i) => ({
+                                ...opt,
+                                correct: i === idx
+                              }));
+                              setEditingLanguageExercise({ ...editingLanguageExercise, options: newOptions });
+                            }}
+                          />
+                          Correct
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="form-group">
+                    <label>Order</label>
+                    <input 
+                      type="number" 
+                      value={editingLanguageExercise.order || 1}
+                      onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, order: parseInt(e.target.value) })}
+                      min={1}
+                    />
+                  </div>
+                </>
+              )}
+              
+              {/* Expressive-specific fields */}
+              {activeSub === 'expressive' && (
+                <>
+                  <div className="form-group">
+                    <label>Prompt</label>
+                    <textarea 
+                      value={editingLanguageExercise.prompt}
+                      onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, prompt: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Expected Keywords (comma-separated)</label>
+                    <input 
+                      type="text" 
+                      value={Array.isArray(editingLanguageExercise.expectedKeywords) 
+                        ? editingLanguageExercise.expectedKeywords.join(', ') 
+                        : editingLanguageExercise.expectedKeywords || ''}
+                      onChange={(e) => setEditingLanguageExercise({ 
+                        ...editingLanguageExercise, 
+                        expectedKeywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean)
+                      })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Minimum Words</label>
+                    <input 
+                      type="number" 
+                      value={editingLanguageExercise.minWords}
+                      onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, minWords: parseInt(e.target.value) })}
+                      min={1}
+                    />
+                  </div>
+                  {editingLanguageExercise.type === 'retell' && (
+                    <div className="form-group">
+                      <label>Story</label>
+                      <textarea 
+                        value={editingLanguageExercise.story || ''}
+                        onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, story: e.target.value })}
+                        rows={4}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editingLanguageExercise.is_active}
+                    onChange={(e) => setEditingLanguageExercise({ ...editingLanguageExercise, is_active: e.target.checked })}
+                  />
+                  Active (visible to patients)
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setEditingLanguageExercise(null)}>Cancel</button>
+              <button className="primary-btn" onClick={handleUpdateLanguageExercise}>Save Changes</button>
             </div>
           </div>
         </div>

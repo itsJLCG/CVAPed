@@ -223,4 +223,100 @@ export const fluencyExerciseService = {
   },
 };
 
+// Language Exercise CRUD API
+export const languageExerciseService = {
+  // Seed default exercises
+  seedDefault: async () => {
+    const response = await api.post('/language-exercises/seed');
+    return response.data;
+  },
+
+  // Get all exercises for a mode (for therapists - includes inactive)
+  getAll: async (mode = 'expressive') => {
+    const response = await api.get(`/language-exercises?mode=${mode}`);
+    return response.data;
+  },
+
+  // Get only active exercises for a mode (for patients)
+  getActive: async (mode = 'expressive') => {
+    const response = await api.get(`/language-exercises/active?mode=${mode}`);
+    return response.data;
+  },
+
+  // Create new exercise
+  create: async (exerciseData) => {
+    const response = await api.post('/language-exercises', exerciseData);
+    return response.data;
+  },
+
+  // Update exercise
+  update: async (exerciseId, exerciseData) => {
+    const response = await api.put(`/language-exercises/${exerciseId}`, exerciseData);
+    return response.data;
+  },
+
+  // Delete exercise
+  delete: async (exerciseId) => {
+    const response = await api.delete(`/language-exercises/${exerciseId}`);
+    return response.data;
+  },
+
+  // Toggle active status
+  toggleActive: async (exerciseId) => {
+    const response = await api.patch(`/language-exercises/${exerciseId}/toggle-active`);
+    return response.data;
+  },
+};
+
+// Receptive Language Exercise Service
+export const receptiveExerciseService = {
+  // Seed default exercises
+  seedDefault: async () => {
+    const response = await api.post('/receptive-exercises/seed');
+    return response.data;
+  },
+
+  // Get all exercises (for therapists - includes inactive)
+  getAll: async () => {
+    const response = await api.get('/receptive-exercises');
+    return response.data;
+  },
+
+  // Get only active exercises (for patients)
+  getActive: async () => {
+    const response = await api.get('/receptive-exercises/active');
+    return response.data;
+  },
+
+  // Create new exercise
+  create: async (exerciseData) => {
+    const response = await api.post('/receptive-exercises', exerciseData);
+    return response.data;
+  },
+
+  // Update exercise
+  update: async (exerciseId, exerciseData) => {
+    const response = await api.put(`/receptive-exercises/${exerciseId}`, exerciseData);
+    return response.data;
+  },
+
+  // Delete exercise
+  delete: async (exerciseId) => {
+    const response = await api.delete(`/receptive-exercises/${exerciseId}`);
+    return response.data;
+  },
+
+  // Toggle active status
+  toggleActive: async (exerciseId) => {
+    const response = await api.patch(`/receptive-exercises/${exerciseId}/toggle-active`);
+    return response.data;
+  },
+
+  // Delete all exercises
+  deleteAll: async () => {
+    const response = await api.delete('/receptive-exercises/delete-all');
+    return response.data;
+  },
+};
+
 export default api;

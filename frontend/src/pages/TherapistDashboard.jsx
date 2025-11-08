@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService } from '../services/api';
+import { adminService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService } from '../services/api';
 import { images } from '../assets/images';
 import './AdminDashboard.css';
 
@@ -76,6 +76,23 @@ function TherapistDashboard({ onLogout }) {
   };
   
   const [newLanguageExercise, setNewLanguageExercise] = useState(getDefaultLanguageExercise('expressive'));
+
+  // Articulation exercise states
+  const [showArticulationLevels, setShowArticulationLevels] = useState(false);
+  const [articulationExercises, setArticulationExercises] = useState({});
+  const [editingArticulationExercise, setEditingArticulationExercise] = useState(null);
+  const [showArticulationModal, setShowArticulationModal] = useState(false);
+  const [activeArticulationSound, setActiveArticulationSound] = useState('s');
+  const [newArticulationExercise, setNewArticulationExercise] = useState({
+    exercise_id: '',
+    sound_id: 's',
+    sound_name: 'S Sound',
+    level: 1,
+    level_name: 'Sound',
+    target: '',
+    order: 1,
+    is_active: true
+  });
 
   // Load exercises from database and group by level
   const loadFluencyExercises = async () => {
@@ -348,6 +365,113 @@ function TherapistDashboard({ onLogout }) {
     }
   };
 
+  // Articulation Exercise CRUD Functions
+  const loadArticulationExercises = async () => {
+    try {
+      const response = await articulationExerciseService.getAll();
+      if (response.success) {
+        setArticulationExercises(response.exercises_by_sound || {});
+      }
+    } catch (error) {
+      console.error('Failed to load articulation exercises:', error);
+    }
+  };
+
+  const handleSeedArticulationExercises = async () => {
+    if (!window.confirm('This will seed the database with default articulation exercises for all sounds. Continue?')) return;
+    try {
+      const response = await articulationExerciseService.seedDefault();
+      if (response.success) {
+        alert(`Successfully seeded ${response.count} articulation exercises!`);
+        loadArticulationExercises();
+      }
+    } catch (error) {
+      alert('Failed to seed exercises: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleCreateArticulationExercise = async () => {
+    try {
+      const response = await articulationExerciseService.create(newArticulationExercise);
+      if (response.success) {
+        setShowArticulationModal(false);
+        setNewArticulationExercise({
+          exercise_id: '',
+          sound_id: activeArticulationSound,
+          sound_name: getSoundName(activeArticulationSound),
+          level: 1,
+          level_name: 'Sound',
+          target: '',
+          order: 1,
+          is_active: true
+        });
+        loadArticulationExercises();
+        alert('Exercise created successfully!');
+      }
+    } catch (error) {
+      alert('Failed to create exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleUpdateArticulationExercise = async () => {
+    try {
+      const response = await articulationExerciseService.update(editingArticulationExercise._id, editingArticulationExercise);
+      if (response.success) {
+        setEditingArticulationExercise(null);
+        loadArticulationExercises();
+        alert('Exercise updated successfully!');
+      }
+    } catch (error) {
+      alert('Failed to update exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleDeleteArticulationExercise = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this exercise?')) return;
+    try {
+      const response = await articulationExerciseService.delete(id);
+      if (response.success) {
+        loadArticulationExercises();
+        alert('Exercise deleted successfully!');
+      }
+    } catch (error) {
+      alert('Failed to delete exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleToggleArticulationActive = async (id) => {
+    try {
+      const response = await articulationExerciseService.toggleActive(id);
+      if (response.success) {
+        loadArticulationExercises();
+      }
+    } catch (error) {
+      alert('Failed to toggle exercise: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const getSoundName = (soundId) => {
+    const soundNames = {
+      's': 'S Sound',
+      'r': 'R Sound',
+      'l': 'L Sound',
+      'k': 'K Sound',
+      'th': 'TH Sound'
+    };
+    return soundNames[soundId] || soundId;
+  };
+
+  const getLevelName = (level) => {
+    const levelNames = {
+      1: 'Sound',
+      2: 'Syllable',
+      3: 'Word',
+      4: 'Phrase',
+      5: 'Sentence'
+    };
+    return levelNames[level] || `Level ${level}`;
+  };
+
   useEffect(() => {
     const stored = authService.getStoredUser();
     setUser(stored);
@@ -361,7 +485,10 @@ function TherapistDashboard({ onLogout }) {
 
   useEffect(() => {
     // Load therapy data when switching tabs
-    if (activeTab === 'articulation') loadArticulation();
+    if (activeTab === 'articulation') {
+      loadArticulation(); // Load patient session data
+      if (showArticulationLevels) loadArticulationExercises(); // Load exercises for CRUD
+    }
     if (activeTab === 'language') {
       loadLanguage(activeSub); // Load patient session data
       if (showLanguageLevels) loadLanguageExercises(); // Load exercises for CRUD
@@ -371,7 +498,7 @@ function TherapistDashboard({ onLogout }) {
       if (showFluencyLevels) loadFluencyExercises(); // Load exercises for CRUD
     }
     if (activeTab === 'physical') loadPhysical();
-  }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels]);
+  }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
     setLoading(true);
@@ -571,11 +698,158 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
-          {(activeTab === 'articulation' || activeTab === 'physical') && (
+          {activeTab === 'articulation' && (
             <div className="therapy-management">
               <div className="users-header">
                 <div className="users-title-section">
-                  <h2>{activeTab === 'articulation' ? 'Articulation Sessions' : 'Physical Sessions'}</h2>
+                  <h2>Articulation Therapy</h2>
+                  <p className="users-subtitle">Manage exercises for speech sound production</p>
+                </div>
+                <div className="users-actions">
+                  <button 
+                    className={`tab-btn ${showArticulationLevels ? 'active' : ''}`}
+                    onClick={() => setShowArticulationLevels(true)}
+                  >
+                    📚 Exercise Levels
+                  </button>
+                  <button 
+                    className={`tab-btn ${!showArticulationLevels ? 'active' : ''}`}
+                    onClick={() => setShowArticulationLevels(false)}
+                  >
+                    📊 Patient Sessions
+                  </button>
+                </div>
+              </div>
+
+              {showArticulationLevels ? (
+                <div className="fluency-levels-container">
+                  <div className="level-actions-bar">
+                    <button className="primary-btn" onClick={handleSeedArticulationExercises}>
+                      🌱 Seed Default Exercises
+                    </button>
+                    <button className="primary-btn" onClick={() => setShowArticulationModal(true)}>
+                      ➕ New Exercise
+                    </button>
+                  </div>
+
+                  {/* Sound Selection Tabs */}
+                  <div className="sound-tabs-container">
+                    {['s', 'r', 'l', 'k', 'th'].map(sound => (
+                      <button
+                        key={sound}
+                        className={`sound-tab-btn ${activeArticulationSound === sound ? 'active' : ''}`}
+                        onClick={() => setActiveArticulationSound(sound)}
+                      >
+                        /{sound.toUpperCase()}/ Sound
+                      </button>
+                    ))}
+                  </div>
+
+                  {Object.keys(articulationExercises).length === 0 ? (
+                    <div className="no-exercises-message">
+                      <p>No exercises found. Click "Seed Default Exercises" to get started.</p>
+                    </div>
+                  ) : (
+                    articulationExercises[activeArticulationSound] && 
+                    Object.entries(articulationExercises[activeArticulationSound].levels || {}).map(([level, data]) => (
+                      <div key={level} className="level-section">
+                        <div className="level-header">
+                          <h3>Level {level}: {data.level_name}</h3>
+                          <span className="exercise-count">{data.exercises.length} exercise{data.exercises.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="exercises-grid">
+                          {data.exercises.map((exercise, idx) => (
+                            <div key={exercise._id} className="exercise-card">
+                              <div className="exercise-card-header">
+                                <span className="exercise-number">#{idx + 1}</span>
+                                <span className="exercise-id-badge">{exercise.exercise_id}</span>
+                              </div>
+                              <div className="exercise-card-body">
+                                <div className="exercise-target-display">
+                                  <label>Target:</label>
+                                  <span className="target-word">{exercise.target}</span>
+                                </div>
+                                <div className="exercise-order-display">
+                                  <label>Order:</label>
+                                  <span>{exercise.order}</span>
+                                </div>
+                              </div>
+                              <div className="exercise-card-footer">
+                                <label className="active-toggle">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={exercise.is_active}
+                                    onChange={() => handleToggleArticulationActive(exercise._id)}
+                                  />
+                                  <span className="toggle-label">Active</span>
+                                </label>
+                                <div className="card-actions">
+                                  <button 
+                                    className="card-edit-btn" 
+                                    onClick={() => setEditingArticulationExercise(exercise)}
+                                    title="Edit exercise"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    className="card-delete-btn" 
+                                    onClick={() => handleDeleteArticulationExercise(exercise._id)}
+                                    title="Delete exercise"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>User</th>
+                        <th>Sound</th>
+                        <th>Level</th>
+                        <th>Score</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.length > 0 ? (
+                        filtered.map(item => (
+                          <tr key={item.id}>
+                            <td>{item.user_name}<br/><small>{item.user_email}</small></td>
+                            <td>{item.sound_id || '—'}</td>
+                            <td>Level {item.level || '—'}</td>
+                            <td>{item.score !== undefined ? item.score : '—'}</td>
+                            <td>{formatDate(item.created_at)}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5" className="no-data">{searchTerm ? 'No results' : 'No data available'}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <div className="table-footer">
+                    <div className="table-info">Showing {filtered.length} of {therapyData.length}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'physical' && (
+            <div className="therapy-management">
+              <div className="users-header">
+                <div className="users-title-section">
+                  <h2>Physical Sessions</h2>
                 </div>
                 <div className="users-actions">
                   <input type="text" placeholder="Search by user..." className="search-input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -1507,6 +1781,194 @@ function TherapistDashboard({ onLogout }) {
             <div className="modal-footer">
               <button className="secondary-btn" onClick={() => setEditingLanguageExercise(null)}>Cancel</button>
               <button className="primary-btn" onClick={handleUpdateLanguageExercise}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Articulation Exercise Modal */}
+      {showArticulationModal && (
+        <div className="modal-overlay" onClick={() => setShowArticulationModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create New Articulation Exercise</h2>
+              <button className="modal-close" onClick={() => setShowArticulationModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Exercise ID (unique identifier)</label>
+                <input 
+                  type="text" 
+                  value={newArticulationExercise.exercise_id}
+                  onChange={(e) => setNewArticulationExercise({ ...newArticulationExercise, exercise_id: e.target.value })}
+                  placeholder="e.g., s-word-3, r-phrase-4"
+                />
+              </div>
+              <div className="form-group">
+                <label>Sound</label>
+                <select 
+                  value={newArticulationExercise.sound_id}
+                  onChange={(e) => {
+                    const soundId = e.target.value;
+                    setNewArticulationExercise({ 
+                      ...newArticulationExercise, 
+                      sound_id: soundId,
+                      sound_name: getSoundName(soundId)
+                    });
+                  }}
+                >
+                  <option value="s">S Sound</option>
+                  <option value="r">R Sound</option>
+                  <option value="l">L Sound</option>
+                  <option value="k">K Sound</option>
+                  <option value="th">TH Sound</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Level</label>
+                <select 
+                  value={newArticulationExercise.level}
+                  onChange={(e) => {
+                    const level = parseInt(e.target.value);
+                    setNewArticulationExercise({ 
+                      ...newArticulationExercise, 
+                      level,
+                      level_name: getLevelName(level)
+                    });
+                  }}
+                >
+                  <option value={1}>Level 1 - Sound</option>
+                  <option value={2}>Level 2 - Syllable</option>
+                  <option value={3}>Level 3 - Word</option>
+                  <option value={4}>Level 4 - Phrase</option>
+                  <option value={5}>Level 5 - Sentence</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Target (text to pronounce)</label>
+                <input 
+                  type="text" 
+                  value={newArticulationExercise.target}
+                  onChange={(e) => setNewArticulationExercise({ ...newArticulationExercise, target: e.target.value })}
+                  placeholder="e.g., sun, See the sun."
+                />
+              </div>
+              <div className="form-group">
+                <label>Order (within level)</label>
+                <input 
+                  type="number" 
+                  value={newArticulationExercise.order}
+                  onChange={(e) => setNewArticulationExercise({ ...newArticulationExercise, order: parseInt(e.target.value) })}
+                  min={1}
+                />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={newArticulationExercise.is_active}
+                    onChange={(e) => setNewArticulationExercise({ ...newArticulationExercise, is_active: e.target.checked })}
+                  />
+                  Active (visible to patients)
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowArticulationModal(false)}>Cancel</button>
+              <button className="primary-btn" onClick={handleCreateArticulationExercise}>Create Exercise</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Articulation Exercise Modal */}
+      {editingArticulationExercise && (
+        <div className="modal-overlay" onClick={() => setEditingArticulationExercise(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Articulation Exercise</h2>
+              <button className="modal-close" onClick={() => setEditingArticulationExercise(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Exercise ID</label>
+                <input 
+                  type="text" 
+                  value={editingArticulationExercise.exercise_id}
+                  onChange={(e) => setEditingArticulationExercise({ ...editingArticulationExercise, exercise_id: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Sound</label>
+                <select 
+                  value={editingArticulationExercise.sound_id}
+                  onChange={(e) => {
+                    const soundId = e.target.value;
+                    setEditingArticulationExercise({ 
+                      ...editingArticulationExercise, 
+                      sound_id: soundId,
+                      sound_name: getSoundName(soundId)
+                    });
+                  }}
+                >
+                  <option value="s">S Sound</option>
+                  <option value="r">R Sound</option>
+                  <option value="l">L Sound</option>
+                  <option value="k">K Sound</option>
+                  <option value="th">TH Sound</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Level</label>
+                <select 
+                  value={editingArticulationExercise.level}
+                  onChange={(e) => {
+                    const level = parseInt(e.target.value);
+                    setEditingArticulationExercise({ 
+                      ...editingArticulationExercise, 
+                      level,
+                      level_name: getLevelName(level)
+                    });
+                  }}
+                >
+                  <option value={1}>Level 1 - Sound</option>
+                  <option value={2}>Level 2 - Syllable</option>
+                  <option value={3}>Level 3 - Word</option>
+                  <option value={4}>Level 4 - Phrase</option>
+                  <option value={5}>Level 5 - Sentence</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Target (text to pronounce)</label>
+                <input 
+                  type="text" 
+                  value={editingArticulationExercise.target}
+                  onChange={(e) => setEditingArticulationExercise({ ...editingArticulationExercise, target: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Order (within level)</label>
+                <input 
+                  type="number" 
+                  value={editingArticulationExercise.order}
+                  onChange={(e) => setEditingArticulationExercise({ ...editingArticulationExercise, order: parseInt(e.target.value) })}
+                  min={1}
+                />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editingArticulationExercise.is_active}
+                    onChange={(e) => setEditingArticulationExercise({ ...editingArticulationExercise, is_active: e.target.checked })}
+                  />
+                  Active (visible to patients)
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setEditingArticulationExercise(null)}>Cancel</button>
+              <button className="primary-btn" onClick={handleUpdateArticulationExercise}>Save Changes</button>
             </div>
           </div>
         </div>

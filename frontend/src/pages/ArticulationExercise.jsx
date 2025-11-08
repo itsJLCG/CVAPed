@@ -2,66 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { images } from '../assets/images';
 import WaveSurfer from 'wavesurfer.js';
-import { articulationService } from '../services/api';
+import { articulationService, articulationExerciseService } from '../services/api';
 import './ArticulationExercise.css';
 
-// Exercise data for all 5 sounds
-const exerciseData = {
-  s: {
-    name: 'S Sound',
-    color: '#ce3630',
-    levels: {
-      1: { name: 'Sound', items: ['s'] },
-      2: { name: 'Syllable', items: ['sa', 'se', 'si'] },
-      3: { name: 'Word', items: ['sun', 'sock'] },
-      4: { name: 'Phrase', items: ['See the sun.', 'Sit down.'] },
-      5: { name: 'Sentence', items: ['Sam saw seven shiny shells.', 'The sun is very hot.'] }
-    }
-  },
-  r: {
-    name: 'R Sound',
-    color: '#479ac3',
-    levels: {
-      1: { name: 'Sound', items: ['r'] },
-      2: { name: 'Syllable', items: ['ra', 're', 'ri'] },
-      3: { name: 'Word', items: ['rabbit', 'red'] },
-      4: { name: 'Phrase', items: ['Run to the road.', 'Read the book.'] },
-      5: { name: 'Sentence', items: ['Rita rides the red rocket.', 'The rabbit raced around the yard.'] }
-    }
-  },
-  l: {
-    name: 'L Sound',
-    color: '#e8b04e',
-    levels: {
-      1: { name: 'Sound', items: ['l'] },
-      2: { name: 'Syllable', items: ['la', 'le', 'li'] },
-      3: { name: 'Word', items: ['lion', 'leaf'] },
-      4: { name: 'Phrase', items: ['Look at the lion.', 'Lift the box.'] },
-      5: { name: 'Sentence', items: ['Lily loves lemons.', 'The little lamb likes leaves.'] }
-    }
-  },
-  k: {
-    name: 'K Sound',
-    color: '#8e44ad',
-    levels: {
-      1: { name: 'Sound', items: ['k'] },
-      2: { name: 'Syllable', items: ['ka', 'ke', 'ki'] },
-      3: { name: 'Word', items: ['kite', 'cat'] },
-      4: { name: 'Phrase', items: ['Kick the ball.', 'Cook the rice.'] },
-      5: { name: 'Sentence', items: ['Keep the kite flying high.', 'The cat climbed the kitchen counter.'] }
-    }
-  },
-  th: {
-    name: 'TH Sound',
-    color: '#27ae60',
-    levels: {
-      1: { name: 'Sound', items: ['th'] },
-      2: { name: 'Syllable', items: ['tha', 'the', 'thi'] },
-      3: { name: 'Word', items: ['think', 'this'] },
-      4: { name: 'Phrase', items: ['Think about that.', 'This is the thumb.'] },
-      5: { name: 'Sentence', items: ['Those three thieves thought they were free.', 'This is my thumb.'] }
-    }
-  }
+// Exercise data will be loaded from database
+// Keeping this for metadata only (colors, names, etc.)
+const soundMetadata = {
+  s: { name: 'S Sound', color: '#ce3630' },
+  r: { name: 'R Sound', color: '#479ac3' },
+  l: { name: 'L Sound', color: '#e8b04e' },
+  k: { name: 'K Sound', color: '#8e44ad' },
+  th: { name: 'TH Sound', color: '#27ae60' }
 };
 
 function ArticulationExercise({ onLogout }) {
@@ -79,18 +30,59 @@ function ArticulationExercise({ onLogout }) {
   const [averageScore, setAverageScore] = useState(null);
   const [levelProgress, setLevelProgress] = useState({ 1: false, 2: false, 3: false, 4: false, 5: false });
   const [isLoadingProgress, setIsLoadingProgress] = useState(true);
+  const [exercises, setExercises] = useState(null); // Database exercises
+  const [isLoadingExercises, setIsLoadingExercises] = useState(true);
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const waveformRef = useRef(null);
   const waveSurferRef = useRef(null);
 
-  const soundData = exerciseData[soundId];
-  const currentLevelData = soundData?.levels[currentLevel];
-  const currentTarget = currentLevelData?.items[currentItem];
-  const totalItems = currentLevelData?.items.length || 3;
+  // Get sound metadata and exercise data
+  const soundData = soundMetadata[soundId];
+  const currentLevelData = exercises?.levels?.[currentLevel];
+  const currentTarget = currentLevelData?.items?.[currentItem];
+  const totalItems = currentLevelData?.items?.length || 3;
   const maxTrials = 3;
   const passThreshold = 0.50;
+
+  // Load exercises from database
+  useEffect(() => {
+    const loadExercises = async () => {
+      try {
+        const response = await articulationExerciseService.getActive(soundId);
+        if (response.success && response.exercises_by_level) {
+          // Transform database response to match current code structure
+          const transformedData = {
+            name: soundData.name,
+            color: soundData.color,
+            levels: {}
+          };
+
+          // Convert exercises_by_level to the expected format
+          Object.keys(response.exercises_by_level).forEach(levelKey => {
+            const levelNum = parseInt(levelKey);
+            const levelData = response.exercises_by_level[levelKey];
+            
+            transformedData.levels[levelNum] = {
+              name: levelData.level_name,
+              items: levelData.exercises
+                .sort((a, b) => a.order - b.order) // Sort by order field
+                .map(ex => ex.target) // Extract target strings
+            };
+          });
+
+          setExercises(transformedData);
+        }
+      } catch (error) {
+        console.error('Error loading exercises:', error);
+      } finally {
+        setIsLoadingExercises(false);
+      }
+    };
+
+    loadExercises();
+  }, [soundId]);
 
   // Load progress when component mounts
   useEffect(() => {
@@ -124,7 +116,7 @@ function ArticulationExercise({ onLogout }) {
   }, [soundId]);
 
   useEffect(() => {
-    if (waveformRef.current && !waveSurferRef.current) {
+    if (waveformRef.current && !waveSurferRef.current && soundData) {
       waveSurferRef.current = WaveSurfer.create({
         container: waveformRef.current,
         waveColor: soundData.color,
@@ -141,7 +133,7 @@ function ArticulationExercise({ onLogout }) {
         waveSurferRef.current.destroy();
       }
     };
-  }, [soundData.color]);
+  }, [soundData]);
 
   const handleLogout = () => {
     onLogout();
@@ -397,7 +389,7 @@ function ArticulationExercise({ onLogout }) {
         setCurrentItem(0);
         setLevelProgress({ ...levelProgress, [currentLevel]: true });
         resetTrials();
-        alert(`Level ${currentLevel} Complete! Moving to Level ${currentLevel + 1}: ${soundData.levels[currentLevel + 1].name}`);
+        alert(`Level ${currentLevel} Complete! Moving to Level ${currentLevel + 1}: ${exercises.levels[currentLevel + 1].name}`);
       } else {
         alert('Congratulations! You completed all levels for this sound!');
         navigate('/articulation');
@@ -434,7 +426,7 @@ function ArticulationExercise({ onLogout }) {
     return <div>Sound not found</div>;
   }
 
-  if (isLoadingProgress) {
+  if (isLoadingProgress || isLoadingExercises) {
     return (
       <div className="articulation-exercise-page">
         <div style={{ 
@@ -445,8 +437,30 @@ function ArticulationExercise({ onLogout }) {
           flexDirection: 'column',
           gap: '1rem'
         }}>
-          <div style={{ fontSize: '1.5rem', color: '#2c3e50' }}>Loading your progress...</div>
+          <div style={{ fontSize: '1.5rem', color: '#2c3e50' }}>
+            {isLoadingExercises ? 'Loading exercises...' : 'Loading your progress...'}
+          </div>
           <div style={{ fontSize: '1rem', color: '#6b7280' }}>Please wait</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!exercises || !exercises.levels || Object.keys(exercises.levels).length === 0) {
+    return (
+      <div className="articulation-exercise-page">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          flexDirection: 'column',
+          gap: '1rem'
+        }}>
+          <div style={{ fontSize: '1.5rem', color: '#2c3e50' }}>No exercises available</div>
+          <div style={{ fontSize: '1rem', color: '#6b7280' }}>
+            Please contact your therapist to add exercises for this sound.
+          </div>
         </div>
       </div>
     );
@@ -498,7 +512,7 @@ function ArticulationExercise({ onLogout }) {
                   }}
                 >
                   <span className="level-num">{level}</span>
-                  <span className="level-name">{soundData.levels[level].name}</span>
+                  <span className="level-name">{exercises.levels[level]?.name || `Level ${level}`}</span>
                 </div>
               ))}
             </div>

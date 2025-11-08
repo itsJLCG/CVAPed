@@ -319,4 +319,47 @@ export const receptiveExerciseService = {
   },
 };
 
+// Articulation Exercise Service (CRUD for therapist dashboard)
+export const articulationExerciseService = {
+  seedDefault: async () => {
+    const response = await api.post('/articulation/exercises/seed');
+    return response.data;
+  },
+  
+  getAll: async () => {
+    const response = await api.get('/articulation/exercises/');
+    return response.data;
+  },
+  
+  getActive: async (soundId) => {
+    const response = await api.get(`/articulation/exercises/active/${soundId}`);
+    return response.data;
+  },
+  
+  create: async (exerciseData) => {
+    const response = await api.post('/articulation/exercises/', exerciseData);
+    return response.data;
+  },
+  
+  update: async (exerciseId, exerciseData) => {
+    const response = await api.put(`/articulation/exercises/${exerciseId}`, exerciseData);
+    return response.data;
+  },
+  
+  delete: async (exerciseId) => {
+    const response = await api.delete(`/articulation/exercises/${exerciseId}`);
+    return response.data;
+  },
+  
+  toggleActive: async (exerciseId) => {
+    const response = await api.put(`/articulation/exercises/${exerciseId}/toggle`);
+    return response.data;
+  },
+  
+  deleteAll: async () => {
+    const response = await api.delete('/articulation/exercises/all');
+    return response.data;
+  }
+};
+
 export default api;

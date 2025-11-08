@@ -17,6 +17,8 @@ from fluency_crud import fluency_bp, init_fluency_crud
 from language_crud import language_bp, init_language_crud
 # Import receptive CRUD blueprint
 from receptive_crud import receptive_bp, init_receptive_crud
+# Import articulation CRUD blueprint
+from articulation_crud import articulation_bp, init_articulation_crud
 
 # Load environment variables from .env file
 load_dotenv()
@@ -45,6 +47,7 @@ db = client['CVACare']
 users_collection = db['users']
 articulation_progress_collection = db['articulation_progress']
 articulation_trials_collection = db['articulation_trials']
+articulation_exercises_collection = db['articulation_exercises']
 language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
 
@@ -59,6 +62,10 @@ init_language_crud(db, app.config['SECRET_KEY'])
 # Register receptive CRUD blueprint
 app.register_blueprint(receptive_bp)
 init_receptive_crud(db, app.config['SECRET_KEY'])
+
+# Register articulation CRUD blueprint
+app.register_blueprint(articulation_bp, url_prefix='/api/articulation/exercises')
+init_articulation_crud(db, app.config['SECRET_KEY'])
 
 # Token required decorator
 def token_required(f):

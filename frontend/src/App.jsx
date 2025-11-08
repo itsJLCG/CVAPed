@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import CompleteProfile from './pages/CompleteProfile';
 import Dashboard from './pages/Dashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
 import SpeechTherapy from './pages/SpeechTherapy';
@@ -18,30 +19,54 @@ import './App.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Check if user is authenticated
     const token = localStorage.getItem('token');
-    if (token) {
+    const user = localStorage.getItem('user');
+    if (token && user) {
       setIsAuthenticated(true);
+      try {
+        const userData = JSON.parse(user);
+        setUserRole(userData.role);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
     }
     setLoading(false);
   }, []);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        setUserRole(userData.role);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setIsAuthenticated(false);
+    setUserRole(null);
   };
 
   if (loading) {
     return <div className="loading">Loading...</div>;
   }
+
+  // Component to handle role-based redirect
+  const RoleBasedRedirect = () => {
+    if (!isAuthenticated) return <Navigate to="/login" />;
+    return userRole === 'admin' ? <Navigate to="/admin" /> : <Navigate to="/therapy-selection" />;
+  };
 
   return (
     <ToastProvider>
@@ -50,18 +75,18 @@ function App() {
           <Routes>
             <Route 
               path="/" 
-              element={isAuthenticated ? <Navigate to="/therapy-selection" /> : <Landing />} 
+              element={<RoleBasedRedirect />} 
             />
             <Route 
               path="/login" 
               element={
-                isAuthenticated ? <Navigate to="/therapy-selection" /> : <Login onLogin={handleLogin} />
+                isAuthenticated ? <RoleBasedRedirect /> : <Login onLogin={handleLogin} />
               } 
             />
             <Route 
               path="/register" 
               element={
-                isAuthenticated ? <Navigate to="/therapy-selection" /> : <Register onLogin={handleLogin} />
+                isAuthenticated ? <RoleBasedRedirect /> : <Register onLogin={handleLogin} />
               } 
             />
             <Route 
@@ -73,7 +98,13 @@ function App() {
             <Route 
               path="/dashboard" 
               element={
-                isAuthenticated ? <Navigate to="/therapy-selection" /> : <Navigate to="/login" />
+                isAuthenticated ? <RoleBasedRedirect /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/admin" 
+              element={
+                isAuthenticated && userRole === 'admin' ? <AdminDashboard onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

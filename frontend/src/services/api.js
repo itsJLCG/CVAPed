@@ -134,4 +134,48 @@ export const fluencyService = {
   },
 };
 
+// Admin API
+export const adminService = {
+  getStats: async () => {
+    const response = await api.get('/admin/stats');
+    return response.data;
+  },
+
+  getAllUsers: async () => {
+    const response = await api.get('/admin/users');
+    return response.data;
+  },
+
+  updateUser: async (userId, userData) => {
+    const response = await api.put(`/admin/users/${userId}`, userData);
+    return response.data;
+  },
+
+  deleteUser: async (userId) => {
+    const response = await api.delete(`/admin/users/${userId}`);
+    return response.data;
+  },
+
+  // Therapy data endpoints
+  getArticulationData: async () => {
+    const response = await api.get('/admin/therapies/articulation');
+    return response.data;
+  },
+
+  getLanguageData: async (mode) => {
+    const response = await api.get(`/admin/therapies/language/${mode}`);
+    return response.data;
+  },
+
+  getFluencyData: async () => {
+    const response = await api.get('/admin/therapies/fluency');
+    return response.data;
+  },
+
+  getPhysicalData: async () => {
+    const response = await api.get('/admin/therapies/physical');
+    return response.data;
+  },
+};
+
 export default api;

@@ -1647,6 +1647,458 @@ def get_fluency_progress(current_user):
         print(traceback.format_exc())
         return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
 
+# ========== ADMIN ENDPOINTS ==========
+
+@app.route('/api/admin/stats', methods=['GET'])
+@token_required
+def get_admin_stats(current_user):
+    """Get admin dashboard statistics"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Total users count
+        total_users = users_collection.count_documents({})
+        
+        # Active users (users who have any progress)
+        active_users = len(set(
+            list(articulation_progress_collection.distinct('user_id')) +
+            list(language_progress_collection.distinct('user_id')) +
+            list(db['fluency_progress'].distinct('user_id'))
+        ))
+        
+        # Total therapy sessions (all trials combined)
+        articulation_sessions = articulation_trials_collection.count_documents({})
+        language_sessions = language_trials_collection.count_documents({})
+        fluency_sessions = db['fluency_trials'].count_documents({})
+        total_sessions = articulation_sessions + language_sessions + fluency_sessions
+        
+        # Therapy completions (users who completed at least one therapy)
+        articulation_completions = articulation_progress_collection.count_documents({'completed': True})
+        language_completions = language_progress_collection.count_documents({'all_levels_completed': True})
+        fluency_completions = db['fluency_progress'].count_documents({'levels.5.completed': True})
+        total_completions = articulation_completions + language_completions + fluency_completions
+        
+        # Average scores
+        articulation_avg = list(articulation_trials_collection.aggregate([
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$accuracy_score'}}}
+        ]))
+        language_avg = list(language_trials_collection.aggregate([
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$accuracy_score'}}}
+        ]))
+        fluency_avg = list(db['fluency_trials'].aggregate([
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+        ]))
+        
+        avg_score = 0
+        score_count = 0
+        if articulation_avg and articulation_avg[0].get('avg_score') is not None:
+            avg_score += articulation_avg[0]['avg_score']
+            score_count += 1
+        if language_avg and language_avg[0].get('avg_score') is not None:
+            avg_score += language_avg[0]['avg_score']
+            score_count += 1
+        if fluency_avg and fluency_avg[0].get('avg_score') is not None:
+            avg_score += fluency_avg[0]['avg_score']
+            score_count += 1
+        
+        average_score = round(avg_score / score_count, 1) if score_count > 0 else 0
+        
+        # Therapy type distribution
+        speech_users = users_collection.count_documents({'therapyType': 'speech'})
+        physical_users = users_collection.count_documents({'therapyType': 'physical'})
+        
+        # Recent activity (last 10 completions)
+        recent_trials = list(db['fluency_trials'].find({}).sort('created_at', -1).limit(10))
+        recent_activity = []
+        for trial in recent_trials:
+            try:
+                user = users_collection.find_one({'_id': ObjectId(trial['user_id'])})
+                if user:
+                    timestamp = trial.get('created_at', utc_now())
+                    # Ensure timestamp is datetime object
+                    if isinstance(timestamp, str):
+                        timestamp = datetime.datetime.fromisoformat(timestamp)
+                    
+                    recent_activity.append({
+                        'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                        'therapy_type': 'Fluency Therapy',
+                        'score': trial.get('fluency_score', 0),
+                        'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                        'status': 'completed' if trial.get('fluency_score', 0) >= 70 else 'practicing'
+                    })
+            except Exception as e:
+                print(f"Error processing trial: {str(e)}")
+                continue
+        
+        # Session trends (last 7 days)
+        seven_days_ago = utc_now() - datetime.timedelta(days=7)
+        daily_sessions = {}
+        
+        for i in range(7):
+            day = seven_days_ago + datetime.timedelta(days=i)
+            day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + datetime.timedelta(days=1)
+            
+            count = (
+                articulation_trials_collection.count_documents({
+                    'created_at': {'$gte': day_start, '$lt': day_end}
+                }) +
+                language_trials_collection.count_documents({
+                    'created_at': {'$gte': day_start, '$lt': day_end}
+                }) +
+                db['fluency_trials'].count_documents({
+                    'created_at': {'$gte': day_start, '$lt': day_end}
+                })
+            )
+            
+            daily_sessions[day.strftime('%Y-%m-%d')] = count
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_users': total_users,
+                'active_users': active_users,
+                'total_sessions': total_sessions,
+                'total_completions': total_completions,
+                'average_score': average_score,
+                'speech_users': speech_users,
+                'physical_users': physical_users,
+                'articulation_sessions': articulation_sessions,
+                'language_sessions': language_sessions,
+                'fluency_sessions': fluency_sessions,
+                'articulation_avg': round(articulation_avg[0]['avg_score'], 1) if articulation_avg and articulation_avg[0].get('avg_score') is not None else 0,
+                'language_avg': round(language_avg[0]['avg_score'], 1) if language_avg and language_avg[0].get('avg_score') is not None else 0,
+                'fluency_avg': round(fluency_avg[0]['avg_score'], 1) if fluency_avg and fluency_avg[0].get('avg_score') is not None else 0
+            },
+            'therapy_distribution': {
+                'speech': speech_users,
+                'physical': physical_users
+            },
+            'recent_activity': recent_activity,
+            'session_trends': daily_sessions
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error getting admin stats: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to get admin stats', 'error': str(e)}), 500
+
+@app.route('/api/admin/users', methods=['GET'])
+@token_required
+def get_all_users(current_user):
+    """Get all users for admin management"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Get all users
+        users = list(users_collection.find({}))
+        
+        user_list = []
+        for user in users:
+            # Get user's progress across therapies
+            articulation_prog = articulation_progress_collection.find_one({'user_id': str(user['_id'])})
+            language_prog = language_progress_collection.find_one({'user_id': str(user['_id'])})
+            fluency_prog = db['fluency_progress'].find_one({'user_id': str(user['_id'])})
+            
+            # Count sessions
+            articulation_count = articulation_trials_collection.count_documents({'user_id': str(user['_id'])})
+            language_count = language_trials_collection.count_documents({'user_id': str(user['_id'])})
+            fluency_count = db['fluency_trials'].count_documents({'user_id': str(user['_id'])})
+            total_sessions = articulation_count + language_count + fluency_count
+            
+            # Calculate overall progress
+            progress_count = 0
+            if articulation_prog:
+                progress_count += 1
+            if language_prog:
+                progress_count += 1
+            if fluency_prog:
+                progress_count += 1
+            
+            user_list.append({
+                'id': str(user['_id']),
+                'email': user.get('email', ''),
+                'firstName': user.get('firstName', ''),
+                'lastName': user.get('lastName', ''),
+                'role': user.get('role', 'patient'),
+                'therapyType': user.get('therapyType', 'N/A'),
+                'patientType': user.get('patientType', 'N/A'),
+                'gender': user.get('gender', 'N/A'),
+                'age': user.get('age', 'N/A'),
+                'created_at': user.get('created_at', utc_now()).isoformat(),
+                'total_sessions': total_sessions,
+                'active_therapies': progress_count,
+                'last_active': user.get('updated_at', user.get('created_at', utc_now())).isoformat()
+            })
+        
+        return jsonify({
+            'success': True,
+            'users': user_list,
+            'total_count': len(user_list)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error getting users: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to get users', 'error': str(e)}), 500
+
+@app.route('/api/admin/users/<user_id>', methods=['PUT'])
+@token_required
+def admin_update_user(current_user, user_id):
+    """Update user details (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        data = request.get_json()
+        
+        # Prepare update fields
+        update_fields = {}
+        allowed_fields = ['firstName', 'lastName', 'email', 'role', 'therapyType', 'patientType', 'gender', 'age']
+        
+        for field in allowed_fields:
+            if field in data:
+                update_fields[field] = data[field]
+        
+        if not update_fields:
+            return jsonify({'message': 'No valid fields to update'}), 400
+        
+        update_fields['updated_at'] = utc_now()
+        
+        # Update user
+        result = users_collection.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': update_fields}
+        )
+        
+        if result.modified_count == 0:
+            return jsonify({'message': 'User not found or no changes made'}), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'User updated successfully'
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error updating user: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to update user', 'error': str(e)}), 500
+
+@app.route('/api/admin/users/<user_id>', methods=['DELETE'])
+@token_required
+def admin_delete_user(current_user, user_id):
+    """Delete user (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Cannot delete self
+        if str(current_user['_id']) == user_id:
+            return jsonify({'message': 'Cannot delete your own account'}), 400
+        
+        # Delete user and all their data
+        users_collection.delete_one({'_id': ObjectId(user_id)})
+        articulation_progress_collection.delete_many({'user_id': user_id})
+        articulation_trials_collection.delete_many({'user_id': user_id})
+        language_progress_collection.delete_many({'user_id': user_id})
+        language_trials_collection.delete_many({'user_id': user_id})
+        db['fluency_progress'].delete_many({'user_id': user_id})
+        db['fluency_trials'].delete_many({'user_id': user_id})
+        
+        return jsonify({
+            'success': True,
+            'message': 'User and all associated data deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error deleting user: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to delete user', 'error': str(e)}), 500
+
+@app.route('/api/admin/therapies/articulation', methods=['GET'])
+@token_required
+def get_articulation_therapy_data(current_user):
+    """Get all articulation therapy data (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Get all articulation trials with user info
+        trials = list(articulation_trials_collection.find({}).sort('created_at', -1))
+        
+        therapy_data = []
+        for trial in trials:
+            user = users_collection.find_one({'_id': ObjectId(trial['user_id'])})
+            if user:
+                therapy_data.append({
+                    'id': str(trial['_id']),
+                    'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                    'user_email': user.get('email', 'N/A'),
+                    'sound': trial.get('sound', 'N/A'),
+                    'word': trial.get('word', 'N/A'),
+                    'score': trial.get('score', 0),
+                    'is_correct': trial.get('is_correct', False),
+                    'transcription': trial.get('transcription', ''),
+                    'created_at': trial.get('created_at', datetime.datetime.utcnow()).isoformat() if trial.get('created_at') else datetime.datetime.utcnow().isoformat()
+                })
+        
+        return jsonify({
+            'success': True,
+            'data': therapy_data,
+            'total': len(therapy_data)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error fetching articulation data: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+
+@app.route('/api/admin/therapies/language/<mode>', methods=['GET'])
+@token_required
+def get_language_therapy_data(current_user, mode):
+    """Get all language therapy data for a specific mode (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Validate mode
+        if mode not in ['receptive', 'expressive']:
+            return jsonify({'message': 'Invalid mode. Must be receptive or expressive'}), 400
+        
+        # Get all language trials for this mode with user info
+        trials = list(language_trials_collection.find({'mode': mode}).sort('timestamp', -1))
+        
+        therapy_data = []
+        for trial in trials:
+            user = users_collection.find_one({'_id': ObjectId(trial['user_id'])})
+            if user:
+                therapy_data.append({
+                    'id': str(trial['_id']),
+                    'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                    'user_email': user.get('email', 'N/A'),
+                    'mode': trial.get('mode', mode),
+                    'exercise_id': trial.get('exercise_id', 'N/A'),
+                    'exercise_index': trial.get('exercise_index', 0),
+                    'score': trial.get('score', 0),
+                    'is_correct': trial.get('is_correct', False),
+                    'user_answer': trial.get('user_answer', ''),
+                    'transcription': trial.get('transcription', ''),
+                    'created_at': trial.get('timestamp', datetime.datetime.utcnow()).isoformat() if trial.get('timestamp') else datetime.datetime.utcnow().isoformat()
+                })
+        
+        return jsonify({
+            'success': True,
+            'mode': mode,
+            'data': therapy_data,
+            'total': len(therapy_data)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error fetching language data: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+
+@app.route('/api/admin/therapies/fluency', methods=['GET'])
+@token_required
+def get_fluency_therapy_data(current_user):
+    """Get all fluency therapy data (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Get all fluency trials with user info
+        trials = list(db['fluency_trials'].find({}).sort('created_at', -1))
+        
+        therapy_data = []
+        for trial in trials:
+            user = users_collection.find_one({'_id': ObjectId(trial['user_id'])})
+            if user:
+                therapy_data.append({
+                    'id': str(trial['_id']),
+                    'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                    'user_email': user.get('email', 'N/A'),
+                    'exercise_type': trial.get('exercise_type', 'N/A'),
+                    'fluency_score': trial.get('fluency_score', 0),
+                    'transcription': trial.get('transcription', ''),
+                    'word_count': trial.get('word_count', 0),
+                    'filler_count': trial.get('filler_count', 0),
+                    'created_at': trial.get('created_at', datetime.datetime.utcnow()).isoformat() if trial.get('created_at') else datetime.datetime.utcnow().isoformat()
+                })
+        
+        return jsonify({
+            'success': True,
+            'data': therapy_data,
+            'total': len(therapy_data)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error fetching fluency data: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+
+@app.route('/api/admin/therapies/physical', methods=['GET'])
+@token_required
+def get_physical_therapy_data(current_user):
+    """Get all physical therapy data (admin only)"""
+    try:
+        # Check if user is admin
+        if current_user.get('role') != 'admin':
+            return jsonify({'message': 'Unauthorized. Admin access required.'}), 403
+        
+        # Check if physical therapy collection exists
+        if 'physical_trials' in db.list_collection_names():
+            trials = list(db['physical_trials'].find({}).sort('created_at', -1))
+            
+            therapy_data = []
+            for trial in trials:
+                user = users_collection.find_one({'_id': ObjectId(trial['user_id'])})
+                if user:
+                    therapy_data.append({
+                        'id': str(trial['_id']),
+                        'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                        'user_email': user.get('email', 'N/A'),
+                        'exercise_type': trial.get('exercise_type', 'N/A'),
+                        'score': trial.get('score', 0),
+                        'duration': trial.get('duration', 0),
+                        'created_at': trial.get('created_at', datetime.datetime.utcnow()).isoformat() if trial.get('created_at') else datetime.datetime.utcnow().isoformat()
+                    })
+            
+            return jsonify({
+                'success': True,
+                'data': therapy_data,
+                'total': len(therapy_data)
+            }), 200
+        else:
+            # No physical therapy data yet
+            return jsonify({
+                'success': True,
+                'data': [],
+                'total': 0,
+                'message': 'No physical therapy data available'
+            }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error fetching physical therapy data: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'

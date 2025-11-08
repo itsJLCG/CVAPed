@@ -178,4 +178,49 @@ export const adminService = {
   },
 };
 
+// Fluency Exercise CRUD API
+export const fluencyExerciseService = {
+  // Seed default exercises
+  seedDefault: async () => {
+    const response = await api.post('/fluency-exercises/seed');
+    return response.data;
+  },
+
+  // Get all exercises (for therapists - includes inactive)
+  getAll: async () => {
+    const response = await api.get('/fluency-exercises');
+    return response.data;
+  },
+
+  // Get only active exercises (for patients)
+  getActive: async () => {
+    const response = await api.get('/fluency-exercises/active');
+    return response.data;
+  },
+
+  // Create new exercise
+  create: async (exerciseData) => {
+    const response = await api.post('/fluency-exercises', exerciseData);
+    return response.data;
+  },
+
+  // Update exercise
+  update: async (exerciseId, exerciseData) => {
+    const response = await api.put(`/fluency-exercises/${exerciseId}`, exerciseData);
+    return response.data;
+  },
+
+  // Delete exercise
+  delete: async (exerciseId) => {
+    const response = await api.delete(`/fluency-exercises/${exerciseId}`);
+    return response.data;
+  },
+
+  // Toggle active status
+  toggleActive: async (exerciseId) => {
+    const response = await api.patch(`/fluency-exercises/${exerciseId}/toggle-active`);
+    return response.data;
+  },
+};
+
 export default api;

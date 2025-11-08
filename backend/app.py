@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, auth
 
+# Import fluency CRUD blueprint
+from fluency_crud import fluency_bp, init_fluency_crud
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -40,6 +43,10 @@ articulation_progress_collection = db['articulation_progress']
 articulation_trials_collection = db['articulation_trials']
 language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
+
+# Register fluency CRUD blueprint
+app.register_blueprint(fluency_bp)
+init_fluency_crud(db)
 
 # Token required decorator
 def token_required(f):

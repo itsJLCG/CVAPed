@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { images } from '../assets/images';
 import axios from 'axios';
+import { fluencyExerciseService } from '../services/api';
 import './FluencyTherapy.css';
 
 const API_URL = 'http://localhost:5000/api';
@@ -26,6 +27,8 @@ function FluencyTherapy({ onLogout }) {
   const [showSpeakingIndicator, setShowSpeakingIndicator] = useState(false);
   const [hasCompletedBreathing, setHasCompletedBreathing] = useState(false);
   const [isLoadingProgress, setIsLoadingProgress] = useState(true);
+  const [fluencyExercises, setFluencyExercises] = useState({});
+  const [isLoadingExercises, setIsLoadingExercises] = useState(true);
   
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -33,211 +36,36 @@ function FluencyTherapy({ onLogout }) {
   const breathingTimerRef = useRef(null);
   const speechTimeoutRef = useRef(null);
 
-  // Fluency Therapy Exercises Structure
-  const fluencyExercises = {
-    1: {
-      name: 'Breathing & Single Words',
-      color: '#e8b04e',
-      exercises: [
-        {
-          id: 'breath-1',
-          type: 'controlled-breathing',
-          instruction: 'Take a deep breath, hold for 2 seconds, then use this word in a sentence or phrase',
-          target: 'Hello',
-          expectedDuration: 3,
-          breathing: true
-        },
-        {
-          id: 'breath-2',
-          type: 'controlled-breathing',
-          instruction: 'Breathe in deeply, pause, then use this word in a complete sentence',
-          target: 'Morning',
-          expectedDuration: 3,
-          breathing: true
-        },
-        {
-          id: 'breath-3',
-          type: 'controlled-breathing',
-          instruction: 'Control your breath, then use this word in context',
-          target: 'Welcome',
-          expectedDuration: 3,
-          breathing: true
-        },
-        {
-          id: 'breath-4',
-          type: 'controlled-breathing',
-          instruction: 'Take a breath, relax, and create a sentence with this word',
-          target: 'Sunshine',
-          expectedDuration: 3,
-          breathing: true
-        },
-        {
-          id: 'breath-5',
-          type: 'controlled-breathing',
-          instruction: 'Breathe calmly, then use this word in a longer phrase or sentence',
-          target: 'Beautiful',
-          expectedDuration: 4,
-          breathing: true
+  // Load active exercises from database
+  useEffect(() => {
+    const loadExercises = async () => {
+      setIsLoadingExercises(true);
+      try {
+        const response = await fluencyExerciseService.getActive();
+        console.log('Fluency exercises API response:', response);
+        if (response && response.success && response.exercises_by_level) {
+          // Backend returns exercises_by_level, not exercises
+          setFluencyExercises(response.exercises_by_level);
+          console.log('Loaded exercises:', response.exercises_by_level);
+        } else {
+          console.warn('No exercises in response, keeping empty object');
+          setFluencyExercises({});
         }
-      ]
-    },
-    2: {
-      name: 'Short Phrases',
-      color: '#479ac3',
-      exercises: [
-        {
-          id: 'phrase-1',
-          type: 'short-phrase',
-          instruction: 'Use this phrase as a starting point - expand it into a longer sentence',
-          target: 'Good morning everyone',
-          expectedDuration: 4,
-          breathing: true
-        },
-        {
-          id: 'phrase-2',
-          type: 'short-phrase',
-          instruction: 'Start with this phrase and keep talking naturally',
-          target: 'How are you today',
-          expectedDuration: 4,
-          breathing: true
-        },
-        {
-          id: 'phrase-3',
-          type: 'short-phrase',
-          instruction: 'Use this phrase in a complete thought or conversation',
-          target: 'Thank you very much',
-          expectedDuration: 4,
-          breathing: true
-        },
-        {
-          id: 'phrase-4',
-          type: 'short-phrase',
-          instruction: 'Begin with this phrase and continue with related ideas',
-          target: 'Have a nice day',
-          expectedDuration: 4,
-          breathing: true
-        },
-        {
-          id: 'phrase-5',
-          type: 'short-phrase',
-          instruction: 'Use this phrase as inspiration to speak more',
-          target: 'See you later friend',
-          expectedDuration: 4,
-          breathing: true
-        }
-      ]
-    },
-    3: {
-      name: 'Complete Sentences',
-      color: '#ce3630',
-      exercises: [
-        {
-          id: 'sentence-1',
-          type: 'sentence',
-          instruction: 'Read this sentence, then add your own thoughts to continue speaking',
-          target: 'The weather is very nice today and I feel happy',
-          expectedDuration: 6,
-          breathing: true
-        },
-        {
-          id: 'sentence-2',
-          type: 'sentence',
-          instruction: 'Say this sentence and continue with related ideas',
-          target: 'I enjoy reading books in the morning with coffee',
-          expectedDuration: 6,
-          breathing: true
-        },
-        {
-          id: 'sentence-3',
-          type: 'sentence',
-          instruction: 'Read this sentence and expand on the topic',
-          target: 'My family and I like to go hiking on weekends',
-          expectedDuration: 6,
-          breathing: true
-        },
-        {
-          id: 'sentence-4',
-          type: 'sentence',
-          instruction: 'Speak this sentence then elaborate naturally',
-          target: 'Learning new things helps me grow and become better',
-          expectedDuration: 6,
-          breathing: true
-        },
-        {
-          id: 'sentence-5',
-          type: 'sentence',
-          instruction: 'Read this sentence and share more about your practice',
-          target: 'I practice speaking every day to improve my fluency',
-          expectedDuration: 6,
-          breathing: true
-        }
-      ]
-    },
-    4: {
-      name: 'Reading Passages',
-      color: '#8e44ad',
-      exercises: [
-        {
-          id: 'passage-1',
-          type: 'passage',
-          instruction: 'Read this passage, then add your own observations or feelings about mornings',
-          target: 'The sun rises early in the morning. Birds start singing their beautiful songs. It is a peaceful time of day.',
-          expectedDuration: 10,
-          breathing: true
-        },
-        {
-          id: 'passage-2',
-          type: 'passage',
-          instruction: 'Read this passage and share your own reading experiences',
-          target: 'Reading helps improve vocabulary and comprehension. Take your time with each word. There is no need to rush.',
-          expectedDuration: 10,
-          breathing: true
-        },
-        {
-          id: 'passage-3',
-          type: 'passage',
-          instruction: 'Read this passage then talk about your practice routine',
-          target: 'Practice makes perfect in everything we do. Daily exercises help build confidence. Remember to breathe and stay calm.',
-          expectedDuration: 10,
-          breathing: true
-        }
-      ]
-    },
-    5: {
-      name: 'Spontaneous Speech',
-      color: '#27ae60',
-      exercises: [
-        {
-          id: 'spontaneous-1',
-          type: 'spontaneous',
-          instruction: 'Answer this question fully - speak for at least 10-15 seconds continuously',
-          target: 'What is your favorite hobby and why do you enjoy it?',
-          expectedDuration: 10,
-          breathing: true
-        },
-        {
-          id: 'spontaneous-2',
-          type: 'spontaneous',
-          instruction: 'Describe your routine in detail - keep talking for 10-15 seconds',
-          target: 'Tell me about your daily morning routine',
-          expectedDuration: 10,
-          breathing: true
-        },
-        {
-          id: 'spontaneous-3',
-          type: 'spontaneous',
-          instruction: 'Share your thoughts with examples - aim for 10-15 seconds of speech',
-          target: 'What makes you happy and why?',
-          expectedDuration: 10,
-          breathing: true
-        }
-      ]
-    }
-  };
+      } catch (error) {
+        console.error('Failed to load fluency exercises:', error);
+        // Keep empty object as fallback
+        setFluencyExercises({});
+      } finally {
+        setIsLoadingExercises(false);
+      }
+    };
+    loadExercises();
+  }, []);
 
+  // Calculate current exercise data - safely handle empty fluencyExercises
   const currentExercises = fluencyExercises[currentLevel]?.exercises || [];
-  const currentExercise = currentExercises[currentExerciseIndex];
-  const levelData = fluencyExercises[currentLevel];
+  const currentExercise = currentExercises[currentExerciseIndex] || null;
+  const levelData = fluencyExercises[currentLevel] || null;
 
   // Load progress on mount - resume where user left off
   useEffect(() => {
@@ -664,18 +492,23 @@ function FluencyTherapy({ onLogout }) {
     }
   };
 
-  // Show loading only while fetching progress
-  if (isLoadingProgress) {
+  // Show loading only while fetching progress or exercises
+  if (isLoadingProgress || isLoadingExercises) {
     return (
       <div className="loading-container">
         <div className="loading-spinner"></div>
-        <p>Loading your progress...</p>
+        <p>{isLoadingExercises ? 'Loading exercises...' : 'Loading your progress...'}</p>
       </div>
     );
   }
 
-  if (!currentExercise) {
-    return <div className="loading-container">Loading exercise...</div>;
+  if (!currentExercise || !levelData) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>No exercises available. Please contact your therapist.</p>
+      </div>
+    );
   }
 
   return (

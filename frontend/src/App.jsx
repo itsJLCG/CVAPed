@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import CompleteProfile from './pages/CompleteProfile';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import TherapistDashboard from './pages/TherapistDashboard';
 import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
 import SpeechTherapy from './pages/SpeechTherapy';
@@ -65,7 +66,9 @@ function App() {
   // Component to handle role-based redirect
   const RoleBasedRedirect = () => {
     if (!isAuthenticated) return <Navigate to="/login" />;
-    return userRole === 'admin' ? <Navigate to="/admin" /> : <Navigate to="/therapy-selection" />;
+    if (userRole === 'admin') return <Navigate to="/admin" />;
+    if (userRole === 'therapist') return <Navigate to="/therapist" />;
+    return <Navigate to="/therapy-selection" />;
   };
 
   return (
@@ -106,6 +109,12 @@ function App() {
               element={
                 isAuthenticated && userRole === 'admin' ? <AdminDashboard onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
+            />
+            <Route
+              path="/therapist"
+              element={
+                isAuthenticated && userRole === 'therapist' ? <TherapistDashboard onLogout={handleLogout} /> : <Navigate to="/login" />
+              }
             />
             <Route 
               path="/therapy-selection" 

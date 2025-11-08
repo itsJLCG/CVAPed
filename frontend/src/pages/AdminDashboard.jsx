@@ -289,10 +289,10 @@ function AdminDashboard({ onLogout }) {
       <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <img src={images.logo} alt="CVACare Logo" className="logo-img" />
+            <img src={images.logo} alt="CVAPed Logo" className="logo-img" />
             {!sidebarCollapsed && (
               <div className="logo-text">
-                <h2>CVACare</h2>
+                <h2>CVAPed</h2>
                 <span className="admin-badge">Admin Panel</span>
               </div>
             )}

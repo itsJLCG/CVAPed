@@ -8,6 +8,7 @@ function TherapistDashboard({ onLogout }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [speechDropdownOpen, setSpeechDropdownOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSub, setActiveSub] = useState('receptive');
   const [therapyData, setTherapyData] = useState([]);
@@ -83,6 +84,7 @@ function TherapistDashboard({ onLogout }) {
   const [editingArticulationExercise, setEditingArticulationExercise] = useState(null);
   const [showArticulationModal, setShowArticulationModal] = useState(false);
   const [activeArticulationSound, setActiveArticulationSound] = useState('s');
+  const [soundDropdownOpen, setSoundDropdownOpen] = useState(false);
   const [availableOrders, setAvailableOrders] = useState([1]);
   const [newArticulationExercise, setNewArticulationExercise] = useState({
     sound_id: 's',
@@ -694,7 +696,11 @@ function TherapistDashboard({ onLogout }) {
     <div className="admin-dashboard">
       <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo">
+          <div 
+            className="sidebar-logo" 
+            onClick={sidebarCollapsed ? () => setSidebarCollapsed(false) : undefined}
+            style={sidebarCollapsed ? { cursor: 'pointer' } : {}}
+          >
             <img src={images.logo} alt="CVAPed Logo" className="logo-img" />
             {!sidebarCollapsed && (
               <div className="logo-text">
@@ -703,9 +709,11 @@ function TherapistDashboard({ onLogout }) {
               </div>
             )}
           </div>
-          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-            {sidebarCollapsed ? '→' : '←'}
-          </button>
+          {!sidebarCollapsed && (
+            <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+              ←
+            </button>
+          )}
         </div>
 
         <nav className="sidebar-nav">
@@ -714,13 +722,21 @@ function TherapistDashboard({ onLogout }) {
             {!sidebarCollapsed && <span className="nav-label">Overview</span>}
           </button>
 
-          <div>
-            <button className={`nav-item ${activeTab === 'speech' || activeTab.startsWith('speech-') ? 'active' : ''}`} onClick={() => { setActiveTab('speech'); setActiveSub(null); }}>
+          <div className="dropdown-container">
+            <button 
+              className={`nav-item ${activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency' ? 'active' : ''}`} 
+              onClick={() => setSpeechDropdownOpen(!speechDropdownOpen)}
+            >
               <span className="nav-icon">🎤</span>
-              {!sidebarCollapsed && <span className="nav-label">Speech Therapy</span>}
+              {!sidebarCollapsed && (
+                <>
+                  <span className="nav-label">Speech Therapy</span>
+                  <span className={`dropdown-arrow ${speechDropdownOpen ? 'open' : ''}`}>▼</span>
+                </>
+              )}
             </button>
-            {!sidebarCollapsed && (
-              <div className="sub-nav">
+            {!sidebarCollapsed && speechDropdownOpen && (
+              <div className="dropdown-menu">
                 <button className={`nav-item sub-item ${activeTab === 'articulation' ? 'active' : ''}`} onClick={() => { setActiveTab('articulation'); setTherapyData([]); }}>
                   <span className="nav-label">Articulation</span>
                 </button>
@@ -772,7 +788,6 @@ function TherapistDashboard({ onLogout }) {
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
-            <button className="header-btn" onClick={() => navigate('/profile')}>👤 Profile</button>
             <button className="header-btn logout-btn" onClick={onLogout}>🚪 Logout</button>
           </div>
         </header>
@@ -787,10 +802,249 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'overview' && (
             <div className="overview-section">
-              <div className="empty-state">
-                <div className="empty-state-icon">📊</div>
-                <h2 className="empty-state-title">Overview Dashboard</h2>
-                <p className="empty-state-message">Overview analytics and statistics will be displayed here.</p>
+              {/* Stats Cards */}
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                    👥
+                  </div>
+                  <div className="stat-details">
+                    <h3 className="stat-value">156</h3>
+                    <p className="stat-label">Total Patients</p>
+                    <span className="stat-change positive">+12% this month</span>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
+                    📋
+                  </div>
+                  <div className="stat-details">
+                    <h3 className="stat-value">48</h3>
+                    <p className="stat-label">Active Sessions</p>
+                    <span className="stat-change positive">+8% this week</span>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
+                    ✅
+                  </div>
+                  <div className="stat-details">
+                    <h3 className="stat-value">89%</h3>
+                    <p className="stat-label">Completion Rate</p>
+                    <span className="stat-change positive">+5% improvement</span>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>
+                    ⭐
+                  </div>
+                  <div className="stat-details">
+                    <h3 className="stat-value">4.8</h3>
+                    <p className="stat-label">Avg Rating</p>
+                    <span className="stat-change positive">+0.3 this month</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Charts Section */}
+              <div className="charts-section">
+                <div className="chart-card">
+                  <div className="chart-header">
+                    <h3 className="chart-title">Therapy Sessions Overview</h3>
+                    <select className="chart-filter">
+                      <option>Last 7 Days</option>
+                      <option>Last 30 Days</option>
+                      <option>Last 3 Months</option>
+                    </select>
+                  </div>
+                  <div className="chart-placeholder">
+                    <div className="pie-chart-container">
+                      <svg className="pie-chart" viewBox="0 0 200 200">
+                        {/* Articulation - 35% */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="80"
+                          fill="transparent"
+                          stroke="url(#gradient1)"
+                          strokeWidth="40"
+                          strokeDasharray="175.93 502.65"
+                          strokeDashoffset="0"
+                          transform="rotate(-90 100 100)"
+                        />
+                        {/* Language - 28% */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="80"
+                          fill="transparent"
+                          stroke="url(#gradient2)"
+                          strokeWidth="40"
+                          strokeDasharray="140.74 502.65"
+                          strokeDashoffset="-175.93"
+                          transform="rotate(-90 100 100)"
+                        />
+                        {/* Fluency - 22% */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="80"
+                          fill="transparent"
+                          stroke="url(#gradient3)"
+                          strokeWidth="40"
+                          strokeDasharray="110.58 502.65"
+                          strokeDashoffset="-316.67"
+                          transform="rotate(-90 100 100)"
+                        />
+                        {/* Physical - 15% */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="80"
+                          fill="transparent"
+                          stroke="url(#gradient4)"
+                          strokeWidth="40"
+                          strokeDasharray="75.40 502.65"
+                          strokeDashoffset="-427.25"
+                          transform="rotate(-90 100 100)"
+                        />
+                        <defs>
+                          <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style={{ stopColor: '#667eea' }} />
+                            <stop offset="100%" style={{ stopColor: '#764ba2' }} />
+                          </linearGradient>
+                          <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style={{ stopColor: '#f093fb' }} />
+                            <stop offset="100%" style={{ stopColor: '#f5576c' }} />
+                          </linearGradient>
+                          <linearGradient id="gradient3" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style={{ stopColor: '#4facfe' }} />
+                            <stop offset="100%" style={{ stopColor: '#00f2fe' }} />
+                          </linearGradient>
+                          <linearGradient id="gradient4" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style={{ stopColor: '#fa709a' }} />
+                            <stop offset="100%" style={{ stopColor: '#fee140' }} />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                      <div className="pie-legend">
+                        <div className="legend-item">
+                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}></span>
+                          <span className="legend-text">Articulation (35%)</span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}></span>
+                          <span className="legend-text">Language (28%)</span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}></span>
+                          <span className="legend-text">Fluency (22%)</span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}></span>
+                          <span className="legend-text">Physical (15%)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="chart-card">
+                  <div className="chart-header">
+                    <h3 className="chart-title">Therapy Types Distribution</h3>
+                  </div>
+                  <div className="chart-placeholder">
+                    <div className="therapy-type-grid">
+                      <div className="therapy-type-card">
+                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>🎤</div>
+                        <div className="therapy-info">
+                          <p className="therapy-name">Articulation</p>
+                          <p className="therapy-percentage">35%</p>
+                        </div>
+                        <div className="therapy-bar-mini">
+                          <div className="therapy-bar-fill" style={{ width: '35%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}></div>
+                        </div>
+                      </div>
+                      <div className="therapy-type-card">
+                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>💬</div>
+                        <div className="therapy-info">
+                          <p className="therapy-name">Language</p>
+                          <p className="therapy-percentage">28%</p>
+                        </div>
+                        <div className="therapy-bar-mini">
+                          <div className="therapy-bar-fill" style={{ width: '28%', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}></div>
+                        </div>
+                      </div>
+                      <div className="therapy-type-card">
+                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>🗣️</div>
+                        <div className="therapy-info">
+                          <p className="therapy-name">Fluency</p>
+                          <p className="therapy-percentage">22%</p>
+                        </div>
+                        <div className="therapy-bar-mini">
+                          <div className="therapy-bar-fill" style={{ width: '22%', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}></div>
+                        </div>
+                      </div>
+                      <div className="therapy-type-card therapy-type-card-centered">
+                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>🏃</div>
+                        <div className="therapy-info">
+                          <p className="therapy-name">Physical</p>
+                          <p className="therapy-percentage">15%</p>
+                        </div>
+                        <div className="therapy-bar-mini">
+                          <div className="therapy-bar-fill" style={{ width: '15%', background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="recent-activity-section">
+                <div className="activity-card">
+                  <div className="activity-header">
+                    <h3 className="activity-title">Recent Patient Activity</h3>
+                    <button className="view-all-btn">View All →</button>
+                  </div>
+                  <div className="activity-list">
+                    <div className="activity-item">
+                      <div className="activity-avatar">JD</div>
+                      <div className="activity-details">
+                        <p className="activity-name">John Doe</p>
+                        <p className="activity-desc">Completed Articulation Exercise - Level 2</p>
+                      </div>
+                      <span className="activity-time">2 hours ago</span>
+                    </div>
+                    <div className="activity-item">
+                      <div className="activity-avatar">SM</div>
+                      <div className="activity-details">
+                        <p className="activity-name">Sarah Miller</p>
+                        <p className="activity-desc">Started Language Therapy Session</p>
+                      </div>
+                      <span className="activity-time">4 hours ago</span>
+                    </div>
+                    <div className="activity-item">
+                      <div className="activity-avatar">RJ</div>
+                      <div className="activity-details">
+                        <p className="activity-name">Robert Johnson</p>
+                        <p className="activity-desc">Achieved 90% accuracy in Fluency exercises</p>
+                      </div>
+                      <span className="activity-time">6 hours ago</span>
+                    </div>
+                    <div className="activity-item">
+                      <div className="activity-avatar">EW</div>
+                      <div className="activity-details">
+                        <p className="activity-name">Emily Wilson</p>
+                        <p className="activity-desc">Completed Physical Therapy milestone</p>
+                      </div>
+                      <span className="activity-time">1 day ago</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -810,16 +1064,30 @@ function TherapistDashboard({ onLogout }) {
 
                 <div className="sound-selector">
                   <div className="sound-selector-title">Select Sound</div>
-                  <div className="sound-selector-buttons">
-                    {['s', 'r', 'l', 'k', 'th'].map(sound => (
-                      <button
-                        key={sound}
-                        className={`sound-btn ${activeArticulationSound === sound ? 'active' : ''}`}
-                        onClick={() => setActiveArticulationSound(sound)}
-                      >
-                        /{sound.toUpperCase()}/
-                      </button>
-                    ))}
+                  <div className="sound-dropdown-wrapper">
+                    <button 
+                      className="sound-dropdown-button"
+                      onClick={() => setSoundDropdownOpen(!soundDropdownOpen)}
+                    >
+                      <span className="selected-sound">/{activeArticulationSound.toUpperCase()}/</span>
+                      <span className={`dropdown-arrow ${soundDropdownOpen ? 'open' : ''}`}>▼</span>
+                    </button>
+                    {soundDropdownOpen && (
+                      <div className="sound-dropdown-menu">
+                        {Object.keys(articulationExercises).map(sound => (
+                          <button
+                            key={sound}
+                            className={`sound-dropdown-item ${activeArticulationSound === sound ? 'active' : ''}`}
+                            onClick={() => {
+                              setActiveArticulationSound(sound);
+                              setSoundDropdownOpen(false);
+                            }}
+                          >
+                            /{sound.toUpperCase()}/
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -459,85 +459,89 @@ function AdminDashboard({ onLogout }) {
   }
 
   return (
-    <div className="admin-dashboard">
+    <>
       {/* Header */}
       <header className="admin-header">
         <div className="admin-header-container">
           <div className="admin-logo-group">
-            <img src={images.logo} alt="CVACare Logo" className="admin-header-logo" />
-            <img src={images.cvacareText} alt="CVACare" className="admin-header-text" />
+            <img src={images.logo} alt="CVAPed Logo" className="admin-header-logo" />
+            <img src={images.cvacareText} alt="CVAPed" className="admin-header-text" />
             <span className="admin-badge">Admin Panel</span>
           </div>
           <div className="admin-header-actions">
-            <span className="admin-user-name">{user?.firstName} {user?.lastName}</span>
-            <button onClick={onLogout} className="header-btn logout-btn">
+            <span className="admin-user-name">
+              {user.firstName} {user.lastName}
+            </span>
+            <button onClick={onLogout} className="logout-btn">
               Logout
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="admin-content">
-        {/* Sidebar */}
-        <aside className="admin-sidebar">
-          <nav className="sidebar-nav">
-            <button
-              className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
-              onClick={() => setActiveTab('overview')}
-            >
-              <span className="nav-icon">
-                <FiGrid />
-              </span>
-              <span className="nav-label">Overview</span>
-            </button>
-            
-            <button
-              className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
-              onClick={() => setActiveTab('users')}
-            >
-              <span className="nav-icon">
-                <FiUsers />
-              </span>
-              <span className="nav-label">User Management</span>
-            </button>
-          </nav>
-        </aside>
-
-        {/* Main Section */}
-        <main className="admin-main">
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'users' && renderUserManagement()}
-        </main>
-      </div>
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Confirm Delete</h3>
-            <p className="modal-body">
-              Are you sure you want to delete user <strong>{deleteConfirm.userName}</strong>? 
-              This action cannot be undone.
-            </p>
-            <div className="modal-actions">
-              <button 
-                onClick={() => setDeleteConfirm(null)} 
-                className="modal-btn modal-btn-cancel"
+      <div className="admin-dashboard">
+        {/* Main Content */}
+        <div className="admin-content">
+          {/* Sidebar */}
+          <aside className="admin-sidebar">
+            <nav className="sidebar-nav">
+              <button
+                className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('overview')}
               >
-                Cancel
+                <span className="nav-icon">
+                  <FiGrid />
+                </span>
+                <span className="nav-label">Overview</span>
               </button>
-              <button 
-                onClick={deleteUser} 
-                className="modal-btn modal-btn-confirm"
+              
+              <button
+                className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
+                onClick={() => setActiveTab('users')}
               >
-                Delete
+                <span className="nav-icon">
+                  <FiUsers />
+                </span>
+                <span className="nav-label">User Management</span>
               </button>
+            </nav>
+          </aside>
+
+          {/* Main Section */}
+          <main className="admin-main">
+            {activeTab === 'overview' && renderOverview()}
+            {activeTab === 'users' && renderUserManagement()}
+          </main>
+        </div>
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h3 className="modal-title">Confirm Delete</h3>
+              <p className="modal-body">
+                Are you sure you want to delete user <strong>{deleteConfirm.userName}</strong>? 
+                This action cannot be undone.
+              </p>
+              <div className="modal-actions">
+                <button 
+                  onClick={() => setDeleteConfirm(null)} 
+                  className="modal-btn modal-btn-cancel"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={deleteUser} 
+                  className="modal-btn modal-btn-confirm"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 }
 

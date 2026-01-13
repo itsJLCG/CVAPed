@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { images } from '../assets/images';
+import Header from '../components/Header';
 import axios from 'axios';
 import { fluencyExerciseService } from '../services/api';
 import './FluencyTherapy.css';
@@ -130,11 +130,6 @@ function FluencyTherapy({ onLogout }) {
       setHasPlayedAudio(false);
     }
   }, [currentExercise, showResults]);
-
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
-  };
 
   // Text-to-Speech function
   const speakText = (text, repeatCount = 1) => {
@@ -534,31 +529,7 @@ function FluencyTherapy({ onLogout }) {
       )}
 
       {/* Header */}
-      <header className="fluency-header">
-        <div className="fluency-header-container">
-          <div className="fluency-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="fluency-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="fluency-header-text" />
-          </div>
-          <div className="fluency-title-section">
-            <h1 className="fluency-exercise-title">Fluency Therapy Assessment</h1>
-            <div className="fluency-breadcrumb">
-              Level {currentLevel}: {levelData.name} • Exercise {currentExerciseIndex + 1} of {currentExercises.length}
-            </div>
-          </div>
-          <div className="fluency-nav">
-            <button onClick={() => navigate('/speech-therapy')} className="fluency-nav-btn">
-              ← Back
-            </button>
-            <button onClick={() => navigate('/profile')} className="fluency-nav-btn profile">
-              My Profile
-            </button>
-            <button onClick={handleLogout} className="fluency-nav-btn logout">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Content */}
       <main className="fluency-main">

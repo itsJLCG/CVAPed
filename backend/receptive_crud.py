@@ -61,6 +61,38 @@ def therapist_required(f):
     return decorated
 
 
+# ============= HELPER FUNCTIONS =============
+
+def generate_exercise_id(type_name, order):
+    """Generate a unique exercise_id based on type and order"""
+    return f"{type_name}-{order}"
+
+def get_available_orders(level):
+    """Get list of available order numbers for a given level"""
+    # Get all existing orders for this level
+    existing_exercises = list(receptive_exercises_collection.find(
+        {'level': level},
+        {'order': 1}
+    ))
+    existing_orders = {ex['order'] for ex in existing_exercises}
+    
+    # Find gaps in the sequence and next available
+    if not existing_orders:
+        return [1]
+    
+    max_order = max(existing_orders)
+    available = []
+    
+    # Check for gaps in sequence
+    for i in range(1, max_order + 1):
+        if i not in existing_orders:
+            available.append(i)
+    
+    # Add next number after max
+    available.append(max_order + 1)
+    
+    return available if available else [1]
+
 # ============= SEED DEFAULT EXERCISES =============
 
 @receptive_bp.route('/api/receptive-exercises/seed', methods=['POST'])
@@ -442,6 +474,37 @@ def get_active_exercises(current_user):
         }), 500
 
 
+# ============= GET AVAILABLE ORDERS =============
+
+@receptive_bp.route('/api/receptive-exercises/available-orders', methods=['GET'])
+@token_required
+@therapist_required
+def get_available_orders_endpoint(current_user):
+    """Get available order numbers for a given level (therapist only)"""
+    try:
+        level = request.args.get('level', type=int)
+        
+        if level is None:
+            return jsonify({
+                'success': False,
+                'message': 'Level parameter is required'
+            }), 400
+        
+        available_orders = get_available_orders(level)
+        
+        return jsonify({
+            'success': True,
+            'available_orders': available_orders
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting available orders: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get available orders',
+            'error': str(e)
+        }), 500
+
 # ============= CREATE EXERCISE =============
 
 @receptive_bp.route('/api/receptive-exercises', methods=['POST'])
@@ -452,8 +515,8 @@ def create_exercise(current_user):
     try:
         data = request.get_json()
         
-        # Validate required fields
-        required_fields = ['exercise_id', 'type', 'level', 'instruction', 'target', 'options']
+        # Validate required fields (exercise_id NOT required - will be auto-generated)
+        required_fields = ['type', 'level', 'instruction', 'target', 'options', 'order']
         for field in required_fields:
             if field not in data:
                 return jsonify({
@@ -461,30 +524,37 @@ def create_exercise(current_user):
                     'message': f'Missing required field: {field}'
                 }), 400
         
-        # Check if exercise_id already exists
-        existing = receptive_exercises_collection.find_one({'exercise_id': data['exercise_id']})
+        # Check if order is already taken for this level
+        existing_order = receptive_exercises_collection.find_one({
+            'level': data['level'],
+            'order': data['order']
+        })
+        if existing_order:
+            return jsonify({
+                'success': False,
+                'message': f'Order {data["order"]} is already taken for level {data["level"]}'
+            }), 400
+        
+        # Auto-generate exercise_id
+        exercise_id = generate_exercise_id(data['type'], data['order'])
+        
+        # Check if auto-generated exercise_id already exists (shouldn't happen but safety check)
+        existing = receptive_exercises_collection.find_one({'exercise_id': exercise_id})
         if existing:
             return jsonify({
                 'success': False,
-                'message': f'Exercise with ID {data["exercise_id"]} already exists'
+                'message': f'Exercise with ID {exercise_id} already exists'
             }), 400
-        
-        # Auto-calculate order (next available for this level)
-        max_order_doc = receptive_exercises_collection.find_one(
-            {'level': data['level']},
-            sort=[('order', -1)]
-        )
-        next_order = (max_order_doc['order'] + 1) if max_order_doc else 1
         
         # Create new exercise
         new_exercise = {
-            'exercise_id': data['exercise_id'],
+            'exercise_id': exercise_id,
             'type': data['type'],
             'level': data['level'],
             'instruction': data['instruction'],
             'target': data['target'],
             'options': data['options'],
-            'order': next_order,
+            'order': data['order'],
             'is_active': data.get('is_active', False),  # Default to inactive
             'created_at': datetime.datetime.utcnow(),
             'updated_at': datetime.datetime.utcnow()
@@ -514,9 +584,16 @@ def create_exercise(current_user):
 @token_required
 @therapist_required
 def update_exercise(current_user, exercise_id):
-    """Update an existing receptive exercise (therapist only)"""
+    """Update an existing receptive exercise (therapist only - only target, options, and is_active)"""
     try:
         data = request.get_json()
+        
+        # Only allow updating specific fields
+        allowed_fields = ['target', 'options', 'is_active']
+        update_data = {}
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
         
         # Find exercise by _id or exercise_id
         exercise = None
@@ -531,16 +608,14 @@ def update_exercise(current_user, exercise_id):
                 'message': 'Exercise not found'
             }), 404
         
-        # Update fields
-        update_data = {
-            'updated_at': datetime.datetime.utcnow()
-        }
+        # Add updated timestamp
+        update_data['updated_at'] = datetime.datetime.utcnow()
         
-        # Update allowed fields
-        allowed_fields = ['type', 'level', 'instruction', 'target', 'options', 'order', 'is_active']
-        for field in allowed_fields:
-            if field in data:
-                update_data[field] = data[field]
+        if not update_data or len(update_data) == 1:  # Only has updated_at
+            return jsonify({
+                'success': False,
+                'message': 'No valid fields to update'
+            }), 400
         
         # Perform update
         receptive_exercises_collection.update_one(

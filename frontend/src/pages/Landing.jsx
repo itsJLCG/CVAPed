@@ -138,21 +138,43 @@ function Landing() {
       <section className="features-section">
         <div className="features-container">
           <h2 className="section-title">Our Services</h2>
+          <p className="section-subtitle">Comprehensive therapy solutions designed for optimal patient care and recovery</p>
           <div className="features-grid">
             <div className="feature-card">
-              <div className="feature-icon">🏥</div>
-              <h3>Physical Therapy</h3>
-              <p>Specialized rehabilitation programs for stroke patients with expert guidance and monitoring.</p>
+              <div className="feature-icon-wrapper">
+                <div className="feature-icon">🏥</div>
+              </div>
+              <h3>Physical Therapy for Stroke Patients</h3>
+              <p>Expert-led rehabilitation programs tailored for stroke recovery. Our specialized approach combines traditional therapy methods with modern technology to help patients regain mobility, strength, and independence.</p>
+              <ul className="feature-benefits">
+                <li>Personalized treatment plans</li>
+                <li>Real-time progress monitoring</li>
+                <li>Exercise tracking and guidance</li>
+              </ul>
             </div>
             <div className="feature-card">
-              <div className="feature-icon">💬</div>
-              <h3>Speech Therapy</h3>
-              <p>Comprehensive pediatric speech therapy services to support children's communication development.</p>
+              <div className="feature-icon-wrapper">
+                <div className="feature-icon">💬</div>
+              </div>
+              <h3>Pediatric Speech Therapy</h3>
+              <p>Comprehensive speech and language therapy services for children. We focus on articulation, fluency, language development, and receptive communication skills through engaging and evidence-based interventions.</p>
+              <ul className="feature-benefits">
+                <li>Articulation & pronunciation training</li>
+                <li>Language comprehension exercises</li>
+                <li>Fluency development programs</li>
+              </ul>
             </div>
             <div className="feature-card">
-              <div className="feature-icon">📊</div>
-              <h3>Progress Tracking</h3>
-              <p>Advanced analytics and reporting tools to monitor patient progress and therapy outcomes.</p>
+              <div className="feature-icon-wrapper">
+                <div className="feature-icon">📊</div>
+              </div>
+              <h3>Advanced Progress Tracking</h3>
+              <p>State-of-the-art analytics and reporting system that provides detailed insights into therapy progress. Monitor improvements, identify trends, and make data-driven decisions for optimal outcomes.</p>
+              <ul className="feature-benefits">
+                <li>Comprehensive performance metrics</li>
+                <li>Visual progress reports</li>
+                <li>Predictive mastery analysis</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -228,33 +250,28 @@ function Landing() {
       <footer className="landing-footer">
         <div className="footer-container">
           <div className="footer-section">
-            <h4>CVAPed</h4>
-            <p>Empowering recovery through innovative therapy management.</p>
+            <h4>CVACare</h4>
+            <p>Empowering recovery through innovative therapy management for stroke patients and pediatric speech therapy.</p>
           </div>
           <div className="footer-section">
-            <h4>Quick Links</h4>
+            <h4>Partnered With</h4>
             <ul>
-              <li><a href="#about">About Us</a></li>
-              <li><a href="#services">Services</a></li>
-              <li><a href="#contact">Contact</a></li>
+              <li>Technological University of the Philippines - Taguig</li>
+              <li>Taguig Physical Medicine and Rehabilitation Unit</li>
+              <li>City Government of Taguig</li>
             </ul>
           </div>
           <div className="footer-section">
-            <h4>Contact</h4>
-            <p>Email: info@cvaped.com</p>
-            <p>Phone: (123) 456-7890</p>
-          </div>
-          <div className="footer-section">
-            <h4>Follow Us</h4>
-            <div className="social-links">
-              <a href="#facebook">Facebook</a>
-              <a href="#twitter">Twitter</a>
-              <a href="#linkedin">LinkedIn</a>
-            </div>
+            <h4>Services</h4>
+            <ul>
+              <li>Physical Therapy</li>
+              <li>Pediatric Speech Therapy</li>
+              <li>Progress Tracking & Analytics</li>
+            </ul>
           </div>
         </div>
         <div className="footer-bottom">
-          <p>&copy; 2025 CVAPed. All rights reserved.</p>
+          <p>&copy; 2025 CVACare. A thesis project by TUP-Taguig students. All rights reserved.</p>
         </div>
       </footer>
     </div>

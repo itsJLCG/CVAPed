@@ -817,6 +817,72 @@ def get_active_exercises(current_user, sound_id):
             'error': str(e)
         }), 500
 
+# Helper function to generate exercise ID
+def generate_exercise_id(sound_id, level, order):
+    """Generate exercise ID based on sound, level and order"""
+    level_names = {
+        1: 'sound',
+        2: 'syllable',
+        3: 'word',
+        4: 'phrase',
+        5: 'sentence'
+    }
+    level_name = level_names.get(level, f'level{level}')
+    return f"{sound_id}-{level_name}-{order}"
+
+# Helper function to get available orders for a sound/level combination
+def get_available_orders(sound_id, level):
+    """Get list of available order numbers for a sound/level combination"""
+    existing_exercises = articulation_exercises_collection.find({
+        'sound_id': sound_id,
+        'level': level
+    }).sort('order', 1)
+    
+    used_orders = set(ex['order'] for ex in existing_exercises)
+    
+    # Return next available order (1-indexed)
+    next_order = 1
+    while next_order in used_orders:
+        next_order += 1
+    
+    # Return list of available orders (next 10 possible orders)
+    available = []
+    for i in range(next_order, next_order + 10):
+        if i not in used_orders:
+            available.append(i)
+    
+    return available
+
+# Get available orders endpoint
+@articulation_bp.route('/available-orders', methods=['GET'])
+@token_required
+def get_available_orders_endpoint(current_user):
+    """Get available order numbers for a sound/level combination"""
+    try:
+        sound_id = request.args.get('sound_id')
+        level = request.args.get('level')
+        
+        if not sound_id or not level:
+            return jsonify({
+                'success': False,
+                'message': 'Missing sound_id or level parameter'
+            }), 400
+        
+        level = int(level)
+        available_orders = get_available_orders(sound_id, level)
+        
+        return jsonify({
+            'success': True,
+            'available_orders': available_orders
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get available orders',
+            'error': str(e)
+        }), 500
+
 # Create new exercise
 @articulation_bp.route('/', methods=['POST'])
 @token_required
@@ -825,8 +891,8 @@ def create_exercise(current_user):
     try:
         data = request.get_json()
         
-        # Validate required fields
-        required_fields = ['exercise_id', 'sound_id', 'sound_name', 'level', 'level_name', 'target']
+        # Validate required fields (exercise_id is now auto-generated)
+        required_fields = ['sound_id', 'sound_name', 'level', 'level_name', 'target', 'order']
         for field in required_fields:
             if field not in data:
                 return jsonify({
@@ -834,23 +900,34 @@ def create_exercise(current_user):
                     'message': f'Missing required field: {field}'
                 }), 400
         
-        # Check if exercise_id already exists
-        existing = articulation_exercises_collection.find_one({'exercise_id': data['exercise_id']})
+        sound_id = data['sound_id']
+        level = int(data['level'])
+        order = int(data['order'])
+        
+        # Check if order is already taken for this sound/level combination
+        existing = articulation_exercises_collection.find_one({
+            'sound_id': sound_id,
+            'level': level,
+            'order': order
+        })
         if existing:
             return jsonify({
                 'success': False,
-                'message': 'Exercise ID already exists'
+                'message': f'Order {order} is already taken for {sound_id.upper()} sound, Level {level}. Please choose a different order.'
             }), 400
+        
+        # Auto-generate exercise_id
+        exercise_id = generate_exercise_id(sound_id, level, order)
         
         # Create exercise document
         exercise = {
-            'exercise_id': data['exercise_id'],
-            'sound_id': data['sound_id'],
+            'exercise_id': exercise_id,
+            'sound_id': sound_id,
             'sound_name': data['sound_name'],
-            'level': int(data['level']),
+            'level': level,
             'level_name': data['level_name'],
             'target': data['target'],
-            'order': int(data.get('order', 1)),
+            'order': order,
             'is_active': data.get('is_active', True),
             'created_at': datetime.datetime.utcnow(),
             'updated_at': datetime.datetime.utcnow()
@@ -894,14 +971,13 @@ def update_exercise(current_user, exercise_id):
             'updated_at': datetime.datetime.utcnow()
         }
         
-        # Update allowed fields
-        allowed_fields = ['sound_id', 'sound_name', 'level', 'level_name', 'target', 'order', 'is_active']
-        for field in allowed_fields:
-            if field in data:
-                if field in ['level', 'order']:
-                    update_data[field] = int(data[field])
-                else:
-                    update_data[field] = data[field]
+        # Only allow updating the target field and is_active status
+        # Other fields (sound_id, level, order, etc.) cannot be changed to maintain data integrity
+        if 'target' in data:
+            update_data['target'] = data['target']
+        
+        if 'is_active' in data:
+            update_data['is_active'] = data['is_active']
         
         # Update in database
         articulation_exercises_collection.update_one(

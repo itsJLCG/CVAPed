@@ -86,7 +86,7 @@
 /* Main Content */
 .therapy-page-main {
   flex: 1;
-  padding: 100px 20px 40px;
+  padding: 30px 20px 40px;
 }
 
 .therapy-page-container {
@@ -97,29 +97,20 @@
 /* Header Section */
 .therapy-page-header-section {
   text-align: center;
-  margin-bottom: 60px;
+  margin-bottom: 20px;
+  padding: 5px 0;
 }
 
 .therapy-page-icon {
-  font-size: 5rem;
-  margin-bottom: 20px;
-  animation: bounce 2s ease-in-out infinite;
-}
-
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-15px);
-  }
+  font-size: 2.8rem;
+  margin-bottom: 8px;
 }
 
 .therapy-page-title {
-  font-size: 3rem;
+  font-size: 2rem;
   font-weight: 700;
   color: var(--color-text);
-  margin-bottom: 15px;
+  margin-bottom: 8px;
 }
 
 .therapy-page.speech .therapy-page-title {
@@ -127,7 +118,7 @@
 }
 
 .therapy-page-subtitle {
-  font-size: 1.3rem;
+  font-size: 1rem;
   color: var(--color-text-light);
   font-weight: 500;
 }

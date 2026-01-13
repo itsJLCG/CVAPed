@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { images } from '../assets/images';
+import Header from '../components/Header';
 import './SpeechTherapyTypes.css';
 
 function SpeechTherapy({ onLogout }) {
   const [selectedType, setSelectedType] = useState(null);
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
-  };
 
   const therapyTypes = [
     {
@@ -78,25 +73,7 @@ function SpeechTherapy({ onLogout }) {
   return (
     <div className="speech-therapy-types-page">
       {/* Header */}
-      <header className="speech-types-header">
-        <div className="speech-types-header-container">
-          <div className="speech-types-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="speech-types-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="speech-types-header-text" />
-          </div>
-          <div className="speech-types-nav">
-            <button onClick={() => navigate('/therapy-selection')} className="speech-types-nav-btn">
-              Back to Therapies
-            </button>
-            <button onClick={() => navigate('/profile')} className="speech-types-nav-btn profile">
-              My Profile
-            </button>
-            <button onClick={handleLogout} className="speech-types-nav-btn logout">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Content */}
       <main className="speech-types-main">

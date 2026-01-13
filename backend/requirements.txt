@@ -11,3 +11,9 @@ scipy
 pydub
 azure-cognitiveservices-speech
 firebase-admin==7.1.0
+networkx==3.2.1
+experta==1.9.4
+numpy
+pandas
+xgboost
+scikit-learn

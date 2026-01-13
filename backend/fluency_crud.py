@@ -58,6 +58,71 @@ def therapist_required(f):
     return decorated
 
 
+# Helper function to generate exercise ID
+def generate_exercise_id(level, order):
+    """Generate exercise ID based on level and order"""
+    level_prefixes = {
+        1: 'breath',
+        2: 'phrase',
+        3: 'sentence',
+        4: 'passage',
+        5: 'speech'
+    }
+    prefix = level_prefixes.get(level, f'level{level}')
+    return f"{prefix}-{order}"
+
+# Helper function to get available orders for a level
+def get_available_orders(level):
+    """Get list of available order numbers for a level"""
+    existing_exercises = fluency_exercises_collection.find({
+        'level': level
+    }).sort('order', 1)
+    
+    used_orders = set(ex['order'] for ex in existing_exercises)
+    
+    # Return next available order (1-indexed)
+    next_order = 1
+    while next_order in used_orders:
+        next_order += 1
+    
+    # Return list of available orders (next 10 possible orders)
+    available = []
+    for i in range(next_order, next_order + 10):
+        if i not in used_orders:
+            available.append(i)
+    
+    return available
+
+# Get available orders endpoint
+@fluency_bp.route('/api/fluency-exercises/available-orders', methods=['GET'])
+@token_required
+@therapist_required
+def get_available_orders_endpoint(current_user):
+    """Get available order numbers for a level"""
+    try:
+        level = request.args.get('level')
+        
+        if not level:
+            return jsonify({
+                'success': False,
+                'message': 'Missing level parameter'
+            }), 400
+        
+        level = int(level)
+        available_orders = get_available_orders(level)
+        
+        return jsonify({
+            'success': True,
+            'available_orders': available_orders
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get available orders',
+            'error': str(e)
+        }), 500
+
 @fluency_bp.route('/api/fluency-exercises/seed', methods=['POST'])
 @token_required
 @therapist_required
@@ -500,29 +565,39 @@ def create_exercise(current_user):
     try:
         data = request.get_json()
         
-        # Validate required fields
-        required_fields = ['level', 'level_name', 'level_color', 'exercise_id', 'type', 'instruction', 'target', 'expected_duration']
+        # Validate required fields (exercise_id is now auto-generated)
+        required_fields = ['level', 'level_name', 'level_color', 'type', 'instruction', 'target', 'expected_duration', 'order']
         for field in required_fields:
             if field not in data:
                 return jsonify({'message': f'{field} is required'}), 400
         
-        # Get the max order for this level
-        max_order_doc = fluency_exercises_collection.find_one(
-            {'level': data['level']},
-            sort=[('order', -1)]
-        )
-        next_order = (max_order_doc['order'] + 1) if max_order_doc else 1
+        level = int(data['level'])
+        order = int(data['order'])
+        
+        # Check if order is already taken for this level
+        existing = fluency_exercises_collection.find_one({
+            'level': level,
+            'order': order
+        })
+        if existing:
+            return jsonify({
+                'success': False,
+                'message': f'Order {order} is already taken for Level {level}. Please choose a different order.'
+            }), 400
+        
+        # Auto-generate exercise_id
+        exercise_id = generate_exercise_id(level, order)
         
         new_exercise = {
-            'level': data['level'],
+            'level': level,
             'level_name': data['level_name'],
             'level_color': data['level_color'],
-            'order': next_order,
-            'exercise_id': data['exercise_id'],
+            'order': order,
+            'exercise_id': exercise_id,
             'type': data['type'],
             'instruction': data['instruction'],
             'target': data['target'],
-            'expected_duration': data['expected_duration'],
+            'expected_duration': int(data['expected_duration']),
             'breathing': data.get('breathing', True),
             'is_active': data.get('is_active', False),  # Default to inactive
             'created_at': datetime.datetime.utcnow(),
@@ -558,10 +633,15 @@ def update_exercise(current_user, exercise_id):
             'updated_at': datetime.datetime.utcnow()
         }
         
-        allowed_fields = ['level_name', 'level_color', 'type', 'instruction', 'target', 'expected_duration', 'breathing', 'is_active', 'order']
+        # Only allow editing specific fields (not exercise_id, level, order)
+        # This maintains data integrity
+        allowed_fields = ['type', 'instruction', 'target', 'expected_duration', 'breathing', 'is_active']
         for field in allowed_fields:
             if field in data:
-                update_data[field] = data[field]
+                if field == 'expected_duration':
+                    update_data[field] = int(data[field])
+                else:
+                    update_data[field] = data[field]
         
         result = fluency_exercises_collection.update_one(
             {'_id': ObjectId(exercise_id)},

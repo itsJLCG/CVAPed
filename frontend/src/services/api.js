@@ -141,39 +141,20 @@ export const adminService = {
     return response.data;
   },
 
-  getAllUsers: async () => {
-    const response = await api.get('/admin/users');
+  getAllUsers: async (page = 1, perPage = 10, search = '') => {
+    const response = await api.get('/admin/users', {
+      params: { page, per_page: perPage, search }
+    });
     return response.data;
   },
 
-  updateUser: async (userId, userData) => {
-    const response = await api.put(`/admin/users/${userId}`, userData);
+  updateUserRole: async (userId, role) => {
+    const response = await api.put(`/admin/users/${userId}/role`, { role });
     return response.data;
   },
 
   deleteUser: async (userId) => {
     const response = await api.delete(`/admin/users/${userId}`);
-    return response.data;
-  },
-
-  // Therapy data endpoints
-  getArticulationData: async () => {
-    const response = await api.get('/admin/therapies/articulation');
-    return response.data;
-  },
-
-  getLanguageData: async (mode) => {
-    const response = await api.get(`/admin/therapies/language/${mode}`);
-    return response.data;
-  },
-
-  getFluencyData: async () => {
-    const response = await api.get('/admin/therapies/fluency');
-    return response.data;
-  },
-
-  getPhysicalData: async () => {
-    const response = await api.get('/admin/therapies/physical');
     return response.data;
   },
 };
@@ -195,6 +176,12 @@ export const fluencyExerciseService = {
   // Get only active exercises (for patients)
   getActive: async () => {
     const response = await api.get('/fluency-exercises/active');
+    return response.data;
+  },
+
+  // Get available orders for a level
+  getAvailableOrders: async (level) => {
+    const response = await api.get(`/fluency-exercises/available-orders?level=${level}`);
     return response.data;
   },
 
@@ -288,6 +275,12 @@ export const receptiveExerciseService = {
     return response.data;
   },
 
+  // Get available orders for a level
+  getAvailableOrders: async (level) => {
+    const response = await api.get(`/receptive-exercises/available-orders?level=${level}`);
+    return response.data;
+  },
+
   // Create new exercise
   create: async (exerciseData) => {
     const response = await api.post('/receptive-exercises', exerciseData);
@@ -336,6 +329,11 @@ export const articulationExerciseService = {
     return response.data;
   },
   
+  getAvailableOrders: async (soundId, level) => {
+    const response = await api.get(`/articulation/exercises/available-orders?sound_id=${soundId}&level=${level}`);
+    return response.data;
+  },
+  
   create: async (exerciseData) => {
     const response = await api.post('/articulation/exercises/', exerciseData);
     return response.data;
@@ -358,6 +356,149 @@ export const articulationExerciseService = {
   
   deleteAll: async () => {
     const response = await api.delete('/articulation/exercises/all');
+    return response.data;
+  }
+};
+
+// Health Service
+export const healthService = {
+  getLogs: async (limit = 50, all = false) => {
+    const params = all ? { all: 'true' } : { limit };
+    const response = await api.get('/health/logs', { params });
+    return response.data;
+  },
+
+  getSummary: async () => {
+    const response = await api.get('/health/summary');
+    return response.data;
+  },
+
+  // Prediction endpoints (from mobile backend - may need to be implemented)
+  getArticulationPredictions: async () => {
+    try {
+      const response = await api.get('/articulation/predict-mastery');
+      return response.data;
+    } catch (error) {
+      console.log('Articulation predictions not available');
+      return null;
+    }
+  },
+
+  getFluencyPrediction: async () => {
+    try {
+      const response = await api.get('/fluency/predict-mastery');
+      return response.data;
+    } catch (error) {
+      console.log('Fluency prediction not available');
+      return null;
+    }
+  },
+
+  getReceptivePrediction: async () => {
+    try {
+      const response = await api.get('/receptive/predict-mastery');
+      return response.data;
+    } catch (error) {
+      console.log('Receptive prediction not available');
+      return null;
+    }
+  },
+
+  getExpressivePrediction: async () => {
+    try {
+      const response = await api.get('/expressive/predict-mastery');
+      return response.data;
+    } catch (error) {
+      console.log('Expressive prediction not available');
+      return null;
+    }
+  },
+
+  getOverallSpeechPrediction: async () => {
+    try {
+      const response = await api.get('/overall-speech/predict-mastery');
+      return response.data;
+    } catch (error) {
+      console.log('Overall speech prediction not available');
+      return null;
+    }
+  }
+};
+
+// Prescriptive Analysis Service
+export const prescriptionService = {
+  // Get complete prescriptive analysis
+  getAnalysis: async () => {
+    const response = await api.get('/prescriptive');
+    return response.data;
+  },
+
+  // Get therapy priorities
+  getPriorities: async () => {
+    const data = await prescriptionService.getAnalysis();
+    return data.analysis.priorities;
+  },
+
+  // Get weekly schedule
+  getSchedule: async () => {
+    const data = await prescriptionService.getAnalysis();
+    return data.analysis.weekly_schedule;
+  },
+
+  // Get bottleneck analysis
+  getBottlenecks: async () => {
+    const data = await prescriptionService.getAnalysis();
+    return data.analysis.bottleneck_analysis;
+  },
+
+  // Get recommendations
+  getRecommendations: async () => {
+    const data = await prescriptionService.getAnalysis();
+    return data.analysis.recommendations;
+  },
+
+  // Get insights
+  getInsights: async () => {
+    const data = await prescriptionService.getAnalysis();
+    return data.analysis.insights;
+  }
+};
+
+// Prediction Service (XGBoost ML Models)
+export const predictionService = {
+  // Get all predictions
+  getAllPredictions: async () => {
+    const response = await api.get('/predictions');
+    return response.data;
+  },
+
+  // Get articulation prediction for specific sound
+  getArticulationPrediction: async (soundId) => {
+    const response = await api.get(`/predictions/articulation/${soundId}`);
+    return response.data;
+  },
+
+  // Get fluency prediction
+  getFluencyPrediction: async () => {
+    const response = await api.get('/predictions/fluency');
+    return response.data;
+  },
+
+  // Get receptive language prediction
+  getReceptivePrediction: async () => {
+    const response = await api.get('/predictions/language/receptive');
+    return response.data;
+  },
+
+  // Get expressive language prediction
+  getExpressivePrediction: async () => {
+    const response = await api.get('/predictions/language/expressive');
+    return response.data;
+  },
+
+  // Get overall speech improvement prediction
+  getOverallPrediction: async () => {
+    const response = await api.get('/predictions/overall');
     return response.data;
   }
 };

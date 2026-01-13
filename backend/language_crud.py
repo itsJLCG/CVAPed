@@ -337,9 +337,9 @@ def get_all_exercises(current_user):
         # Convert ObjectId to string
         for exercise in exercises:
             exercise['_id'] = str(exercise['_id'])
-            if 'created_at' in exercise:
+            if 'created_at' in exercise and hasattr(exercise['created_at'], 'isoformat'):
                 exercise['created_at'] = exercise['created_at'].isoformat()
-            if 'updated_at' in exercise:
+            if 'updated_at' in exercise and hasattr(exercise['updated_at'], 'isoformat'):
                 exercise['updated_at'] = exercise['updated_at'].isoformat()
         
         return jsonify({
@@ -370,9 +370,9 @@ def get_active_exercises(current_user):
         # Convert ObjectId to string
         for exercise in exercises:
             exercise['_id'] = str(exercise['_id'])
-            if 'created_at' in exercise:
+            if 'created_at' in exercise and hasattr(exercise['created_at'], 'isoformat'):
                 exercise['created_at'] = exercise['created_at'].isoformat()
-            if 'updated_at' in exercise:
+            if 'updated_at' in exercise and hasattr(exercise['updated_at'], 'isoformat'):
                 exercise['updated_at'] = exercise['updated_at'].isoformat()
         
         # Group by level

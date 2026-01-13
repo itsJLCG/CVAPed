@@ -15,6 +15,9 @@ import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
 import LanguageTherapy from './pages/LanguageTherapy';
 import FluencyTherapy from './pages/FluencyTherapy';
+import HealthLogs from './pages/HealthLogs';
+import Prediction from './pages/Prediction';
+import Prescription from './pages/Prescription';
 import Profile from './pages/Profile';
 import './App.css';
 
@@ -78,7 +81,11 @@ function App() {
           <Routes>
             <Route 
               path="/" 
-              element={<RoleBasedRedirect />} 
+              element={<Landing />} 
+            />
+            <Route 
+              path="/home" 
+              element={<Landing />} 
             />
             <Route 
               path="/login" 
@@ -156,6 +163,24 @@ function App() {
               path="/fluency-therapy" 
               element={
                 isAuthenticated ? <FluencyTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/health-logs" 
+              element={
+                isAuthenticated ? <HealthLogs onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/prediction" 
+              element={
+                isAuthenticated ? <Prediction onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/prescription" 
+              element={
+                isAuthenticated ? <Prescription onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { images } from '../assets/images';
+import Header from '../components/Header';
 import './ArticulationTherapy.css';
 
 function ArticulationTherapy({ onLogout }) {
   const [selectedSound, setSelectedSound] = useState(null);
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
-  };
 
   const targetSounds = [
     {
@@ -69,25 +64,7 @@ function ArticulationTherapy({ onLogout }) {
   return (
     <div className="articulation-therapy-page">
       {/* Header */}
-      <header className="articulation-header">
-        <div className="articulation-header-container">
-          <div className="articulation-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="articulation-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="articulation-header-text" />
-          </div>
-          <div className="articulation-nav">
-            <button onClick={() => navigate('/speech-therapy')} className="articulation-nav-btn">
-              Back to Speech Therapy
-            </button>
-            <button onClick={() => navigate('/profile')} className="articulation-nav-btn profile">
-              My Profile
-            </button>
-            <button onClick={handleLogout} className="articulation-nav-btn logout">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Content */}
       <main className="articulation-main">

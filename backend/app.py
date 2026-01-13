@@ -19,6 +19,8 @@ from language_crud import language_bp, init_language_crud
 from receptive_crud import receptive_bp, init_receptive_crud
 # Import articulation CRUD blueprint
 from articulation_crud import articulation_bp, init_articulation_crud
+# Import admin management blueprint
+from admin.AdminManagement import admin_bp, init_admin_management
 
 # Load environment variables from .env file
 load_dotenv()
@@ -66,6 +68,30 @@ init_receptive_crud(db, app.config['SECRET_KEY'])
 # Register articulation CRUD blueprint
 app.register_blueprint(articulation_bp, url_prefix='/api/articulation/exercises')
 init_articulation_crud(db, app.config['SECRET_KEY'])
+
+# Register admin management blueprint
+app.register_blueprint(admin_bp)
+init_admin_management(db)
+
+# Initialize XGBoost Prediction Service (Standalone - all 4 predictors)
+print("\n🤖 Initializing XGBoost Prediction Models...")
+print("="*60)
+try:
+    from articulation_mastery_predictor import ArticulationMasteryPredictor
+    from fluency_mastery_predictor import FluencyMasteryPredictor
+    from language_mastery_predictor import LanguageMasteryPredictor
+    from overall_speech_predictor import OverallSpeechPredictor
+    
+    print("✅ All 4 XGBoost predictors loaded successfully!")
+    print("   - Articulation Mastery Predictor")
+    print("   - Fluency Mastery Predictor")
+    print("   - Language Mastery Predictor (Receptive & Expressive)")
+    print("   - Overall Speech Improvement Predictor")
+    print("="*60)
+except Exception as e:
+    print(f"⚠️  Could not initialize all prediction models: {e}")
+    print("   Predictions will use baseline estimates")
+    print("="*60)
 
 # Token required decorator
 def token_required(f):
@@ -296,9 +322,46 @@ def firebase_auth():
         profile_picture = data.get('profilePicture', '')
         provider = data.get('provider', 'unknown')
         
-        # Check if email already exists (from regular registration)
-        if users_collection.find_one({'email': email}):
-            return jsonify({'message': 'Email already registered. Please login with password.'}), 409
+        # Check if email already exists
+        existing_user = users_collection.find_one({'email': email})
+        if existing_user:
+            # If user exists but doesn't have providerId, update it (link accounts)
+            if not existing_user.get('providerId'):
+                users_collection.update_one(
+                    {'_id': existing_user['_id']},
+                    {
+                        '$set': {
+                            'providerId': firebase_uid,
+                            'provider': provider,
+                            'profilePicture': profile_picture or existing_user.get('profilePicture', ''),
+                            'updatedAt': datetime.datetime.utcnow()
+                        }
+                    }
+                )
+                # Return success with updated user
+                token = jwt.encode({
+                    'user_id': str(existing_user['_id']),
+                    'role': existing_user.get('role', 'patient'),
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                }, app.config['SECRET_KEY'], algorithm="HS256")
+                
+                return jsonify({
+                    'message': 'Account linked successfully',
+                    'token': token,
+                    'user': {
+                        'id': str(existing_user['_id']),
+                        'email': existing_user['email'],
+                        'firstName': existing_user['firstName'],
+                        'lastName': existing_user['lastName'],
+                        'role': existing_user.get('role', 'patient'),
+                        'isProfileComplete': existing_user.get('isProfileComplete', True),
+                        'therapyType': existing_user.get('therapyType'),
+                        'patientType': existing_user.get('patientType')
+                    }
+                }), 200
+            else:
+                # User exists with a different provider
+                return jsonify({'message': 'Email already registered with a different method. Please login with password.'}), 409
         
         # Create new user with incomplete profile
         new_user = {
@@ -506,6 +569,388 @@ def update_user(current_user):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'healthy', 'message': 'CVACare API is running'}), 200
+
+# Health Logs Endpoints
+@app.route('/api/health/logs', methods=['GET'])
+@token_required
+def get_health_logs(current_user):
+    """Get all therapy progress logs for authenticated user"""
+    try:
+        user_id = str(current_user['_id'])
+        logs = []
+        fetch_all = request.args.get('all') == 'true'
+        limit = int(request.args.get('limit', 50))
+
+        # Fetch Articulation Trials
+        articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
+        for trial in articulation_trials:
+            logs.append({
+                '_id': str(trial['_id']),
+                'therapyType': 'articulation',
+                'soundId': trial.get('sound_id', '').upper(),
+                'level': trial.get('level', 1),
+                'overallScore': int(trial.get('scores', {}).get('computed_score', 0)),
+                'trials': 1,
+                'correctCount': 1 if trial.get('scores', {}).get('computed_score', 0) >= 70 else 0,
+                'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
+            })
+
+        # Fetch Articulation Progress (nested trials)
+        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        for progress in articulation_progress:
+            sound_id = progress.get('sound_id', '')
+            levels = progress.get('levels', {})
+            for level_key, level_data in levels.items():
+                items = level_data.get('items', {})
+                for item_key, item_data in items.items():
+                    trial_details = item_data.get('trial_details', [])
+                    for trial in trial_details:
+                        logs.append({
+                            '_id': f"art_nested_{progress['_id']}_{level_key}_{item_key}",
+                            'therapyType': 'articulation',
+                            'soundId': sound_id.upper(),
+                            'level': int(level_key),
+                            'overallScore': int(trial.get('computed_score', 0)),
+                            'trials': 1,
+                            'correctCount': 1 if trial.get('computed_score', 0) >= 70 else 0,
+                            'createdAt': item_data.get('last_attempt', progress.get('updated_at', datetime.datetime.utcnow())).isoformat()
+                        })
+
+        # Fetch Language Trials
+        language_trials = list(language_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
+        for trial in language_trials:
+            mode = trial.get('mode', 'language')
+            logs.append({
+                '_id': str(trial['_id']),
+                'therapyType': mode if mode in ['receptive', 'expressive'] else 'language',
+                'level': trial.get('level', 1),
+                'overallScore': int(trial.get('score', 0) if trial.get('score') else (100 if trial.get('is_correct') else 0)),
+                'trials': 1,
+                'correctCount': 1 if trial.get('is_correct') else 0,
+                'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
+            })
+
+        # Sort logs chronologically (newest first)
+        logs.sort(key=lambda x: x['createdAt'], reverse=True)
+
+        # Return limited or all logs
+        recent_logs = logs if fetch_all else logs[:limit]
+        
+        return jsonify({
+            'success': True,
+            'logs': recent_logs,
+            'total': len(logs),
+            'hasMore': len(logs) > limit
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"Error fetching health logs: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch health logs', 'error': str(e)}), 500
+
+@app.route('/api/health/summary', methods=['GET'])
+@token_required
+def get_health_summary(current_user):
+    """Get health summary statistics for authenticated user"""
+    try:
+        user_id = str(current_user['_id'])
+
+        # Count trials per therapy type
+        articulation_count = articulation_trials_collection.count_documents({'user_id': user_id})
+        
+        # Get language trials by mode
+        receptive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'receptive'})
+        expressive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'expressive'})
+        
+        # Calculate average scores
+        articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}))
+        articulation_avg = sum([t.get('scores', {}).get('computed_score', 0) for t in articulation_trials]) / len(articulation_trials) if articulation_trials else 0
+
+        receptive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'receptive'}))
+        receptive_avg = sum([t.get('score', 0) if t.get('score') else (100 if t.get('is_correct') else 0) for t in receptive_trials]) / len(receptive_trials) if receptive_trials else 0
+
+        expressive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'expressive'}))
+        expressive_avg = sum([t.get('score', 0) if t.get('score') else (100 if t.get('is_correct') else 0) for t in expressive_trials]) / len(expressive_trials) if expressive_trials else 0
+
+        summary = {
+            'articulation': {
+                'sessions': articulation_count,
+                'avgScore': round(articulation_avg, 1)
+            },
+            'receptive': {
+                'sessions': receptive_count,
+                'avgScore': round(receptive_avg, 1)
+            },
+            'expressive': {
+                'sessions': expressive_count,
+                'avgScore': round(expressive_avg, 1)
+            },
+            'language': {
+                'sessions': receptive_count + expressive_count,
+                'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
+            }
+        }
+
+        return jsonify({
+            'success': True,
+            'summary': summary
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"Error fetching health summary: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch health summary', 'error': str(e)}), 500
+
+
+# ======================
+# PRESCRIPTIVE ANALYSIS ENDPOINTS
+# ======================
+
+@app.route('/api/prescriptive', methods=['GET'])
+@token_required
+def get_prescriptive_analysis(current_user):
+    """Get intelligent therapy prioritization using Decision Rules + Graph-Based Recommendations"""
+    try:
+        from therapy_prioritization import generate_therapy_prioritization
+        
+        # Get user_id from authenticated user
+        user_id = str(current_user['_id'])
+        
+        # Generate prescriptive analysis
+        analysis = generate_therapy_prioritization(user_id)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"Error generating prescriptive analysis: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to generate prescriptive analysis',
+            'error': str(e)
+        }), 500
+
+# ======================
+# PREDICTION ENDPOINTS (XGBoost ML Models - STANDALONE)
+# ======================
+
+@app.route('/api/predictions', methods=['GET'])
+@token_required
+def get_all_predictions(current_user):
+    """
+    Get all therapy mastery predictions using XGBoost ML models
+    Returns predictions for: Articulation (5 sounds), Fluency, Receptive, Expressive, Overall Speech
+    STANDALONE - Uses local XGBoost models, no mobile backend required
+    """
+    try:
+        user_id = str(current_user['_id'])
+        
+        print(f"\n{'='*60}")
+        print(f"🔮 Fetching All Predictions for User: {user_id}")
+        print(f"{'='*60}\n")
+        
+        predictions = {}
+        
+        # 1. Articulation predictions for all 5 sounds
+        try:
+            from articulation_mastery_predictor import ArticulationMasteryPredictor
+            articulation_predictor = ArticulationMasteryPredictor(db)
+            articulation_predictor.load_model()
+            
+            articulation_predictions = {}
+            sounds = ['r', 's', 'l', 'th', 'k']
+            for sound in sounds:
+                try:
+                    pred = articulation_predictor.predict_days_to_mastery(user_id, sound)
+                    articulation_predictions[sound] = pred
+                except Exception as e:
+                    print(f"Could not predict {sound}: {e}")
+            
+            if articulation_predictions:
+                predictions['articulation'] = articulation_predictions
+        except Exception as e:
+            print(f"Articulation predictor error: {e}")
+        
+        # 2. Fluency prediction
+        try:
+            from fluency_mastery_predictor import FluencyMasteryPredictor
+            fluency_predictor = FluencyMasteryPredictor(db)
+            fluency_predictor.load_model()
+            fluency_pred = fluency_predictor.predict_days_to_mastery(user_id)
+            predictions['fluency'] = fluency_pred
+        except Exception as e:
+            print(f"Fluency predictor error: {e}")
+        
+        # 3. Receptive language prediction
+        try:
+            from language_mastery_predictor import LanguageMasteryPredictor
+            receptive_predictor = LanguageMasteryPredictor(db, mode='receptive')
+            receptive_predictor.load_model()
+            receptive_pred = receptive_predictor.predict_days_to_mastery(user_id)
+            predictions['receptive'] = receptive_pred
+        except Exception as e:
+            print(f"Receptive predictor error: {e}")
+        
+        # 4. Expressive language prediction
+        try:
+            from language_mastery_predictor import LanguageMasteryPredictor
+            expressive_predictor = LanguageMasteryPredictor(db, mode='expressive')
+            expressive_predictor.load_model()
+            expressive_pred = expressive_predictor.predict_days_to_mastery(user_id)
+            predictions['expressive'] = expressive_pred
+        except Exception as e:
+            print(f"Expressive predictor error: {e}")
+        
+        # 5. Overall speech improvement prediction
+        try:
+            from overall_speech_predictor import OverallSpeechPredictor
+            overall_predictor = OverallSpeechPredictor(db)
+            overall_predictor.load_model()
+            overall_pred = overall_predictor.predict_improvement(user_id)
+            predictions['overall'] = overall_pred
+        except Exception as e:
+            print(f"Overall predictor error: {e}")
+        
+        print(f"✅ Predictions retrieved successfully")
+        print(f"   Articulation sounds: {len(predictions.get('articulation', {}))}")
+        print(f"   Fluency: {'✅' if 'fluency' in predictions else '❌'}")
+        print(f"   Receptive: {'✅' if 'receptive' in predictions else '❌'}")
+        print(f"   Expressive: {'✅' if 'expressive' in predictions else '❌'}")
+        print(f"   Overall: {'✅' if 'overall' in predictions else '❌'}\n")
+        
+        return jsonify({
+            'success': True,
+            'predictions': predictions
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching predictions: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch predictions',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/predictions/articulation/<sound_id>', methods=['GET'])
+@token_required
+def get_articulation_prediction(current_user, sound_id):
+    """Get prediction for a specific articulation sound (r, s, l, th, k)"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        if sound_id not in ['r', 's', 'l', 'th', 'k']:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid sound_id. Must be one of: r, s, l, th, k'
+            }), 400
+        
+        from articulation_mastery_predictor import ArticulationMasteryPredictor
+        predictor = ArticulationMasteryPredictor(db)
+        predictor.load_model()
+        
+        prediction = predictor.predict_days_to_mastery(user_id, sound_id)
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get articulation prediction',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/predictions/fluency', methods=['GET'])
+@token_required
+def get_fluency_prediction(current_user):
+    """Get fluency mastery prediction"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        from fluency_mastery_predictor import FluencyMasteryPredictor
+        predictor = FluencyMasteryPredictor(db)
+        predictor.load_model()
+        
+        prediction = predictor.predict_days_to_mastery(user_id)
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get fluency prediction',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/predictions/language/<mode>', methods=['GET'])
+@token_required
+def get_language_prediction(current_user, mode):
+    """Get language mastery prediction (receptive or expressive)"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        if mode not in ['receptive', 'expressive']:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid mode. Must be "receptive" or "expressive"'
+            }), 400
+        
+        from language_mastery_predictor import LanguageMasteryPredictor
+        predictor = LanguageMasteryPredictor(db, mode=mode)
+        predictor.load_model()
+        
+        prediction = predictor.predict_days_to_mastery(user_id)
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get language prediction',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/predictions/overall', methods=['GET'])
+@token_required
+def get_overall_prediction(current_user):
+    """Get overall speech improvement prediction"""
+    try:
+        user_id = str(current_user['_id'])
+        
+        from overall_speech_predictor import OverallSpeechPredictor
+        predictor = OverallSpeechPredictor(db)
+        predictor.load_model()
+        
+        prediction = predictor.predict_improvement(user_id)
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get overall prediction',
+            'error': str(e)
+        }), 500
+
 
 # Azure Speech Configuration
 AZURE_SPEECH_KEY = os.getenv('AZURE_SPEECH_KEY')

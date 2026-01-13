@@ -1,0 +1,49 @@
+.blank-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.blank-page-content {
+  padding: 3rem 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 120px);
+}
+
+.blank-page-container {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  padding: 4rem;
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+}
+
+.blank-page-container h1 {
+  font-size: 2.5rem;
+  color: #667eea;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+.blank-page-container p {
+  font-size: 1.2rem;
+  color: #666;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .blank-page-container {
+    padding: 2rem;
+  }
+  
+  .blank-page-container h1 {
+    font-size: 2rem;
+  }
+  
+  .blank-page-container p {
+    font-size: 1rem;
+  }
+}

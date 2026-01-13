@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { images } from '../assets/images';
-import { authService, articulationService, languageService, fluencyService } from '../services/api';
+import Header from '../components/Header';
+import { authService } from '../services/api';
+import noProfileImg from '../assets/no_profile.png';
 import './Profile.css';
 
 function Profile({ onLogout }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [allProgress, setAllProgress] = useState([]);
-  const [languageProgress, setLanguageProgress] = useState([]);
-  const [fluencyProgress, setFluencyProgress] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
@@ -31,34 +29,11 @@ function Profile({ onLogout }) {
         lastName: storedUser.lastName || '',
         email: storedUser.email || ''
       });
-
-      // Load articulation progress data
-      const progressResponse = await articulationService.getAllProgress();
-      if (progressResponse.success) {
-        setAllProgress(progressResponse.progress);
-      }
-
-      // Load language therapy progress data
-      const languageProgressResponse = await languageService.getAllProgress();
-      if (languageProgressResponse.success) {
-        setLanguageProgress(languageProgressResponse.progress);
-      }
-
-      // Load fluency therapy progress data
-      const fluencyProgressResponse = await fluencyService.getProgress();
-      if (fluencyProgressResponse.success) {
-        setFluencyProgress(fluencyProgressResponse);
-      }
     } catch (error) {
       console.error('Error loading profile:', error);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
   };
 
   const handleEditToggle = () => {
@@ -101,41 +76,6 @@ function Profile({ onLogout }) {
     }
   };
 
-  const calculateSoundProgress = (soundProgress) => {
-    const levels = soundProgress.levels || {};
-    const totalLevels = 5;
-    const completedLevels = Object.values(levels).filter(level => level.is_complete).length;
-    const percentage = (completedLevels / totalLevels) * 100;
-    
-    return {
-      completedLevels,
-      totalLevels,
-      percentage: Math.round(percentage)
-    };
-  };
-
-  const getSoundName = (soundId) => {
-    const soundNames = {
-      's': 'S Sound',
-      'r': 'R Sound',
-      'l': 'L Sound',
-      'k': 'K Sound',
-      'th': 'TH Sound'
-    };
-    return soundNames[soundId] || soundId.toUpperCase();
-  };
-
-  const getSoundColor = (soundId) => {
-    const soundColors = {
-      's': '#ce3630',
-      'r': '#479ac3',
-      'l': '#e8b04e',
-      'k': '#8e44ad',
-      'th': '#27ae60'
-    };
-    return soundColors[soundId] || '#6b7280';
-  };
-
   if (isLoading) {
     return (
       <div className="profile-page">
@@ -163,43 +103,66 @@ function Profile({ onLogout }) {
   return (
     <div className="profile-page">
       {/* Header */}
-      <header className="profile-header">
-        <div className="profile-header-container">
-          <div className="profile-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="profile-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="profile-header-text" />
-          </div>
-          <div className="profile-header-actions">
-            <button onClick={() => navigate('/therapy-selection')} className="btn-back">
-              ← Back to Dashboard
-            </button>
-            <button onClick={handleLogout} className="btn-logout">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Content */}
       <div className="profile-content">
-        <div className="profile-container">
-          <h1 className="profile-title">My Profile</h1>
+        {/* Profile Header */}
+        <div className="profile-header-section">
+            <div className="profile-avatar">
+              <div className="avatar-circle">
+                <img src={noProfileImg} alt="Profile" />
+              </div>
+            </div>
+            <h1 className="profile-name">{user.firstName} {user.lastName}</h1>
+            <p className="profile-email">{user.email}</p>
+            <div className="profile-badges">
+              <span className="badge badge-role">
+                <span className="badge-icon">👤</span>
+                {user.role || 'Patient'}
+              </span>
+              <span className="badge badge-therapy">
+                <span className="badge-icon">🏥</span>
+                {user.therapyType || 'N/A'}
+              </span>
+              {user.patientType && (
+                <span className="badge badge-patient">
+                  <span className="badge-icon">📋</span>
+                  {user.patientType}
+                </span>
+              )}
+            </div>
+          </div>
 
           {/* Personal Information Card */}
           <div className="profile-card">
             <div className="card-header">
-              <h2 className="card-title">Personal Information</h2>
+              <div className="card-title-wrapper">
+                <span className="card-icon">👤</span>
+                <h2 className="card-title">Personal Information</h2>
+              </div>
               <button 
                 onClick={handleEditToggle} 
                 className={`btn-edit ${isEditing ? 'btn-cancel' : ''}`}
               >
-                {isEditing ? 'Cancel' : 'Edit'}
+                {isEditing ? (
+                  <>
+                    <span>✕</span> Cancel
+                  </>
+                ) : (
+                  <>
+                    <span>✎</span> Edit Profile
+                  </>
+                )}
               </button>
             </div>
             <div className="card-body">
               <div className="info-grid">
                 <div className="info-item">
-                  <label className="info-label">First Name</label>
+                  <label className="info-label">
+                    <span className="label-icon">📝</span>
+                    First Name
+                  </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -207,13 +170,17 @@ function Profile({ onLogout }) {
                       value={editData.firstName}
                       onChange={handleInputChange}
                       className="info-input"
+                      placeholder="Enter first name"
                     />
                   ) : (
                     <p className="info-value">{user.firstName}</p>
                   )}
                 </div>
                 <div className="info-item">
-                  <label className="info-label">Last Name</label>
+                  <label className="info-label">
+                    <span className="label-icon">📝</span>
+                    Last Name
+                  </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -221,13 +188,17 @@ function Profile({ onLogout }) {
                       value={editData.lastName}
                       onChange={handleInputChange}
                       className="info-input"
+                      placeholder="Enter last name"
                     />
                   ) : (
                     <p className="info-value">{user.lastName}</p>
                   )}
                 </div>
                 <div className="info-item">
-                  <label className="info-label">Email</label>
+                  <label className="info-label">
+                    <span className="label-icon">📧</span>
+                    Email Address
+                  </label>
                   {isEditing ? (
                     <input
                       type="email"
@@ -235,21 +206,31 @@ function Profile({ onLogout }) {
                       value={editData.email}
                       onChange={handleInputChange}
                       className="info-input"
+                      placeholder="Enter email"
                     />
                   ) : (
                     <p className="info-value">{user.email}</p>
                   )}
                 </div>
                 <div className="info-item">
-                  <label className="info-label">Therapy Type</label>
-                  <p className="info-value capitalize">{user.therapyType || 'N/A'}</p>
+                  <label className="info-label">
+                    <span className="label-icon">🏥</span>
+                    Therapy Type
+                  </label>
+                  <p className="info-value capitalize">{user.therapyType || 'Not Set'}</p>
                 </div>
                 <div className="info-item">
-                  <label className="info-label">Patient Type</label>
-                  <p className="info-value capitalize">{user.patientType || 'N/A'}</p>
+                  <label className="info-label">
+                    <span className="label-icon">📋</span>
+                    Patient Type
+                  </label>
+                  <p className="info-value capitalize">{user.patientType || 'Not Set'}</p>
                 </div>
                 <div className="info-item">
-                  <label className="info-label">Role</label>
+                  <label className="info-label">
+                    <span className="label-icon">🎭</span>
+                    Account Role
+                  </label>
                   <p className="info-value capitalize">{user.role || 'Patient'}</p>
                 </div>
               </div>
@@ -260,342 +241,20 @@ function Profile({ onLogout }) {
                     className="btn-save"
                     disabled={isSaving}
                   >
-                    {isSaving ? 'Saving...' : 'Save Changes'}
+                    {isSaving ? (
+                      <>
+                        <span className="spinner"></span> Saving...
+                      </>
+                    ) : (
+                      <>
+                        <span>✓</span> Save Changes
+                      </>
+                    )}
                   </button>
                 </div>
               )}
             </div>
           </div>
-
-          {/* Progress Summary Card */}
-          <div className="profile-card">
-            <div className="card-header">
-              <h2 className="card-title">Articulation Therapy Progress</h2>
-            </div>
-            <div className="card-body">
-              {allProgress.length === 0 ? (
-                <div className="no-progress">
-                  <p>No progress recorded yet.</p>
-                  <p className="no-progress-hint">Start your therapy exercises to track your progress!</p>
-                  <button 
-                    onClick={() => navigate('/articulation')} 
-                    className="btn-start-therapy"
-                  >
-                    Start Articulation Therapy
-                  </button>
-                </div>
-              ) : (
-                <div className="progress-list">
-                  {allProgress.map((soundProgress) => {
-                    const progress = calculateSoundProgress(soundProgress);
-                    const soundColor = getSoundColor(soundProgress.sound_id);
-                    
-                    return (
-                      <div key={soundProgress.sound_id} className="progress-item">
-                        <div className="progress-item-header">
-                          <div className="progress-sound-info">
-                            <div 
-                              className="progress-sound-badge"
-                              style={{ backgroundColor: soundColor }}
-                            >
-                              {soundProgress.sound_id.toUpperCase()}
-                            </div>
-                            <div className="progress-sound-details">
-                              <h3 className="progress-sound-name">
-                                {getSoundName(soundProgress.sound_id)}
-                              </h3>
-                              <p className="progress-sound-stats">
-                                {progress.completedLevels} of {progress.totalLevels} levels completed
-                              </p>
-                            </div>
-                          </div>
-                          <div className="progress-percentage" style={{ color: soundColor }}>
-                            {progress.percentage}%
-                          </div>
-                        </div>
-                        <div className="progress-bar-container">
-                          <div 
-                            className="progress-bar-fill"
-                            style={{ 
-                              width: `${progress.percentage}%`,
-                              backgroundColor: soundColor
-                            }}
-                          ></div>
-                        </div>
-                        <div className="progress-levels">
-                          {[1, 2, 3, 4, 5].map(levelNum => {
-                            const levelKey = String(levelNum);
-                            const levelData = soundProgress.levels?.[levelKey];
-                            const isComplete = levelData?.is_complete || false;
-                            const completedItems = levelData?.completed_items || 0;
-                            const totalItems = levelData?.total_items || 0;
-                            
-                            return (
-                              <div 
-                                key={levelNum} 
-                                className={`level-badge ${isComplete ? 'complete' : 'incomplete'}`}
-                                title={`Level ${levelNum}: ${completedItems}/${totalItems} items`}
-                              >
-                                <span className="level-number">{levelNum}</span>
-                                {isComplete && <span className="level-check">✓</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <button
-                          onClick={() => navigate(`/articulation/${soundProgress.sound_id}`)}
-                          className="btn-continue"
-                          style={{ borderColor: soundColor, color: soundColor }}
-                        >
-                          Continue Practice →
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Language Therapy Progress Card */}
-          <div className="profile-card">
-            <div className="card-header">
-              <h2 className="card-title">Language Therapy Progress</h2>
-            </div>
-            <div className="card-body">
-              {languageProgress.length === 0 ? (
-                <div className="no-progress">
-                  <p>No language therapy progress recorded yet.</p>
-                  <p className="no-progress-hint">Start language therapy exercises to track your progress!</p>
-                  <button 
-                    onClick={() => navigate('/speech-therapy')} 
-                    className="btn-start-therapy"
-                  >
-                    Start Language Therapy
-                  </button>
-                </div>
-              ) : (
-                <div className="progress-list">
-                  {languageProgress.map((modeProgress) => {
-                    const percentage = Math.round((modeProgress.correct_exercises / modeProgress.total_exercises) * 100) || 0;
-                    const modeColor = modeProgress.mode === 'receptive' ? '#3b82f6' : '#8b5cf6';
-                    const modeName = modeProgress.mode === 'receptive' ? 'Receptive Language' : 'Expressive Language';
-                    
-                    return (
-                      <div key={modeProgress.mode} className="progress-item">
-                        <div className="progress-item-header">
-                          <div className="progress-sound-info">
-                            <div 
-                              className="progress-sound-badge"
-                              style={{ backgroundColor: modeColor }}
-                            >
-                              {modeProgress.mode === 'receptive' ? '👂' : '💬'}
-                            </div>
-                            <div className="progress-sound-details">
-                              <h3 className="progress-sound-name">
-                                {modeName}
-                              </h3>
-                              <p className="progress-sound-stats">
-                                {modeProgress.completed_exercises} of {modeProgress.total_exercises} exercises completed
-                                {' • '}
-                                {Math.round(modeProgress.accuracy * 100)}% accuracy
-                              </p>
-                            </div>
-                          </div>
-                          <div className="progress-percentage" style={{ color: modeColor }}>
-                            {percentage}%
-                          </div>
-                        </div>
-                        <div className="progress-bar-container">
-                          <div 
-                            className="progress-bar-fill"
-                            style={{ 
-                              width: `${percentage}%`,
-                              backgroundColor: modeColor
-                            }}
-                          ></div>
-                        </div>
-                        <div className="language-stats">
-                          <div className="language-stat">
-                            <span className="stat-icon">✓</span>
-                            <span className="stat-text">{modeProgress.correct_exercises} Correct</span>
-                          </div>
-                          <div className="language-stat">
-                            <span className="stat-icon">📊</span>
-                            <span className="stat-text">{Math.round(modeProgress.accuracy * 100)}% Accuracy</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => navigate('/language-therapy')}
-                          className="btn-continue"
-                          style={{ borderColor: modeColor, color: modeColor }}
-                        >
-                          Continue Practice →
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Fluency Therapy Progress Card */}
-          <div className="profile-card">
-            <div className="card-header">
-              <h2 className="card-title">Fluency Therapy Progress</h2>
-            </div>
-            <div className="card-body">
-              {!fluencyProgress || !fluencyProgress.has_progress ? (
-                <div className="no-progress">
-                  <p>No fluency therapy progress recorded yet.</p>
-                  <p className="no-progress-hint">Start fluency therapy exercises to track your speaking flow!</p>
-                  <button 
-                    onClick={() => navigate('/speech-therapy')} 
-                    className="btn-start-therapy"
-                  >
-                    Start Fluency Therapy
-                  </button>
-                </div>
-              ) : (
-                <div className="fluency-progress-container">
-                  {/* Level Progress */}
-                  <div className="fluency-levels">
-                    {[1, 2, 3, 4, 5].map((levelNum) => {
-                      const levelData = fluencyProgress.levels[String(levelNum)] || {};
-                      const exercises = levelData.exercises || {};
-                      const completedCount = Object.keys(exercises).length;
-                      const totalExercises = levelNum <= 3 ? 5 : (levelNum === 4 ? 3 : 3);
-                      const percentage = Math.round((completedCount / totalExercises) * 100);
-                      const isComplete = completedCount === totalExercises;
-                      const isCurrent = fluencyProgress.current_level === levelNum;
-                      
-                      const levelColors = {
-                        1: '#e8b04e',
-                        2: '#479ac3',
-                        3: '#ce3630',
-                        4: '#8e44ad',
-                        5: '#27ae60'
-                      };
-                      
-                      const levelNames = {
-                        1: 'Breathing & Words',
-                        2: 'Short Phrases',
-                        3: 'Complete Sentences',
-                        4: 'Reading Passages',
-                        5: 'Spontaneous Speech'
-                      };
-                      
-                      return (
-                        <div key={levelNum} className={`fluency-level-item ${isCurrent ? 'current' : ''} ${isComplete ? 'complete' : ''}`}>
-                          <div className="fluency-level-header">
-                            <div className="fluency-level-info">
-                              <div 
-                                className="fluency-level-badge"
-                                style={{ backgroundColor: levelColors[levelNum] }}
-                              >
-                                {isComplete ? '✓' : levelNum}
-                              </div>
-                              <div className="fluency-level-details">
-                                <h3 className="fluency-level-name">
-                                  Level {levelNum}: {levelNames[levelNum]}
-                                </h3>
-                                <p className="fluency-level-stats">
-                                  {completedCount} of {totalExercises} exercises completed
-                                  {isCurrent && !isComplete && ' • Currently practicing'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="fluency-percentage" style={{ color: levelColors[levelNum] }}>
-                              {percentage}%
-                            </div>
-                          </div>
-                          <div className="progress-bar-container">
-                            <div 
-                              className="progress-bar-fill"
-                              style={{ 
-                                width: `${percentage}%`,
-                                backgroundColor: levelColors[levelNum]
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Fluency Stats */}
-                  <div className="fluency-stats">
-                    <div className="fluency-stat">
-                      <span className="stat-icon">🎯</span>
-                      <span className="stat-text">
-                        Level {fluencyProgress.current_level === 6 ? '5 Complete!' : fluencyProgress.current_level}
-                      </span>
-                    </div>
-                    <div className="fluency-stat">
-                      <span className="stat-icon">📈</span>
-                      <span className="stat-text">
-                        {Object.values(fluencyProgress.levels).reduce((total, level) => 
-                          total + Object.keys(level.exercises || {}).length, 0
-                        )} Total Exercises
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => navigate('/fluency-therapy')}
-                    className="btn-continue"
-                    style={{ borderColor: '#667eea', color: '#667eea' }}
-                  >
-                    {fluencyProgress.current_level > 5 ? '✓ Completed!' : 'Continue Practice →'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Statistics Card */}
-          <div className="profile-card">
-            <div className="card-header">
-              <h2 className="card-title">Overall Statistics</h2>
-            </div>
-            <div className="card-body">
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <div className="stat-value">{allProgress.length}</div>
-                  <div className="stat-label">Sounds Practiced</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">
-                    {allProgress.reduce((total, sound) => {
-                      return total + Object.values(sound.levels || {}).filter(l => l.is_complete).length;
-                    }, 0)}
-                  </div>
-                  <div className="stat-label">Levels Completed</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">
-                    {languageProgress.reduce((total, mode) => {
-                      return total + (mode.completed_exercises || 0);
-                    }, 0)}
-                  </div>
-                  <div className="stat-label">Language Exercises</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">
-                    {Math.round(
-                      allProgress.reduce((total, sound) => {
-                        const progress = calculateSoundProgress(sound);
-                        return total + progress.percentage;
-                      }, 0) / (allProgress.length || 1)
-                    )}%
-                  </div>
-                  <div className="stat-label">Average Progress</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

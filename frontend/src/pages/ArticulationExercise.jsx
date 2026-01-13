@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { images } from '../assets/images';
+import Header from '../components/Header';
 import WaveSurfer from 'wavesurfer.js';
 import { articulationService, articulationExerciseService } from '../services/api';
 import './ArticulationExercise.css';
@@ -134,11 +134,6 @@ function ArticulationExercise({ onLogout }) {
       }
     };
   }, [soundData]);
-
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
-  };
 
   const startRecording = async () => {
     if (isRecording || isProcessing) return;
@@ -469,31 +464,7 @@ function ArticulationExercise({ onLogout }) {
   return (
     <div className="articulation-exercise-page">
       {/* Header */}
-      <header className="exercise-header">
-        <div className="exercise-header-container">
-          <div className="exercise-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="exercise-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="exercise-header-text" />
-          </div>
-          <div className="exercise-title-section">
-            <h1 className="exercise-sound-title">{soundData.name} Assessment</h1>
-            <div className="level-breadcrumb">
-              Level {currentLevel}: {currentLevelData.name} • Item {currentItem + 1}/{totalItems}
-            </div>
-          </div>
-          <div className="exercise-nav">
-            <button onClick={() => navigate('/articulation')} className="exercise-nav-btn">
-              ← Back
-            </button>
-            <button onClick={() => navigate('/profile')} className="exercise-nav-btn profile">
-              My Profile
-            </button>
-            <button onClick={handleLogout} className="exercise-nav-btn logout">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Content */}
       <main className="exercise-main">

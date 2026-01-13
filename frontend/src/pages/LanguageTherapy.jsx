@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { images } from '../assets/images';
+import Header from '../components/Header';
 import { languageService, languageExerciseService, receptiveExerciseService } from '../services/api';
 import './LanguageTherapy.css';
 
@@ -124,11 +124,6 @@ function LanguageTherapy({ onLogout }) {
 
     loadReceptiveExercises();
   }, []);
-
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
-  };
 
   const selectTherapyMode = async (mode) => {
     setTherapyMode(mode);
@@ -604,25 +599,7 @@ function LanguageTherapy({ onLogout }) {
     return (
       <div className="language-therapy-page">
         {/* Header */}
-        <header className="language-header">
-          <div className="language-header-container">
-            <div className="language-logo-group">
-              <img src={images.logo} alt="CVAPed Logo" className="language-header-logo" />
-              <img src={images.cvacareText} alt="CVAPed" className="language-header-text" />
-            </div>
-            <div className="language-nav">
-              <button onClick={() => navigate('/speech-therapy')} className="language-nav-btn">
-                ← Back
-              </button>
-              <button onClick={() => navigate('/profile')} className="language-nav-btn profile">
-                My Profile
-              </button>
-              <button onClick={handleLogout} className="language-nav-btn logout">
-                Logout
-              </button>
-            </div>
-          </div>
-        </header>
+        <Header onLogout={onLogout} />
 
         {/* Mode Selection */}
         <main className="language-main">
@@ -702,25 +679,7 @@ function LanguageTherapy({ onLogout }) {
 
     return (
       <div className="language-therapy-page">
-        <header className="language-header">
-          <div className="language-header-container">
-            <div className="language-logo-group">
-              <img src={images.logo} alt="CVAPed Logo" className="language-header-logo" />
-              <img src={images.cvacareText} alt="CVAPed" className="language-header-text" />
-            </div>
-            <div className="language-nav">
-              <button onClick={() => setTherapyMode(null)} className="language-nav-btn">
-                ← Back to Selection
-              </button>
-              <button onClick={() => navigate('/profile')} className="language-nav-btn profile">
-                My Profile
-              </button>
-              <button onClick={handleLogout} className="language-nav-btn logout">
-                Logout
-              </button>
-            </div>
-          </div>
-        </header>
+        <Header onLogout={onLogout} />
 
         <main className="language-main">
           <div className="language-container">
@@ -805,31 +764,7 @@ function LanguageTherapy({ onLogout }) {
   return (
     <div className="language-therapy-page">
       {/* Header */}
-      <header className="language-header">
-        <div className="language-header-container">
-          <div className="language-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="language-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="language-header-text" />
-          </div>
-          <div className="language-title-section">
-            <h1 className="language-exercise-title">{modeData.name} Assessment</h1>
-            <div className="language-breadcrumb">
-              Exercise {currentExerciseIndex + 1} of {currentExercises.length} • Level {currentExercise?.level || 1}
-            </div>
-          </div>
-          <div className="language-nav">
-            <button onClick={() => setTherapyMode(null)} className="language-nav-btn">
-              ← Back
-            </button>
-            <button onClick={() => navigate('/profile')} className="language-nav-btn profile">
-              My Profile
-            </button>
-            <button onClick={handleLogout} className="language-nav-btn logout">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Exercise */}
       <main className="language-main">

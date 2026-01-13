@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Header from '../components/Header';
 import { images } from '../assets/images';
 import './TherapySelection.css';
 
@@ -15,30 +16,10 @@ function TherapySelection({ onLogout }) {
     }
   };
 
-  const handleLogout = () => {
-    onLogout();
-    navigate('/login');
-  };
-
   return (
     <div className="therapy-selection-page">
       {/* Header */}
-      <header className="therapy-header">
-        <div className="therapy-header-container">
-          <div className="therapy-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="therapy-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="therapy-header-text" />
-          </div>
-          <div className="therapy-header-actions">
-            <button onClick={() => navigate('/profile')} className="therapy-profile-btn">
-              My Profile
-            </button>
-            <button onClick={handleLogout} className="therapy-logout-btn">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header onLogout={onLogout} />
 
       {/* Main Selection Area */}
       <main className="therapy-main">

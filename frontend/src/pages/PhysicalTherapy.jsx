@@ -48,7 +48,7 @@ function PhysicalTherapy({ onLogout }) {
                   <button 
                     className="therapy-page-cta-btn" 
                     style={{ width: '100%', padding: '0.75rem' }}
-                    onClick={() => alert('Hardware setup coming soon!')}
+                    onClick={() => navigate('/gait-analysis')}
                   >
                     Start with Hardware
                   </button>

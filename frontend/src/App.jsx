@@ -10,6 +10,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import TherapistDashboard from './pages/TherapistDashboard';
 import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
+import GaitAnalysis from './pages/GaitAnalysis';
 import SpeechTherapy from './pages/SpeechTherapy';
 import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
@@ -133,6 +134,12 @@ function App() {
               path="/physical-therapy" 
               element={
                 isAuthenticated ? <PhysicalTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/gait-analysis" 
+              element={
+                isAuthenticated ? <GaitAnalysis onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

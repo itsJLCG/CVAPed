@@ -2574,6 +2574,39 @@ def get_physical_therapy_data(current_user):
         print(traceback.format_exc())
         return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
 
+# ============================================================================
+# WEARABLE GAIT ANALYSIS ENDPOINTS
+# ============================================================================
+
+# Global variable to store latest wearable sensor data
+latest_wearable_data = {}
+
+@app.route('/api/wearable/data', methods=['GET', 'POST'])
+def wearable_data():
+    """
+    Endpoint for wearable gait analysis sensor data
+    POST: Receive sensor data from hardware device
+    GET: Retrieve latest sensor data for web interface
+    """
+    global latest_wearable_data
+    
+    if request.method == 'POST':
+        # Receive data from wearable sensors
+        try:
+            latest_wearable_data = request.json
+            # Log received data for debugging
+            print("\n" + "="*30)
+            print(f"WEARABLE DATA RECEIVED AT: {datetime.datetime.now().strftime('%H:%M:%S')}")
+            print(latest_wearable_data)
+            print("="*30 + "\n")
+            return jsonify({"status": "ok"}), 200
+        except Exception as e:
+            print(f"Error processing wearable data: {str(e)}")
+            return jsonify({"status": "error", "message": str(e)}), 400
+    
+    # GET request - return latest data to web interface
+    return jsonify(latest_wearable_data), 200
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'

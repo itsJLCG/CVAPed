@@ -1,0 +1,407 @@
+// CVACare - Speech & Physical Therapy Application Database Schema
+// MongoDB Collections Schema in DBML format
+// Upload this file to dbdiagram.io to generate ERD
+
+Project CVACare {
+  database_type: 'MongoDB'
+  Note: 'CVACare - Comprehensive therapy platform for CVA patients (Speech + Physical Therapy)'
+}
+
+// ========================================
+// CORE USER MANAGEMENT
+// ========================================
+
+Table users {
+  _id ObjectId [pk]
+  email varchar [unique, not null]
+  password varchar [not null, note: 'Hashed password (bcrypt)']
+  firstName varchar [not null]
+  lastName varchar [not null]
+  role varchar [not null, default: 'patient', note: 'Values: patient, therapist, admin']
+  therapyType varchar [note: 'Values: speech, physical']
+  patientType varchar [note: 'Values: myself, child, dependent']
+  providerId varchar [note: 'Firebase UID for OAuth authentication']
+  createdAt timestamp [not null]
+  updatedAt timestamp [not null]
+  
+  // Nested objects for child patients (speech therapy)
+  childInfo object [note: '{firstName, lastName, dateOfBirth, gender}']
+  parentInfo object [note: '{firstName, lastName, email, phone, relationship}']
+  
+  // Nested object for physical therapy patients
+  patientInfo object [note: '{firstName, lastName, gender}']
+  
+  Note: 'Core user accounts - patients, therapists, and administrators'
+}
+
+// ========================================
+// SPEECH THERAPY - ARTICULATION
+// ========================================
+
+Table articulation_exercises {
+  _id ObjectId [pk]
+  exercise_id varchar [unique, not null]
+  sound_id varchar [not null, note: 'Target sound: r, s, l, th, k']
+  level int [not null, note: 'Difficulty level 1-5']
+  position varchar [note: 'Sound position: initial, medial, final']
+  word varchar [not null, note: 'Target word to practice']
+  phonetic varchar [note: 'IPA phonetic transcription']
+  image_url varchar [note: 'URL to exercise image']
+  audio_url varchar [note: 'URL to reference audio']
+  order int [note: 'Exercise ordering']
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+  
+  Note: 'Articulation exercise definitions for speech sounds (r, s, l, th, k)'
+}
+
+Table articulation_progress {
+  _id ObjectId [pk]
+  user_id varchar [not null]
+  sound_id varchar [not null, note: 'r, s, l, th, k']
+  current_level int [default: 1]
+  overall_mastery float [default: 0, note: 'Overall mastery percentage 0-1']
+  
+  // Nested levels object structure:
+  // levels.{1-5}.completed: boolean
+  // levels.{1-5}.mastery: float
+  // levels.{1-5}.items.{item_id}.completed: boolean
+  // levels.{1-5}.items.{item_id}.accuracy: float
+  // levels.{1-5}.items.{item_id}.attempts: int
+  // levels.{1-5}.items.{item_id}.last_attempt: timestamp
+  // levels.{1-5}.items.{item_id}.trial_details: array of trial objects
+  levels object [note: 'Nested progress data per level and item with trial history']
+  
+  started_at timestamp
+  updated_at timestamp
+  
+  indexes {
+    (user_id, sound_id) [unique]
+  }
+  
+  Note: 'User progress tracking for articulation exercises with detailed level/item breakdown'
+}
+
+Table articulation_trials {
+  _id ObjectId [pk]
+  user_id varchar [not null]
+  sound_id varchar [not null]
+  level int [not null]
+  item_index int
+  trial int [note: 'Trial number for this item']
+  target varchar [not null, note: 'Target word/phrase']
+  transcription varchar [note: 'Speech-to-text result from Azure']
+  
+  // Nested scores object from Azure Pronunciation Assessment
+  scores object [note: '{accuracy_score, pronunciation_score, fluency_score, completeness_score, computed_score}']
+  
+  feedback text [note: 'Feedback message for user']
+  timestamp timestamp [not null]
+  
+  indexes {
+    user_id
+    sound_id
+    timestamp
+  }
+  
+  Note: 'Individual articulation practice attempts with Azure Speech Services assessment'
+}
+
+// ========================================
+// SPEECH THERAPY - FLUENCY
+// ========================================
+
+Table fluency_exercises {
+  _id ObjectId [pk]
+  exercise_id varchar [unique, not null]
+  level int [not null, note: 'Difficulty level 1-5']
+  category varchar [note: 'Exercise category/type']
+  title varchar [not null]
+  description text
+  target_phrase varchar [note: 'Phrase to practice for fluency']
+  technique varchar [note: 'Fluency technique: slow rate, easy onset, etc']
+  audio_url varchar
+  image_url varchar
+  order int
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+  
+  Note: 'Fluency therapy exercise definitions for stuttering treatment'
+}
+
+Table fluency_progress {
+  _id ObjectId [pk]
+  user_id varchar [not null, unique]
+  current_level int [default: 1]
+  overall_mastery float [default: 0]
+  
+  // Nested levels structure similar to articulation
+  levels object [note: 'Progress per level with items and detailed trial history']
+  
+  started_at timestamp
+  updated_at timestamp
+  
+  Note: 'User progress tracking for fluency exercises across levels'
+}
+
+Table fluency_trials {
+  _id ObjectId [pk]
+  user_id varchar [not null]
+  level int [not null]
+  item_index int
+  trial int
+  target varchar
+  transcription varchar
+  
+  // Fluency-specific scores
+  scores object [note: '{fluency_score, rate, pauses, computed_score}']
+  
+  feedback text
+  timestamp timestamp [not null]
+  created_at timestamp
+  
+  indexes {
+    user_id
+    timestamp
+  }
+  
+  Note: 'Individual fluency practice attempts with metrics'
+}
+
+// ========================================
+// SPEECH THERAPY - LANGUAGE
+// ========================================
+
+Table language_exercises {
+  _id ObjectId [pk]
+  exercise_id varchar [unique, not null]
+  mode varchar [not null, note: 'expressive - for expressive language exercises']
+  level int [not null]
+  category varchar
+  subcategory varchar
+  question text [not null]
+  question_audio_url varchar
+  options array [note: 'Array of answer options for multiple choice']
+  correct_answer varchar
+  image_url varchar
+  order int
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+  
+  Note: 'Expressive language therapy exercises - picture naming, sentence formation'
+}
+
+Table receptive_exercises {
+  _id ObjectId [pk]
+  exercise_id varchar [unique, not null]
+  type varchar [note: 'vocabulary, directions, comprehension']
+  level int [not null]
+  instruction text [not null]
+  target varchar [note: 'Target word or concept being tested']
+  options array [note: 'Array of option objects: {id, text, image, shape, correct}']
+  order int
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+  
+  Note: 'Receptive language exercises - comprehension, following directions, vocabulary recognition'
+}
+
+Table language_progress {
+  _id ObjectId [pk]
+  user_id varchar [not null]
+  mode varchar [not null, note: 'receptive or expressive']
+  current_exercise int [default: 0]
+  
+  // Nested exercises object:
+  // exercises.{index}.exercise_id: varchar
+  // exercises.{index}.completed: boolean
+  // exercises.{index}.is_correct: boolean
+  // exercises.{index}.score: float
+  // exercises.{index}.user_answer: varchar
+  // exercises.{index}.transcription: varchar
+  // exercises.{index}.last_attempt: timestamp
+  exercises object [note: 'Progress per exercise with user responses']
+  
+  total_exercises int [default: 0]
+  completed_exercises int [default: 0]
+  correct_exercises int [default: 0]
+  accuracy float [default: 0]
+  started_at timestamp
+  updated_at timestamp
+  
+  indexes {
+    (user_id, mode) [unique]
+  }
+  
+  Note: 'User progress for language exercises (separate tracking for receptive & expressive)'
+}
+
+Table language_trials {
+  _id ObjectId [pk]
+  user_id varchar [not null]
+  mode varchar [not null, note: 'receptive or expressive']
+  exercise_index int
+  exercise_id varchar
+  level int
+  is_correct boolean
+  score float
+  user_answer varchar
+  transcription varchar [note: 'For expressive exercises with speech input']
+  timestamp timestamp [not null]
+  
+  indexes {
+    user_id
+    mode
+    timestamp
+  }
+  
+  Note: 'Individual language exercise attempts for both receptive and expressive modes'
+}
+
+// ========================================
+// PHYSICAL THERAPY
+// ========================================
+
+Table exerciseplans {
+  _id ObjectId [pk]
+  user_id varchar
+  plan_name varchar [not null]
+  description text
+  therapy_type varchar [note: 'speech, physical, or combined']
+  
+  // Exercise details array
+  exercises array [note: 'Array of exercise objects with: {name, type, sets, reps, duration, instructions}']
+  
+  frequency varchar [note: 'Daily, 3x/week, custom schedule']
+  duration int [note: 'Total duration in minutes per session']
+  difficulty varchar [note: 'beginner, intermediate, advanced']
+  status varchar [note: 'active, completed, paused, archived']
+  goals text [note: 'Treatment goals and objectives']
+  
+  // Assignment tracking
+  created_by varchar [note: 'Therapist user_id who created the plan']
+  assigned_by varchar [note: 'Admin or therapist user_id who assigned']
+  
+  created_at timestamp
+  updated_at timestamp
+  start_date timestamp
+  end_date timestamp
+  completion_date timestamp
+  
+  Note: 'Customized therapy exercise plans created by therapists for patients'
+}
+
+Table gaitprogresses {
+  _id ObjectId [pk]
+  user_id varchar [not null]
+  session_date timestamp [not null]
+  exercise_type varchar [note: 'walking, balance, coordination, stairs']
+  exercise_name varchar
+  
+  // Gait and mobility metrics
+  step_count int [note: 'Total steps in session']
+  stride_length float [note: 'Average stride length in cm']
+  walking_speed float [note: 'Speed in m/s']
+  cadence int [note: 'Steps per minute']
+  balance_score float [note: '0-100 balance assessment score']
+  symmetry float [note: 'Left-right gait symmetry percentage']
+  duration int [note: 'Session duration in seconds']
+  distance float [note: 'Total distance covered in meters']
+  
+  // Assessment and scores
+  overall_score float [note: 'Overall performance 0-100']
+  improvement_rate float [note: 'Rate of improvement percentage']
+  pain_level int [note: '0-10 pain scale rating']
+  fatigue_level int [note: '0-10 fatigue scale rating']
+  
+  // Clinical documentation
+  notes text [note: 'Therapist observations and comments']
+  challenges text [note: 'Difficulties or barriers encountered']
+  achievements text [note: 'Milestones reached during session']
+  
+  // Session metadata
+  recorded_by varchar [note: 'Therapist user_id or self-reported']
+  session_type varchar [note: 'therapy, assessment, practice, home-exercise']
+  created_at timestamp
+  updated_at timestamp
+  
+  indexes {
+    user_id
+    session_date
+    (user_id, session_date)
+  }
+  
+  Note: 'Physical therapy gait analysis and mobility progress tracking for stroke rehabilitation'
+}
+
+// ========================================
+// RELATIONSHIPS (References in MongoDB)
+// ========================================
+
+Ref: articulation_progress.user_id > users._id [delete: cascade]
+Ref: articulation_trials.user_id > users._id [delete: cascade]
+Ref: fluency_progress.user_id > users._id [delete: cascade]
+Ref: fluency_trials.user_id > users._id [delete: cascade]
+Ref: language_progress.user_id > users._id [delete: cascade]
+Ref: language_trials.user_id > users._id [delete: cascade]
+Ref: exerciseplans.user_id > users._id [delete: cascade]
+Ref: gaitprogresses.user_id > users._id [delete: cascade]
+
+// ========================================
+// NOTES AND DOCUMENTATION
+// ========================================
+
+Note CollectionSummary {
+  '''
+  # CVACare MongoDB Collections Summary
+  
+  ## Total Collections: 14 (13 active + 1 backup)
+  
+  ### User Management (1)
+  - users: Core user accounts with role-based access (patients, therapists, admins)
+  
+  ### Speech Therapy - Articulation (3)
+  - articulation_exercises: Exercise definitions for sounds (r, s, l, th, k)
+  - articulation_progress: User progress tracking per sound and level
+  - articulation_trials: Individual practice attempts with pronunciation scores
+  
+  ### Speech Therapy - Fluency (3)
+  - fluency_exercises: Exercise definitions for stuttering treatment
+  - fluency_progress: User progress tracking across levels
+  - fluency_trials: Individual practice attempts with fluency metrics
+  
+  ### Speech Therapy - Language (4)
+  - language_exercises: Expressive language exercise definitions
+  - receptive_exercises: Receptive language exercise definitions
+  - language_progress: User progress tracking (receptive & expressive modes)
+  - language_trials: Individual practice attempts for both modes
+  
+  ### Physical Therapy (2)
+  - exerciseplans: Customized therapy plans created by therapists
+  - gaitprogresses: Gait analysis, mobility metrics, and rehabilitation progress
+  
+  ### Backup Collections (1)
+  - language_exercises_backup: Backup copy of language exercises (not visualized in ERD)
+  
+  ## Key Features
+  - MongoDB native structure with deeply nested objects for detailed tracking
+  - Comprehensive progress tracking with complete trial history
+  - Dual therapy system: Speech + Physical therapy for CVA (stroke) patients
+  - Speech assessment integration using Azure Speech Services
+  - XGBoost ML models for therapy mastery prediction
+  - Role-based access control: patients, therapists, administrators
+  - Real-time progress monitoring and analytics dashboard
+  - Multi-modal therapy exercises: articulation, fluency, receptive, expressive
+  - Gait analysis and mobility tracking for physical rehabilitation
+  
+  ## Data Relationships
+  All therapy-related collections reference users via user_id with cascade delete
+  Exercise collections define available exercises
+  Progress collections track user advancement through exercise programs
+  Trials collections record every individual practice attempt with detailed metrics
+  '''
+}

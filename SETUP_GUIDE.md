@@ -294,3 +294,11 @@ Tips
 ---
 
 **That's it! You're ready to use CVACare! 🎉
+
+
+cd backend
+venv\Scripts\activate
+python app.py
+
+cd frontend
+npm run dev

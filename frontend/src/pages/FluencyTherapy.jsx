@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import axios from 'axios';
 import { fluencyExerciseService } from '../services/api';
 import './FluencyTherapy.css';
@@ -9,6 +10,13 @@ const API_URL = 'http://localhost:5000/api';
 
 function FluencyTherapy({ onLogout }) {
   const navigate = useNavigate();
+  const { selectCategory } = useTherapyCategory();
+
+  // Ensure the category is set to 'speech' when this page is loaded
+  useEffect(() => {
+    selectCategory('speech');
+  }, [selectCategory]);
+
   const [currentLevel, setCurrentLevel] = useState(1);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);

@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { prescriptionService } from '../services/api';
 import './Prescription.css';
 
 function Prescription({ onLogout }) {
+  const { selectedCategory } = useTherapyCategory();
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
 
   useEffect(() => {
-    fetchPrescriptiveAnalysis();
-  }, []);
+    // Only fetch prescriptions for speech therapy
+    if (selectedCategory === 'speech') {
+      fetchPrescriptiveAnalysis();
+    } else {
+      setLoading(false);
+    }
+  }, [selectedCategory]);
 
   const fetchPrescriptiveAnalysis = async () => {
     try {
@@ -58,6 +65,43 @@ function Prescription({ onLogout }) {
           <div className="prescription-container">
             <div className="loading-spinner">
               <div className="spinner"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Show "Coming Soon" for Physical Therapy
+  if (selectedCategory === 'physical') {
+    return (
+      <div className="blank-page">
+        <Header onLogout={onLogout} />
+        <main className="blank-page-content">
+          <div className="prescription-container">
+            <div className="coming-soon-message">
+              <div className="coming-soon-icon">🚧</div>
+              <h2>Physical Therapy Prescription</h2>
+              <h3>Coming Soon</h3>
+              <p>AI-powered prescriptive therapy recommendations for physical rehabilitation are currently under development.</p>
+              <p className="coming-soon-detail">
+                This feature will provide personalized exercise recommendations, 
+                daily therapy schedules, and adaptive rehabilitation plans based on your progress.
+              </p>
+              <div className="coming-soon-features">
+                <div className="feature-item">
+                  <i className="fas fa-calendar-check"></i>
+                  <span>Daily Exercise Plans</span>
+                </div>
+                <div className="feature-item">
+                  <i className="fas fa-dumbbell"></i>
+                  <span>Personalized Routines</span>
+                </div>
+                <div className="feature-item">
+                  <i className="fas fa-clipboard-list"></i>
+                  <span>Progress-Based Adjustments</span>
+                </div>
+              </div>
             </div>
           </div>
         </main>

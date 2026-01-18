@@ -1,12 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import './ArticulationTherapy.css';
 
 function ArticulationTherapy({ onLogout }) {
   const [selectedSound, setSelectedSound] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const navigate = useNavigate();
+  const { selectCategory } = useTherapyCategory();
+
+  // Ensure the category is set to 'speech' when this page is loaded
+  useEffect(() => {
+    selectCategory('speech');
+  }, [selectCategory]);
 
   const targetSounds = [
     {

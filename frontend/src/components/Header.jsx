@@ -1,11 +1,13 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTherapyCategory } from './TherapyCategoryContext';
 import { images } from '../assets/images';
 import './Header.css';
 
 function Header({ onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { selectedCategory } = useTherapyCategory();
 
   const handleLogout = () => {
     onLogout();
@@ -15,6 +17,9 @@ function Header({ onLogout }) {
   const isActive = (path) => {
     return location.pathname === path;
   };
+
+  // Show Prediction and Prescription only when a category is selected
+  const showPredictionPrescription = selectedCategory !== null;
 
   return (
     <header className="app-header">
@@ -37,18 +42,22 @@ function Header({ onLogout }) {
           >
             Health Logs
           </button>
-          <button 
-            onClick={() => navigate('/prediction')} 
-            className={`nav-btn ${isActive('/prediction') ? 'active' : ''}`}
-          >
-            Prediction
-          </button>
-          <button 
-            onClick={() => navigate('/prescription')} 
-            className={`nav-btn ${isActive('/prescription') ? 'active' : ''}`}
-          >
-            Prescription
-          </button>
+          {showPredictionPrescription && (
+            <>
+              <button 
+                onClick={() => navigate('/prediction')} 
+                className={`nav-btn ${isActive('/prediction') ? 'active' : ''}`}
+              >
+                Prediction
+              </button>
+              <button 
+                onClick={() => navigate('/prescription')} 
+                className={`nav-btn ${isActive('/prescription') ? 'active' : ''}`}
+              >
+                Prescription
+              </button>
+            </>
+          )}
           <button 
             onClick={() => navigate('/profile')} 
             className={`nav-btn ${isActive('/profile') ? 'active' : ''}`}

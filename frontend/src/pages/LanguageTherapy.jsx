@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { languageService, languageExerciseService, receptiveExerciseService } from '../services/api';
 import './LanguageTherapy.css';
 
@@ -20,6 +21,12 @@ const languageExercises = {
 
 function LanguageTherapy({ onLogout }) {
   const navigate = useNavigate();
+  const { selectCategory } = useTherapyCategory();
+  
+  // Ensure the category is set to 'speech' when this page is loaded
+  useEffect(() => {
+    selectCategory('speech');
+  }, [selectCategory]);
   
   // State for exercises - both will be loaded from database
   const [expressiveExercises, setExpressiveExercises] = useState([]);

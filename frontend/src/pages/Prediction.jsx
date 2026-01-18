@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { predictionService } from '../services/api';
 import './Prediction-Clean.css';
 import './BlankPage.css';
 
 function Prediction({ onLogout }) {
+  const { selectedCategory } = useTherapyCategory();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [predictions, setPredictions] = useState(null);
 
   useEffect(() => {
-    fetchPredictions();
-  }, []);
+    // Only fetch predictions for speech therapy
+    if (selectedCategory === 'speech') {
+      fetchPredictions();
+    } else {
+      setLoading(false);
+    }
+  }, [selectedCategory]);
 
   const fetchPredictions = async () => {
     try {
@@ -266,6 +273,43 @@ function Prediction({ onLogout }) {
                 <span></span>
                 <span></span>
                 <span></span>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Show "Coming Soon" for Physical Therapy
+  if (selectedCategory === 'physical') {
+    return (
+      <div className="blank-page">
+        <Header onLogout={onLogout} />
+        <main className="blank-page-content">
+          <div className="prediction-container">
+            <div className="coming-soon-message">
+              <div className="coming-soon-icon">🚧</div>
+              <h2>Physical Therapy Predictions</h2>
+              <h3>Coming Soon</h3>
+              <p>AI-powered predictions for physical therapy progress are currently under development.</p>
+              <p className="coming-soon-detail">
+                This feature will provide insights on gait analysis improvements, 
+                mobility recovery timelines, and personalized rehabilitation progress tracking.
+              </p>
+              <div className="coming-soon-features">
+                <div className="feature-item">
+                  <i className="fas fa-chart-line"></i>
+                  <span>Gait Progress Tracking</span>
+                </div>
+                <div className="feature-item">
+                  <i className="fas fa-walking"></i>
+                  <span>Mobility Predictions</span>
+                </div>
+                <div className="feature-item">
+                  <i className="fas fa-brain"></i>
+                  <span>AI-Powered Analysis</span>
+                </div>
               </div>
             </div>
           </div>

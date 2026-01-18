@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ToastContext';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import Header from '../components/Header';
 import './GaitAnalysis.css';
 import bodyFullImage from '../assets/body-full.png';
@@ -9,7 +10,14 @@ import soleRightImage from '../assets/sole-right.png';
 
 function GaitAnalysis({ onLogout }) {
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  const showToast = useToast();
+  const { selectCategory } = useTherapyCategory();
+
+  // Ensure the category is set to 'physical' when this page is loaded
+  useEffect(() => {
+    selectCategory('physical');
+  }, [selectCategory]);
+
   const [sensorData, setSensorData] = useState({});
   const [isActive, setIsActive] = useState(false);
   const lastUpdateRef = useRef(Date.now());

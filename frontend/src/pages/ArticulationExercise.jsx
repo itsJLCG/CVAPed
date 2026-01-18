@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import WaveSurfer from 'wavesurfer.js';
 import { articulationService, articulationExerciseService } from '../services/api';
 import './ArticulationExercise.css';
@@ -18,6 +19,12 @@ const soundMetadata = {
 function ArticulationExercise({ onLogout }) {
   const { soundId } = useParams();
   const navigate = useNavigate();
+  const { selectCategory } = useTherapyCategory();
+  
+  // Ensure the category is set to 'speech' when this page is loaded
+  useEffect(() => {
+    selectCategory('speech');
+  }, [selectCategory]);
   
   const [currentLevel, setCurrentLevel] = useState(1);
   const [currentItem, setCurrentItem] = useState(0);

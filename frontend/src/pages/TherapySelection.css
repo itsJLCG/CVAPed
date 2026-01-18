@@ -96,7 +96,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 100px 20px 40px;
+  padding: 40px 20px 40px;
 }
 
 .therapy-container {
@@ -116,7 +116,7 @@
   text-align: center;
   font-size: 1.2rem;
   color: var(--color-text-light);
-  margin-bottom: 60px;
+  margin-bottom: -20px;
 }
 
 /* Therapy Options Container */

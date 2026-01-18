@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import './TherapyPage.css';
 
 function PhysicalTherapy({ onLogout }) {
   const navigate = useNavigate();
+  const { selectCategory } = useTherapyCategory();
+
+  // Ensure the category is set to 'physical' when this page is loaded
+  useEffect(() => {
+    selectCategory('physical');
+  }, [selectCategory]);
 
   return (
     <div className="therapy-page">

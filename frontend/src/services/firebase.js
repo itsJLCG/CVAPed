@@ -7,7 +7,7 @@ import {
   signOut 
 } from 'firebase/auth';
 
-// Your web app's Firebase configuration
+/* // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCHr3gkWCfqiXuawHVN_5TFQRzF-YMU4W8",
   authDomain: "cvaped-mobile.firebaseapp.com",
@@ -16,6 +16,18 @@ const firebaseConfig = {
   messagingSenderId: "292803901437",
   appId: "1:292803901437:web:08a5bbf35081711d178b94",
   measurementId: "G-W0933XJRD1"
+};
+
+ */
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBrj_RrynkNqkd4y68hJW1SKrGZyHlL2rI",
+  authDomain: "cvaped-fa8b2.firebaseapp.com",
+  projectId: "cvaped-fa8b2",
+  storageBucket: "cvaped-fa8b2.firebasestorage.app",
+  messagingSenderId: "195089617239",
+  appId: "1:195089617239:web:c635a1cf461d0b8fa4ae12"
 };
 
 // Initialize Firebase

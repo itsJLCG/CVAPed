@@ -1,14 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { images } from '../assets/images';
 import './TherapySelection.css';
 
 function TherapySelection({ onLogout }) {
   const [hoveredTherapy, setHoveredTherapy] = useState(null);
   const navigate = useNavigate();
+  const { selectCategory, clearCategory } = useTherapyCategory();
+
+  // Clear category when user comes back to therapy selection
+  useEffect(() => {
+    clearCategory();
+  }, [clearCategory]);
 
   const handleTherapyClick = (therapyType) => {
+    // Set the selected category in context
+    selectCategory(therapyType);
+    
     if (therapyType === 'physical') {
       navigate('/physical-therapy');
     } else if (therapyType === 'speech') {

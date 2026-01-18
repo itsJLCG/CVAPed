@@ -1335,6 +1335,10 @@ def save_progress(current_user):
             upsert=True
         )
         
+        # Convert ObjectId to string for JSON serialization
+        if '_id' in progress_doc:
+            progress_doc['_id'] = str(progress_doc['_id'])
+        
         return jsonify({
             'success': True,
             'message': 'Progress saved successfully',

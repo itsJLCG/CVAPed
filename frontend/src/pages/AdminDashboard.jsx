@@ -192,97 +192,144 @@ function AdminDashboard({ onLogout }) {
 
           {/* Charts Section */}
           <div className="charts-section">
+            {/* User Distribution - Pie Chart */}
             <div className="chart-card">
-              <h3 className="chart-title">User Distribution</h3>
+              <h3 className="chart-title">
+                <FiGrid className="title-icon" />
+                User Distribution
+              </h3>
               <div className="pie-chart">
-                <svg viewBox="0 0 200 200" className="pie-svg">
-                  {/* Calculate percentages */}
-                  {(() => {
-                    const total = stats.total_users || 1;
-                    const patientPercent = (stats.total_patients / total) * 100;
-                    const therapistPercent = (stats.total_therapists / total) * 100;
-                    const adminPercent = (stats.total_admins / total) * 100;
-                    
-                    let cumulativePercent = 0;
-                    
-                    const createArc = (percent, color) => {
-                      const startAngle = (cumulativePercent / 100) * 360;
-                      const endAngle = ((cumulativePercent + percent) / 100) * 360;
-                      cumulativePercent += percent;
+                <div className="pie-chart-container">
+                  <svg viewBox="0 0 200 200" className="pie-svg">
+                    {/* Calculate percentages */}
+                    {(() => {
+                      const total = stats.total_users || 1;
+                      const patientPercent = (stats.total_patients / total) * 100;
+                      const therapistPercent = (stats.total_therapists / total) * 100;
+                      const adminPercent = (stats.total_admins / total) * 100;
                       
-                      const start = polarToCartesian(100, 100, 80, endAngle);
-                      const end = polarToCartesian(100, 100, 80, startAngle);
-                      const largeArc = percent > 50 ? 1 : 0;
+                      let cumulativePercent = 0;
+                      
+                      const createArc = (percent, color) => {
+                        const startAngle = (cumulativePercent / 100) * 360;
+                        const endAngle = ((cumulativePercent + percent) / 100) * 360;
+                        cumulativePercent += percent;
+                        
+                        const start = polarToCartesian(100, 100, 80, endAngle);
+                        const end = polarToCartesian(100, 100, 80, startAngle);
+                        const largeArc = percent > 50 ? 1 : 0;
+                        
+                        return (
+                          <path
+                            key={color}
+                            d={`M 100 100 L ${start.x} ${start.y} A 80 80 0 ${largeArc} 0 ${end.x} ${end.y} Z`}
+                            fill={color}
+                            className="pie-slice"
+                          />
+                        );
+                      };
                       
                       return (
-                        <path
-                          key={color}
-                          d={`M 100 100 L ${start.x} ${start.y} A 80 80 0 ${largeArc} 0 ${end.x} ${end.y} Z`}
-                          fill={color}
-                          opacity="0.9"
-                        />
+                        <>
+                          {patientPercent > 0 && createArc(patientPercent, '#4caf50')}
+                          {therapistPercent > 0 && createArc(therapistPercent, '#e8b04e')}
+                          {adminPercent > 0 && createArc(adminPercent, '#ce3630')}
+                          {/* Center circle for donut effect */}
+                          <circle cx="100" cy="100" r="50" fill="white" />
+                          <text x="100" y="95" textAnchor="middle" className="pie-center-text">Total</text>
+                          <text x="100" y="115" textAnchor="middle" className="pie-center-number">{stats.total_users}</text>
+                        </>
                       );
-                    };
-                    
-                    return (
-                      <>
-                        {patientPercent > 0 && createArc(patientPercent, '#4caf50')}
-                        {therapistPercent > 0 && createArc(therapistPercent, '#e8b04e')}
-                        {adminPercent > 0 && createArc(adminPercent, '#ce3630')}
-                      </>
-                    );
-                  })()}
-                </svg>
+                    })()}
+                  </svg>
+                </div>
                 <div className="chart-legend">
                   <div className="legend-item">
-                    <span className="legend-color" style={{background: '#4caf50'}}></span>
-                    <span>Patients ({Math.round((stats.total_patients / stats.total_users) * 100)}%)</span>
+                    <span className="legend-color patients-color"></span>
+                    <span className="legend-text">
+                      <strong>Patients</strong>
+                      <span className="legend-stats">
+                        {stats.total_patients} users ({Math.round((stats.total_patients / stats.total_users) * 100)}%)
+                      </span>
+                    </span>
                   </div>
                   <div className="legend-item">
-                    <span className="legend-color" style={{background: '#e8b04e'}}></span>
-                    <span>Therapists ({Math.round((stats.total_therapists / stats.total_users) * 100)}%)</span>
+                    <span className="legend-color therapists-color"></span>
+                    <span className="legend-text">
+                      <strong>Therapists</strong>
+                      <span className="legend-stats">
+                        {stats.total_therapists} users ({Math.round((stats.total_therapists / stats.total_users) * 100)}%)
+                      </span>
+                    </span>
                   </div>
                   <div className="legend-item">
-                    <span className="legend-color" style={{background: '#ce3630'}}></span>
-                    <span>Admins ({Math.round((stats.total_admins / stats.total_users) * 100)}%)</span>
+                    <span className="legend-color admins-color"></span>
+                    <span className="legend-text">
+                      <strong>Admins</strong>
+                      <span className="legend-stats">
+                        {stats.total_admins} users ({Math.round((stats.total_admins / stats.total_users) * 100)}%)
+                      </span>
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
 
+            {/* User Role Summary - Bar Chart */}
             <div className="chart-card">
-              <h3 className="chart-title">User Role Summary</h3>
+              <h3 className="chart-title">
+                <FiActivity className="title-icon" />
+                User Role Summary
+              </h3>
               <div className="bar-chart">
                 <div className="bar-item">
-                  <div className="bar-label">Patients</div>
+                  <div className="bar-header">
+                    <div className="bar-label">
+                      <span className="bar-icon patients-icon">👥</span>
+                      <span>Patients</span>
+                    </div>
+                    <div className="bar-count">{stats.total_patients}</div>
+                  </div>
                   <div className="bar-track">
                     <div 
                       className="bar-fill patients" 
                       style={{width: `${(stats.total_patients / stats.total_users) * 100}%`}}
                     >
-                      <span className="bar-value">{stats.total_patients}</span>
+                      <span className="bar-percentage">{Math.round((stats.total_patients / stats.total_users) * 100)}%</span>
                     </div>
                   </div>
                 </div>
                 <div className="bar-item">
-                  <div className="bar-label">Therapists</div>
+                  <div className="bar-header">
+                    <div className="bar-label">
+                      <span className="bar-icon therapists-icon">🩺</span>
+                      <span>Therapists</span>
+                    </div>
+                    <div className="bar-count">{stats.total_therapists}</div>
+                  </div>
                   <div className="bar-track">
                     <div 
                       className="bar-fill therapists" 
                       style={{width: `${(stats.total_therapists / stats.total_users) * 100}%`}}
                     >
-                      <span className="bar-value">{stats.total_therapists}</span>
+                      <span className="bar-percentage">{Math.round((stats.total_therapists / stats.total_users) * 100)}%</span>
                     </div>
                   </div>
                 </div>
                 <div className="bar-item">
-                  <div className="bar-label">Admins</div>
+                  <div className="bar-header">
+                    <div className="bar-label">
+                      <span className="bar-icon admins-icon">🛡️</span>
+                      <span>Admins</span>
+                    </div>
+                    <div className="bar-count">{stats.total_admins}</div>
+                  </div>
                   <div className="bar-track">
                     <div 
                       className="bar-fill admins" 
                       style={{width: `${(stats.total_admins / stats.total_users) * 100}%`}}
                     >
-                      <span className="bar-value">{stats.total_admins}</span>
+                      <span className="bar-percentage">{Math.round((stats.total_admins / stats.total_users) * 100)}%</span>
                     </div>
                   </div>
                 </div>

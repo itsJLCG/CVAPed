@@ -10,6 +10,14 @@ import imageBig from './CVACare_ImageBig.png';
 import physicalTherapy from './CVACare_Physical_Therapy.png';
 import speechTherapy from './CVACare_Speech_Therapy.png';
 
+// Team photos
+import mayorLani from './team/mayor_lani.png';
+import drNathaniel from './team/dr_nathaniel.png';
+import jhonLudwig from './team/jhon_ludwig.jpg';
+import gwynBarte from './team/gwyn_barte.jpg';
+import kristineMae from './team/khristine_mae.jpg';
+import jhunMark from './team/jhun_mark.jpg';
+
 export const images = {
   // Logo and branding
   logo: logo, // CVACare main logo
@@ -28,6 +36,14 @@ export const images = {
   // Therapy images
   physicalTherapy: physicalTherapy, // Physical Therapy image
   speechTherapy: speechTherapy, // Speech Therapy image
+  
+  // Team photos
+  mayorLani: mayorLani, // Mayor Lani Cayetano
+  drNathaniel: drNathaniel, // Dr. Noel Nathaniel C. Napa
+  jhonLudwig: jhonLudwig, // Jhon Ludwig C. Gayapa
+  gwynBarte: gwynBarte, // Gwyn S. Barte
+  kristineMae: kristineMae, // Kristine Mae P. Prado
+  jhunMark: jhunMark, // Jhun Mark G. Obreros
 };
 
 // Helper function to check if image exists

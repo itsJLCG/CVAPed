@@ -283,11 +283,34 @@ def firebase_auth():
         
         # Verify Firebase token
         try:
-            decoded_token = auth.verify_id_token(firebase_token)
+            # Verify token and check if revoked
+            decoded_token = auth.verify_id_token(firebase_token, check_revoked=True)
             firebase_uid = decoded_token['uid']
             firebase_email = decoded_token.get('email', '').lower()
+        except auth.ExpiredIdTokenError:
+            return jsonify({
+                'message': 'Firebase token has expired. Please sign in again.',
+                'error': 'TOKEN_EXPIRED',
+                'code': 'auth/id-token-expired'
+            }), 401
+        except auth.RevokedIdTokenError:
+            return jsonify({
+                'message': 'Firebase token has been revoked. Please sign in again.',
+                'error': 'TOKEN_REVOKED',
+                'code': 'auth/id-token-revoked'
+            }), 401
+        except auth.InvalidIdTokenError:
+            return jsonify({
+                'message': 'Invalid Firebase token. Please sign in again.',
+                'error': 'TOKEN_INVALID',
+                'code': 'auth/invalid-id-token'
+            }), 401
         except Exception as e:
-            return jsonify({'message': 'Invalid Firebase token', 'error': str(e)}), 401
+            return jsonify({
+                'message': 'Firebase token verification failed. Please sign in again.',
+                'error': str(e),
+                'code': 'auth/token-verification-failed'
+            }), 401
         
         # Check if user exists by Firebase UID
         user = users_collection.find_one({'providerId': firebase_uid})

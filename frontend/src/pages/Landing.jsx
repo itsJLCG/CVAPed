@@ -116,7 +116,10 @@ function Landing() {
                   <img src={images.webSystem} alt="Web System" className="device-image" />
                 ) : (
                   <div className="device-screen">
-                    <div className="screen-placeholder">Application QR Code</div>
+                    <div className="screen-placeholder coming-soon">
+                      <div className="coming-soon-badge">Coming Soon</div>
+                      <div className="coming-soon-title">Application QR Code</div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -187,14 +190,22 @@ function Landing() {
           <div className="team-grid">
             {/* City Mayor */}
             <div className="team-card special">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('mayorLani') ? (
+                <img src={images.mayorLani} alt="Hon. Lani Cayetano" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Hon. Lani Cayetano</h3>
               <p className="team-role">City Mayor</p>
             </div>
 
             {/* Medical Team */}
             <div className="team-card medical">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('drNathaniel') ? (
+                <img src={images.drNathaniel} alt="Dr. Noel Nathaniel C. Napa" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Dr. Noel Nathaniel C. Napa</h3>
               <p className="team-credentials">MD, FPARM, DPARM</p>
               <p className="team-role">Physical Medicine and Rehabilitation Unit</p>
@@ -218,25 +229,41 @@ function Landing() {
 
             {/* Developers */}
             <div className="team-card">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('jhonLudwig') ? (
+                <img src={images.jhonLudwig} alt="Jhon Ludwig C. Gayapa" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Jhon Ludwig C. Gayapa</h3>
               <p className="team-role">Developer</p>
             </div>
 
             <div className="team-card">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('gwynBarte') ? (
+                <img src={images.gwynBarte} alt="Gwyn S. Barte" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Gwyn S. Barte</h3>
               <p className="team-role">Developer</p>
             </div>
 
             <div className="team-card">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('kristineMae') ? (
+                <img src={images.kristineMae} alt="Kristine Mae P. Prado" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Kristine Mae P. Prado</h3>
               <p className="team-role">Developer</p>
             </div>
 
             <div className="team-card">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('jhunMark') ? (
+                <img src={images.jhunMark} alt="Jhun Mark G. Obreros" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Jhun Mark G. Obreros</h3>
               <p className="team-role">Developer</p>
             </div>

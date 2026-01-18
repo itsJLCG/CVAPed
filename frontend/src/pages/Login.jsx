@@ -48,50 +48,65 @@ function Login({ onLogin }) {
     setLoading(true);
     setError('');
     
-    const result = await signInWithGoogle();
-    
-    if (result.success) {
-      const user = result.user;
+    try {
+      const result = await signInWithGoogle();
       
-      try {
-        const response = await authService.firebaseAuth({
-          firebaseToken: result.token,
-          email: user.email,
-          firstName: user.displayName?.split(' ')[0] || '',
-          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
-          profilePicture: user.photoURL,
-          provider: 'google',
-          providerId: user.uid
-        });
+      if (result.success) {
+        const user = result.user;
+        
+        // Always get a fresh ID token
+        const freshToken = await user.getIdToken(true); // force refresh
+        
+        try {
+          const response = await authService.firebaseAuth({
+            firebaseToken: freshToken,
+            email: user.email,
+            firstName: user.displayName?.split(' ')[0] || '',
+            lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+            profilePicture: user.photoURL,
+            provider: 'google',
+            providerId: user.uid
+          });
 
-        // Backend returns token and user on success
-        if (response.token && response.user) {
-          // Update authentication state
-          if (onLogin) onLogin();
-          
-          // Check if profile is complete
-          if (!response.user.isProfileComplete) {
-            toast.success('Please complete your profile to continue.');
-            navigate('/complete-profile');
+          // Backend returns token and user on success
+          if (response.token && response.user) {
+            // Update authentication state
+            if (onLogin) onLogin();
+            
+            // Check if profile is complete
+            if (!response.user.isProfileComplete) {
+              toast.success('Please complete your profile to continue.');
+              navigate('/complete-profile');
+            } else {
+              toast.success('Successfully signed in with Google!');
+              navigate('/therapy-selection');
+            }
           } else {
-            toast.success('Successfully signed in with Google!');
-            navigate('/therapy-selection');
+            setError(response.message || 'Authentication failed');
+            toast.error(response.message || 'Authentication failed');
           }
-        } else {
-          setError(response.message || 'Authentication failed');
-          toast.error(response.message || 'Authentication failed');
+        } catch (err) {
+          const errorMsg = err.response?.data?.message || 'Failed to authenticate with server';
+          setError(errorMsg);
+          toast.error(errorMsg);
+          
+          // If token error, sign out from Firebase to clear state
+          if (err.response?.data?.code?.includes('token')) {
+            const { firebaseSignOut } = await import('../services/firebase');
+            await firebaseSignOut();
+          }
         }
-      } catch (err) {
-        const errorMsg = err.response?.data?.message || 'Failed to authenticate with server';
-        setError(errorMsg);
-        toast.error(errorMsg);
+      } else {
+        setError(result.error);
+        toast.error(result.error);
       }
-    } else {
-      setError(result.error);
-      toast.error(result.error);
+    } catch (err) {
+      const errorMsg = err.message || 'Google sign-in failed';
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   // Handle Facebook Sign-In
@@ -99,50 +114,65 @@ function Login({ onLogin }) {
     setLoading(true);
     setError('');
     
-    const result = await signInWithFacebook();
-    
-    if (result.success) {
-      const user = result.user;
+    try {
+      const result = await signInWithFacebook();
       
-      try {
-        const response = await authService.firebaseAuth({
-          firebaseToken: result.token,
-          email: user.email,
-          firstName: user.displayName?.split(' ')[0] || '',
-          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
-          profilePicture: user.photoURL,
-          provider: 'facebook',
-          providerId: user.uid
-        });
+      if (result.success) {
+        const user = result.user;
+        
+        // Always get a fresh ID token
+        const freshToken = await user.getIdToken(true); // force refresh
+        
+        try {
+          const response = await authService.firebaseAuth({
+            firebaseToken: freshToken,
+            email: user.email,
+            firstName: user.displayName?.split(' ')[0] || '',
+            lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+            profilePicture: user.photoURL,
+            provider: 'facebook',
+            providerId: user.uid
+          });
 
-        // Backend returns token and user on success
-        if (response.token && response.user) {
-          // Update authentication state
-          if (onLogin) onLogin();
-          
-          // Check if profile is complete
-          if (!response.user.isProfileComplete) {
-            toast.success('Please complete your profile to continue.');
-            navigate('/complete-profile');
+          // Backend returns token and user on success
+          if (response.token && response.user) {
+            // Update authentication state
+            if (onLogin) onLogin();
+            
+            // Check if profile is complete
+            if (!response.user.isProfileComplete) {
+              toast.success('Please complete your profile to continue.');
+              navigate('/complete-profile');
+            } else {
+              toast.success('Successfully signed in with Facebook!');
+              navigate('/therapy-selection');
+            }
           } else {
-            toast.success('Successfully signed in with Facebook!');
-            navigate('/therapy-selection');
+            setError(response.message || 'Authentication failed');
+            toast.error(response.message || 'Authentication failed');
           }
-        } else {
-          setError(response.message || 'Authentication failed');
-          toast.error(response.message || 'Authentication failed');
+        } catch (err) {
+          const errorMsg = err.response?.data?.message || 'Failed to authenticate with server';
+          setError(errorMsg);
+          toast.error(errorMsg);
+          
+          // If token error, sign out from Firebase to clear state
+          if (err.response?.data?.code?.includes('token')) {
+            const { firebaseSignOut } = await import('../services/firebase');
+            await firebaseSignOut();
+          }
         }
-      } catch (err) {
-        const errorMsg = err.response?.data?.message || 'Failed to authenticate with server';
-        setError(errorMsg);
-        toast.error(errorMsg);
+      } else {
+        setError(result.error);
+        toast.error(result.error);
       }
-    } else {
-      setError(result.error);
-      toast.error(result.error);
+    } catch (err) {
+      const errorMsg = err.message || 'Facebook sign-in failed';
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (

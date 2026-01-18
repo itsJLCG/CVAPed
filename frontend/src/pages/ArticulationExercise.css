@@ -538,8 +538,8 @@
 }
 
 .trials-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -548,22 +548,6 @@
 .all-trials-results {
   margin-top: 2rem;
   animation: slideUp 0.5s ease-out;
-}
-
-.trials-section-title {
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: #2c3e50;
-  margin: 0 0 1.5rem 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.trials-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
 }
 
 .trial-result-card {
@@ -586,9 +570,6 @@
 
 .trial-result-card:nth-child(3) {
   animation-delay: 0.3s;
-  grid-column: 1 / -1; /* Trial 3 spans full width */
-  max-width: 50%;
-  margin: 0 auto;
 }
 
 @keyframes fadeInUp {
@@ -619,9 +600,9 @@
 .trial-badge {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.25rem;
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -629,7 +610,7 @@
 }
 
 .trial-overall-score {
-  font-size: 1.8rem;
+  font-size: 2rem;
   font-weight: 800;
   line-height: 1;
 }
@@ -661,21 +642,22 @@
 }
 
 .trial-metrics-detailed {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
 }
 
 .metric-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .metric-info {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 140px;
 }
 
 .metric-icon {
@@ -687,6 +669,7 @@
   justify-content: center;
   font-size: 0.9rem;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
 }
 
 .metric-name {
@@ -699,6 +682,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex: 1;
 }
 
 .metric-progress-bg {
@@ -708,6 +692,7 @@
   border-radius: 12px;
   overflow: hidden;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+  min-width: 150px;
 }
 
 .metric-progress-fill {
@@ -761,28 +746,15 @@
     position: relative;
     top: 0;
   }
-  
-  .trials-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .trial-result-card:nth-child(3) {
-    max-width: 100%;
-  }
 }
 
 @media (max-width: 768px) {
-  .trials-grid {
-    grid-template-columns: 1fr;
-  }
-  
   .trial-result-card {
     padding: 1.25rem;
   }
   
-  .trial-result-card:nth-child(3) {
-    grid-column: 1;
-    max-width: 100%;
+  .trial-metrics-detailed {
+    grid-template-columns: 1fr;
   }
   
   .trial-badge {
@@ -801,6 +773,14 @@
   
   .assessment-score-value {
     font-size: 3rem;
+  }
+  
+  .metric-info {
+    min-width: 120px;
+  }
+  
+  .metric-progress-bg {
+    min-width: 100px;
   }
 }
 

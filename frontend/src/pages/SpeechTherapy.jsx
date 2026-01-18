@@ -10,51 +10,48 @@ function SpeechTherapy({ onLogout }) {
   const therapyTypes = [
     {
       id: 'articulation',
-      icon: 'A',
+      icon: '🗣️',
       title: 'Articulation Therapy',
       subtitle: 'Sound Production & Pronunciation',
-      description: 'Clinical speech sound therapy focused on improving articulation accuracy and phonological development through systematic assessment and intervention.',
+      description: 'Master clear speech sounds with interactive pronunciation exercises and real-time feedback.',
       features: [
-        'Standardized pronunciation assessment protocol',
-        'Multi-trial recording and evaluation system',
-        'Evidence-based pronunciation scoring metrics',
-        'Real-time accuracy feedback mechanisms',
-        'Comprehensive progress monitoring',
-        'Professional therapist review interface'
+        'Voice recording & assessment',
+        'Instant accuracy scoring',
+        'Progress tracking'
       ],
-      color: '#ce3630'
+      benefits: 'Perfect pronunciation skills',
+      color: '#ce3630',
+      gradient: 'linear-gradient(135deg, #ce3630 0%, #ff6b6b 100%)'
     },
     {
       id: 'language',
-      icon: 'L',
+      icon: '💬',
       title: 'Language Therapy',
       subtitle: 'Receptive & Expressive Language',
-      description: 'Comprehensive language intervention program targeting vocabulary development, comprehension skills, and expressive language abilities through structured therapeutic activities.',
+      description: 'Build vocabulary and communication skills through engaging language activities.',
       features: [
-        'Receptive language assessment tasks',
-        'Expressive language evaluation protocols',
-        'Grammar and syntax development exercises',
-        'Quantitative response analysis',
-        'Semantic and syntactic scoring system',
-        'Age-appropriate intervention progression'
+        'Interactive exercises',
+        'Grammar & comprehension',
+        'Smart evaluation system'
       ],
-      color: '#479ac3'
+      benefits: 'Enhanced communication',
+      color: '#479ac3',
+      gradient: 'linear-gradient(135deg, #479ac3 0%, #74b9ff 100%)'
     },
     {
       id: 'fluency',
-      icon: 'F',
+      icon: '⚡',
       title: 'Fluency Therapy',
-      subtitle: 'Fluency Disorders & Speech Rate Control',
-      description: 'Evidence-based fluency intervention program designed to address stuttering behaviors and improve speech flow through systematic desensitization and fluency-shaping techniques.',
+      subtitle: 'Speech Flow & Rhythm',
+      description: 'Improve speech fluency and reduce stuttering with proven therapeutic techniques.',
       features: [
-        'Structured reading and speaking tasks',
-        'Quantitative speech rate analysis (WPM)',
-        'Dysfluency pattern identification',
-        'Real-time biofeedback visualization',
-        'Fluency enhancement metrics',
-        'Systematic progress documentation'
+        'Speech rate monitoring',
+        'Real-time feedback',
+        'Pattern analysis'
       ],
-      color: '#e8b04e'
+      benefits: 'Smoother speech flow',
+      color: '#e8b04e',
+      gradient: 'linear-gradient(135deg, #e8b04e 0%, #ffd93d 100%)'
     }
   ];
 
@@ -89,33 +86,50 @@ function SpeechTherapy({ onLogout }) {
                 key={type.id}
                 className={`speech-type-card ${selectedType === type.id ? 'selected' : ''}`}
                 onClick={() => handleTypeSelect(type.id)}
-                style={{ '--card-color': type.color }}
+                style={{ '--card-color': type.color, '--card-gradient': type.gradient }}
               >
-                <div className="speech-type-icon" style={{ color: type.color, borderColor: type.color }}>
-                  {type.icon}
+                <div className="speech-type-icon-wrapper">
+                  <div className="speech-type-icon" style={{ background: type.gradient }}>
+                    <span className="icon-emoji">{type.icon}</span>
+                  </div>
                 </div>
-                <h2 className="speech-type-title">{type.title}</h2>
-                <p className="speech-type-subtitle">{type.subtitle}</p>
-                <p className="speech-type-description">{type.description}</p>
                 
-                <div className="speech-type-features" style={{ borderLeftColor: type.color }}>
-                  <h3>Program Features:</h3>
-                  <ul>
-                    {type.features.map((feature, index) => (
-                      <li key={index}>{feature}</li>
-                    ))}
-                  </ul>
+                <div className="speech-type-content">
+                  <h2 className="speech-type-title">{type.title}</h2>
+                  <p className="speech-type-subtitle">{type.subtitle}</p>
+                  <p className="speech-type-description">{type.description}</p>
+                  
+                  <div className="speech-type-features">
+                    <div className="features-header">
+                      <span className="features-icon">✓</span>
+                      <span>Key Features</span>
+                    </div>
+                    <ul>
+                      {type.features.map((feature, index) => (
+                        <li key={index}>
+                          <span className="feature-bullet">•</span>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="speech-type-benefit">
+                    <span className="benefit-icon">🎯</span>
+                    <span>{type.benefits}</span>
+                  </div>
                 </div>
 
                 <button 
                   className="speech-type-btn"
-                  style={{ backgroundColor: type.color }}
+                  style={{ background: type.gradient }}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleTypeSelect(type.id);
                   }}
                 >
-                  Begin Assessment
+                  <span className="btn-text">Start Therapy</span>
+                  <span className="btn-arrow">→</span>
                 </button>
               </div>
             ))}

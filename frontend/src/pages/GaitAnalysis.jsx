@@ -181,6 +181,10 @@ function GaitAnalysis({ onLogout }) {
       {/* Gait Analysis Header */}
       <div className="gait-header">
         <h1>Gait Analysis Monitoring System</h1>
+        <button className="start-gait-btn" onClick={() => navigate('/gait-recording')}>
+          <i className="fas fa-play"></i>
+          Start Gait Analysis Now
+        </button>
       </div>
 
       {/* Main Sensor Display */}

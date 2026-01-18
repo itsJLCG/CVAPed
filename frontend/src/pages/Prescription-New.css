@@ -1,9 +1,9 @@
 /* Prescription Page - Professional Clean Design */
 
 .prescription-container {
-  max-width: 1600px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 40px 40px;
+  padding: 0 24px 40px;
 }
 
 /* Loading & Error States */
@@ -528,111 +528,164 @@
   margin-bottom: 32px;
 }
 
-/* Combined Section - Side by Side */
-.combined-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 32px;
+.sequence-timeline {
+  position: relative;
+  padding-left: 40px;
 }
 
-.left-column,
-.right-column {
-  background: white;
-  border: 1px solid #e9ecef;
-  border-radius: 10px;
-  padding: 20px;
+.sequence-timeline::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 20px;
+  bottom: 20px;
+  width: 2px;
+  background: linear-gradient(180deg, #ce3630, #e9ecef);
 }
 
-/* Compact Sequence */
-.sequence-compact {
+.timeline-item {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  margin-bottom: 20px;
+  position: relative;
 }
 
-.sequence-compact-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border-left: 3px solid #ce3630;
-}
-
-.sequence-num {
-  width: 28px;
-  height: 28px;
+.timeline-marker {
+  width: 40px;
+  height: 40px;
   background: linear-gradient(135deg, #ce3630, #ff5449);
-  color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 800;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 2px 8px rgba(206, 54, 48, 0.3);
 }
 
-.sequence-text {
+.marker-number {
+  font-size: 16px;
+  font-weight: 800;
+  color: white;
+}
+
+.timeline-content {
   flex: 1;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 4px;
 }
 
-.sequence-text strong {
-  display: block;
-  font-size: 14px;
+.timeline-content h4 {
+  font-size: 16px;
+  font-weight: 700;
   color: #2c3e50;
-  margin-bottom: 4px;
+  margin: 0 0 8px 0;
 }
 
-.sequence-text p {
-  font-size: 13px;
+.timeline-content p {
+  font-size: 14px;
   color: #6c757d;
   margin: 0;
-  line-height: 1.4;
-}
-
-/* Compact Recommendations */
-.recommendations-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.recommendation-compact {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  background: #fff5f5;
-  border-radius: 8px;
-  border-left: 3px solid #ce3630;
-}
-
-.recommendation-compact i {
-  color: #ce3630;
-  font-size: 14px;
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
-.recommendation-compact span {
-  font-size: 13px;
-  color: #495057;
   line-height: 1.5;
 }
 
 /* Cross-Therapy Connections */
 .connections-section {
   margin-bottom: 32px;
-  display: none; /* Hidden to reduce clutter */
+}
+
+.connections-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.connection-item {
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 18px;
+  transition: all 0.3s ease;
+}
+
+.connection-item:hover {
+  border-color: #ce3630;
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.08);
+}
+
+.connection-flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.flow-therapy {
+  padding: 6px 12px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.flow-arrow {
+  color: #ce3630;
+  font-size: 18px;
+}
+
+.connection-reason {
+  font-size: 13px;
+  color: #6c757d;
+  margin: 0;
+  line-height: 1.5;
 }
 
 /* Recommendations */
 .recommendations-section {
   margin-bottom: 32px;
-  display: none; /* Hidden - using compact version */
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.recommendation-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-left: 3px solid #ce3630;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.recommendation-card:hover {
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.1);
+  transform: translateX(4px);
+}
+
+.recommendation-card i {
+  color: #ce3630;
+  font-size: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.recommendation-card p {
+  font-size: 14px;
+  color: #495057;
+  margin: 0;
+  line-height: 1.5;
 }
 
 /* Motivation Footer */
@@ -750,7 +803,17 @@
     grid-template-columns: 1fr;
   }
 
-  .combined-section {
+  .sequence-timeline {
+    padding-left: 30px;
+  }
+
+  .timeline-marker {
+    width: 36px;
+    height: 36px;
+  }
+
+  .connections-list,
+  .recommendations-grid {
     grid-template-columns: 1fr;
   }
 

@@ -607,14 +607,18 @@ def get_health_logs(current_user):
         # Fetch Articulation Trials
         articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
         for trial in articulation_trials:
+            # computed_score is stored as 0.0-1.0, convert to percentage
+            computed_score = trial.get('scores', {}).get('computed_score', 0)
+            score_percentage = int(computed_score * 100) if computed_score <= 1 else int(computed_score)
+            
             logs.append({
                 '_id': str(trial['_id']),
                 'therapyType': 'articulation',
                 'soundId': trial.get('sound_id', '').upper(),
                 'level': trial.get('level', 1),
-                'overallScore': int(trial.get('scores', {}).get('computed_score', 0)),
+                'overallScore': score_percentage,
                 'trials': 1,
-                'correctCount': 1 if trial.get('scores', {}).get('computed_score', 0) >= 70 else 0,
+                'correctCount': 1 if score_percentage >= 70 else 0,
                 'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
             })
 
@@ -627,15 +631,19 @@ def get_health_logs(current_user):
                 items = level_data.get('items', {})
                 for item_key, item_data in items.items():
                     trial_details = item_data.get('trial_details', [])
-                    for trial in trial_details:
+                    for trial_index, trial in enumerate(trial_details):
+                        # computed_score is stored as 0.0-1.0, convert to percentage
+                        computed_score = trial.get('computed_score', 0)
+                        score_percentage = int(computed_score * 100) if computed_score <= 1 else int(computed_score)
+                        
                         logs.append({
-                            '_id': f"art_nested_{progress['_id']}_{level_key}_{item_key}",
+                            '_id': f"art_nested_{progress['_id']}_{level_key}_{item_key}_{trial_index}",
                             'therapyType': 'articulation',
                             'soundId': sound_id.upper(),
                             'level': int(level_key),
-                            'overallScore': int(trial.get('computed_score', 0)),
+                            'overallScore': score_percentage,
                             'trials': 1,
-                            'correctCount': 1 if trial.get('computed_score', 0) >= 70 else 0,
+                            'correctCount': 1 if score_percentage >= 70 else 0,
                             'createdAt': item_data.get('last_attempt', progress.get('updated_at', datetime.datetime.utcnow())).isoformat()
                         })
 
@@ -643,11 +651,20 @@ def get_health_logs(current_user):
         language_trials = list(language_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
         for trial in language_trials:
             mode = trial.get('mode', 'language')
+            # Language saves score as 0.0/1.0, convert to 0/100
+            # OR use is_correct boolean as fallback
+            raw_score = trial.get('score', None)
+            if raw_score is not None:
+                # If score is 0.0-1.0, convert to percentage; if already 0-100, keep as-is
+                score_percentage = int(raw_score * 100) if raw_score <= 1 else int(raw_score)
+            else:
+                score_percentage = 100 if trial.get('is_correct') else 0
+            
             logs.append({
                 '_id': str(trial['_id']),
                 'therapyType': mode if mode in ['receptive', 'expressive'] else 'language',
                 'level': trial.get('level', 1),
-                'overallScore': int(trial.get('score', 0) if trial.get('score') else (100 if trial.get('is_correct') else 0)),
+                'overallScore': score_percentage,
                 'trials': 1,
                 'correctCount': 1 if trial.get('is_correct') else 0,
                 'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
@@ -688,13 +705,31 @@ def get_health_summary(current_user):
         
         # Calculate average scores
         articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}))
-        articulation_avg = sum([t.get('scores', {}).get('computed_score', 0) for t in articulation_trials]) / len(articulation_trials) if articulation_trials else 0
+        # computed_score is 0.0-1.0, convert to percentage
+        articulation_scores = [t.get('scores', {}).get('computed_score', 0) * 100 for t in articulation_trials]
+        articulation_avg = sum(articulation_scores) / len(articulation_scores) if articulation_scores else 0
 
         receptive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'receptive'}))
-        receptive_avg = sum([t.get('score', 0) if t.get('score') else (100 if t.get('is_correct') else 0) for t in receptive_trials]) / len(receptive_trials) if receptive_trials else 0
+        # Language stores score as 0.0/1.0, convert to percentage
+        receptive_scores = []
+        for t in receptive_trials:
+            score = t.get('score', None)
+            if score is not None:
+                receptive_scores.append(score * 100 if score <= 1 else score)
+            else:
+                receptive_scores.append(100 if t.get('is_correct') else 0)
+        receptive_avg = sum(receptive_scores) / len(receptive_scores) if receptive_scores else 0
 
         expressive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'expressive'}))
-        expressive_avg = sum([t.get('score', 0) if t.get('score') else (100 if t.get('is_correct') else 0) for t in expressive_trials]) / len(expressive_trials) if expressive_trials else 0
+        # Language stores score as 0.0/1.0, convert to percentage
+        expressive_scores = []
+        for t in expressive_trials:
+            score = t.get('score', None)
+            if score is not None:
+                expressive_scores.append(score * 100 if score <= 1 else score)
+            else:
+                expressive_scores.append(100 if t.get('is_correct') else 0)
+        expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
 
         summary = {
             'articulation': {

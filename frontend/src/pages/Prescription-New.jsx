@@ -160,7 +160,7 @@ function Prescription({ onLogout }) {
               </div>
               <div className="header-text">
                 <h1>Therapy Prescription Plan</h1>
-                <p>Personalized recommendations based on your progress</p>
+                <p>AI-Powered personalized therapy recommendations based on your progress</p>
               </div>
             </div>
             <button onClick={fetchPrescriptiveAnalysis} className="refresh-btn">
@@ -182,7 +182,7 @@ function Prescription({ onLogout }) {
                 <p>{analysis.bottleneck_analysis.explanation}</p>
                 {analysis.bottleneck_analysis.affected_therapies.length > 0 && (
                   <div className="blocking-areas">
-                    <span className="blocking-label">Blocking:</span>
+                    <span className="blocking-label">Blocking progress in:</span>
                     {analysis.bottleneck_analysis.affected_therapies.map((therapy, index) => (
                       <span key={index} className="blocking-chip">
                         {formatTherapyName(therapy)}
@@ -199,7 +199,7 @@ function Prescription({ onLogout }) {
             <div className="section-title-bar">
               <h2>
                 <i className="fas fa-flag"></i>
-                Therapy Priorities
+                Therapy Priorities & Focus Areas
               </h2>
             </div>
             <div className="priorities-list">
@@ -224,7 +224,7 @@ function Prescription({ onLogout }) {
                     </div>
                     <div className="priority-allocation">
                       <span className="allocation-percent">{Math.round(priority.weight * 100)}%</span>
-                      <span className="allocation-text">Focus</span>
+                      <span className="allocation-text">Practice Time</span>
                     </div>
                   </div>
                   
@@ -241,7 +241,11 @@ function Prescription({ onLogout }) {
                   <div className="priority-details">
                     <div className="detail-item">
                       <i className="fas fa-lightbulb"></i>
-                      <span>{priority.reason}</span>
+                      <span><strong>Reason:</strong> {priority.reason}</span>
+                    </div>
+                    <div className="detail-item">
+                      <i className="fas fa-target"></i>
+                      <span><strong>Focus Area:</strong> {priority.focus}</span>
                     </div>
                   </div>
                 </div>
@@ -254,9 +258,9 @@ function Prescription({ onLogout }) {
             <div className="section-title-bar">
               <h2>
                 <i className="fas fa-calendar-week"></i>
-                Weekly Schedule
+                Weekly Practice Schedule
               </h2>
-              <span className="schedule-note">Click any day for details</span>
+              <span className="schedule-note">Click any day to view details</span>
             </div>
             <div className="weekly-grid">
               {analysis.weekly_schedule.map((day, index) => (
@@ -267,7 +271,7 @@ function Prescription({ onLogout }) {
                 >
                   <div className="day-header-row">
                     <span className="day-name">{day.day}</span>
-                    <span className="trial-badge">{day.total_trials}×</span>
+                    <span className="trial-badge">{day.total_trials} trials</span>
                   </div>
                   
                   {selectedDay === index && (
@@ -294,43 +298,69 @@ function Prescription({ onLogout }) {
             </div>
           </div>
 
-          {/* Practice Order & Recommendations Combined */}
-          <div className="combined-section">
-            <div className="left-column">
+          {/* Optimal Practice Sequence */}
+          <div className="sequence-section">
+            <div className="section-title-bar">
+              <h2>
+                <i className="fas fa-list-ol"></i>
+                Optimal Practice Order
+              </h2>
+              <span className="sequence-note">Follow this order for best results</span>
+            </div>
+            <div className="sequence-timeline">
+              {analysis.optimal_sequence.map((item, index) => (
+                <div key={index} className="timeline-item">
+                  <div className="timeline-marker">
+                    <span className="marker-number">{index + 1}</span>
+                  </div>
+                  <div className="timeline-content">
+                    <h4>{formatTherapyName(item.therapy)}</h4>
+                    <p>{item.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cross-Therapy Connections */}
+          {analysis.cross_therapy_insights && analysis.cross_therapy_insights.length > 0 && (
+            <div className="connections-section">
               <div className="section-title-bar">
                 <h2>
-                  <i className="fas fa-list-ol"></i>
-                  Practice Order
+                  <i className="fas fa-project-diagram"></i>
+                  Cross-Therapy Synergies
                 </h2>
               </div>
-              <div className="sequence-compact">
-                {analysis.optimal_sequence.map((item, index) => (
-                  <div key={index} className="sequence-compact-item">
-                    <span className="sequence-num">{index + 1}</span>
-                    <div className="sequence-text">
-                      <strong>{formatTherapyName(item.therapy)}</strong>
-                      <p>{item.reason}</p>
+              <div className="connections-list">
+                {analysis.cross_therapy_insights.map((insight, index) => (
+                  <div key={index} className="connection-item">
+                    <div className="connection-flow">
+                      <span className="flow-therapy">{formatTherapyName(insight.from_therapy)}</span>
+                      <i className="fas fa-long-arrow-alt-right flow-arrow"></i>
+                      <span className="flow-therapy">{formatTherapyName(insight.to_therapy)}</span>
                     </div>
+                    <p className="connection-reason">{insight.reason}</p>
                   </div>
                 ))}
               </div>
             </div>
+          )}
 
-            <div className="right-column">
-              <div className="section-title-bar">
-                <h2>
+          {/* Recommendations */}
+          <div className="recommendations-section">
+            <div className="section-title-bar">
+              <h2>
+                <i className="fas fa-check-circle"></i>
+                Key Recommendations
+              </h2>
+            </div>
+            <div className="recommendations-grid">
+              {analysis.recommendations.map((recommendation, index) => (
+                <div key={index} className="recommendation-card">
                   <i className="fas fa-star"></i>
-                  Key Recommendations
-                </h2>
-              </div>
-              <div className="recommendations-compact">
-                {analysis.recommendations.map((recommendation, index) => (
-                  <div key={index} className="recommendation-compact">
-                    <i className="fas fa-check"></i>
-                    <span>{recommendation}</span>
-                  </div>
-                ))}
-              </div>
+                  <p>{recommendation}</p>
+                </div>
+              ))}
             </div>
           </div>
 

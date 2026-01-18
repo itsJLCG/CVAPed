@@ -7,8 +7,9 @@
   padding: 3rem 2rem;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   min-height: calc(100vh - 120px);
+  width: 100%;
 }
 
 .blank-page-container {
@@ -19,6 +20,13 @@
   text-align: center;
   max-width: 600px;
   width: 100%;
+}
+
+/* Prescription page override - full width */
+.blank-page-content:has(.prescription-container) {
+  padding: 0;
+  display: block;
+  align-items: stretch;
 }
 
 .blank-page-container h1 {

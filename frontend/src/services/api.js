@@ -210,6 +210,14 @@ export const adminService = {
   },
 };
 
+// Therapist API
+export const therapistService = {
+  getStats: async () => {
+    const response = await api.get('/therapist/stats');
+    return response.data;
+  },
+};
+
 // Fluency Exercise CRUD API
 export const fluencyExerciseService = {
   // Seed default exercises

@@ -975,6 +975,174 @@ def get_overall_prediction(current_user):
         }), 500
 
 
+# ======================
+# THERAPIST DASHBOARD ENDPOINTS
+# ======================
+
+@app.route('/api/therapist/stats', methods=['GET'])
+@token_required
+def get_therapist_stats(current_user):
+    """
+    Get therapist dashboard statistics
+    Returns statistics focused on therapy sessions and patient progress
+    """
+    try:
+        # Verify user is a therapist
+        if current_user.get('role') != 'therapist':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized. Only therapists can access this endpoint.'
+            }), 403
+        
+        stats = {}
+        
+        # Get all patients (users with role 'patient')
+        total_patients = users_collection.count_documents({'role': 'patient'})
+        stats['total_patients'] = total_patients
+        
+        # Get therapy session counts
+        articulation_sessions = articulation_trials_collection.count_documents({})
+        language_sessions = language_trials_collection.count_documents({})
+        fluency_sessions = db['fluency_trials'].count_documents({})
+        
+        stats['articulation_sessions'] = articulation_sessions
+        stats['language_sessions'] = language_sessions
+        stats['fluency_sessions'] = fluency_sessions
+        stats['total_sessions'] = articulation_sessions + language_sessions + fluency_sessions
+        
+        # Get active patients (patients with at least one trial in last 30 days)
+        thirty_days_ago = utc_now() - datetime.timedelta(days=30)
+        
+        # Get unique patient IDs from recent trials
+        recent_articulation_patients = articulation_trials_collection.distinct(
+            'user_id',
+            {'timestamp': {'$gte': thirty_days_ago}}
+        )
+        recent_language_patients = language_trials_collection.distinct(
+            'user_id',
+            {'timestamp': {'$gte': thirty_days_ago}}
+        )
+        recent_fluency_patients = db['fluency_trials'].distinct(
+            'user_id',
+            {'timestamp': {'$gte': thirty_days_ago}}
+        )
+        
+        # Combine and get unique active patients
+        active_patient_ids = set(recent_articulation_patients + recent_language_patients + recent_fluency_patients)
+        stats['active_patients'] = len(active_patient_ids)
+        
+        # Get total exercises available
+        articulation_exercises = articulation_exercises_collection.count_documents({})
+        language_exercises = db['language_exercises'].count_documents({})
+        fluency_exercises = db['fluency_exercises'].count_documents({})
+        
+        stats['total_exercises'] = articulation_exercises + language_exercises + fluency_exercises
+        
+        # Get recent activity (last 10 therapy sessions across all types)
+        recent_activities = []
+        
+        # Helper function to safely find user by ID (handles both ObjectId and string IDs)
+        def find_user_by_id(user_id):
+            try:
+                # Try as ObjectId first
+                return users_collection.find_one({'_id': ObjectId(user_id)})
+            except:
+                # If that fails, try as string (for test users like 'testuser1')
+                return users_collection.find_one({'_id': user_id})
+        
+        # Get recent articulation trials
+        articulation_recent = list(articulation_trials_collection.find(
+            {},
+            {'user_id': 1, 'sound_id': 1, 'timestamp': 1, 'accuracy': 1}
+        ).sort('timestamp', -1).limit(10))
+        
+        for trial in articulation_recent:
+            user = find_user_by_id(trial['user_id'])
+            if user:
+                recent_activities.append({
+                    'patient_name': user.get('name', 'Unknown'),
+                    'therapy_type': 'Articulation',
+                    'detail': f"/{trial.get('sound_id', '').upper()}/ sound",
+                    'score': round(trial.get('accuracy', 0) * 100),
+                    'timestamp': trial['timestamp'].isoformat() if isinstance(trial['timestamp'], datetime.datetime) else str(trial['timestamp'])
+                })
+        
+        # Get recent language trials
+        language_recent = list(language_trials_collection.find(
+            {},
+            {'user_id': 1, 'level': 1, 'timestamp': 1, 'accuracy': 1}
+        ).sort('timestamp', -1).limit(10))
+        
+        for trial in language_recent:
+            user = find_user_by_id(trial['user_id'])
+            if user:
+                recent_activities.append({
+                    'patient_name': user.get('name', 'Unknown'),
+                    'therapy_type': 'Language',
+                    'detail': f"Level {trial.get('level', 1)}",
+                    'score': round(trial.get('accuracy', 0) * 100),
+                    'timestamp': trial['timestamp'].isoformat() if isinstance(trial['timestamp'], datetime.datetime) else str(trial['timestamp'])
+                })
+        
+        # Get recent fluency trials
+        fluency_recent = list(db['fluency_trials'].find(
+            {},
+            {'user_id': 1, 'level': 1, 'timestamp': 1, 'accuracy': 1}
+        ).sort('timestamp', -1).limit(10))
+        
+        for trial in fluency_recent:
+            user = find_user_by_id(trial['user_id'])
+            if user:
+                recent_activities.append({
+                    'patient_name': user.get('name', 'Unknown'),
+                    'therapy_type': 'Fluency',
+                    'detail': f"Level {trial.get('level', 1)}",
+                    'score': round(trial.get('accuracy', 0) * 100),
+                    'timestamp': trial['timestamp'].isoformat() if isinstance(trial['timestamp'], datetime.datetime) else str(trial['timestamp'])
+                })
+        
+        # Sort all activities by timestamp and get top 10
+        recent_activities.sort(key=lambda x: x['timestamp'], reverse=True)
+        stats['recent_activities'] = recent_activities[:10]
+        
+        # Calculate average scores
+        articulation_avg = list(articulation_trials_collection.aggregate([
+            {'$group': {'_id': None, 'avg_accuracy': {'$avg': '$accuracy'}}}
+        ]))
+        language_avg = list(language_trials_collection.aggregate([
+            {'$group': {'_id': None, 'avg_accuracy': {'$avg': '$accuracy'}}}
+        ]))
+        fluency_avg = list(db['fluency_trials'].aggregate([
+            {'$group': {'_id': None, 'avg_accuracy': {'$avg': '$accuracy'}}}
+        ]))
+        
+        stats['average_scores'] = {
+            'articulation': round(articulation_avg[0]['avg_accuracy'] * 100, 1) if (articulation_avg and articulation_avg[0].get('avg_accuracy') is not None) else 0,
+            'language': round(language_avg[0]['avg_accuracy'] * 100, 1) if (language_avg and language_avg[0].get('avg_accuracy') is not None) else 0,
+            'fluency': round(fluency_avg[0]['avg_accuracy'] * 100, 1) if (fluency_avg and fluency_avg[0].get('avg_accuracy') is not None) else 0
+        }
+        
+        print(f"✅ Therapist stats retrieved successfully")
+        print(f"   Total Patients: {total_patients}")
+        print(f"   Active Patients: {stats['active_patients']}")
+        print(f"   Total Sessions: {stats['total_sessions']}")
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching therapist stats: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch therapist statistics',
+            'error': str(e)
+        }), 500
+
+
 # Azure Speech Configuration
 AZURE_SPEECH_KEY = os.getenv('AZURE_SPEECH_KEY')
 AZURE_SPEECH_REGION = os.getenv('AZURE_SPEECH_REGION', 'eastus')

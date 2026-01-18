@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 
@@ -95,6 +95,31 @@ function TherapistDashboard({ onLogout }) {
     order: 1,
     is_active: true
   });
+
+  // Overview stats state
+  const [overviewStats, setOverviewStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  // Load overview statistics
+  const loadOverviewStats = async () => {
+    setLoadingStats(true);
+    try {
+      const response = await therapistService.getStats();
+      console.log('Therapist stats response:', response);
+      setOverviewStats(response.stats || response);
+    } catch (error) {
+      console.error('Failed to load therapist stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  // Load stats when overview tab is active
+  useEffect(() => {
+    if (activeTab === 'overview' && user) {
+      loadOverviewStats();
+    }
+  }, [activeTab, user]);
 
   // Load exercises from database and group by level
   const loadFluencyExercises = async () => {
@@ -802,250 +827,453 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'overview' && (
             <div className="overview-section">
-              {/* Stats Cards */}
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                    👥
-                  </div>
-                  <div className="stat-details">
-                    <h3 className="stat-value">156</h3>
-                    <p className="stat-label">Total Patients</p>
-                    <span className="stat-change positive">+12% this month</span>
-                  </div>
+              {loadingStats ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading statistics...</p>
                 </div>
+              ) : overviewStats ? (
+                <>
+                  {/* Stats Cards */}
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                        <span className="stat-icon-emoji">👥</span>
+                      </div>
+                      <div className="stat-details">
+                        <h3 className="stat-value">{overviewStats.total_patients || 0}</h3>
+                        <p className="stat-label">Total Patients</p>
+                        <span className="stat-badge">Registered</span>
+                      </div>
+                    </div>
 
-                <div className="stat-card">
-                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
-                    📋
-                  </div>
-                  <div className="stat-details">
-                    <h3 className="stat-value">48</h3>
-                    <p className="stat-label">Active Sessions</p>
-                    <span className="stat-change positive">+8% this week</span>
-                  </div>
-                </div>
+                    <div className="stat-card">
+                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
+                        <span className="stat-icon-emoji">�</span>
+                      </div>
+                      <div className="stat-details">
+                        <h3 className="stat-value">{overviewStats.total_sessions || 0}</h3>
+                        <p className="stat-label">Total Sessions</p>
+                        <span className="stat-badge">Therapy</span>
+                      </div>
+                    </div>
 
-                <div className="stat-card">
-                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-                    ✅
-                  </div>
-                  <div className="stat-details">
-                    <h3 className="stat-value">89%</h3>
-                    <p className="stat-label">Completion Rate</p>
-                    <span className="stat-change positive">+5% improvement</span>
-                  </div>
-                </div>
+                    <div className="stat-card">
+                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
+                        <span className="stat-icon-emoji">✅</span>
+                      </div>
+                      <div className="stat-details">
+                        <h3 className="stat-value">{overviewStats.active_patients || 0}</h3>
+                        <p className="stat-label">Active Patients</p>
+                        <span className="stat-badge">Last 30 Days</span>
+                      </div>
+                    </div>
 
-                <div className="stat-card">
-                  <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>
-                    ⭐
+                    <div className="stat-card">
+                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>
+                        <span className="stat-icon-emoji">🎯</span>
+                      </div>
+                      <div className="stat-details">
+                        <h3 className="stat-value">{overviewStats.total_exercises || 0}</h3>
+                        <p className="stat-label">Total Exercises</p>
+                        <span className="stat-badge">Available</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="stat-details">
-                    <h3 className="stat-value">4.8</h3>
-                    <p className="stat-label">Avg Rating</p>
-                    <span className="stat-change positive">+0.3 this month</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Charts Section */}
-              <div className="charts-section">
-                <div className="chart-card">
-                  <div className="chart-header">
-                    <h3 className="chart-title">Therapy Sessions Overview</h3>
-                    <select className="chart-filter">
-                      <option>Last 7 Days</option>
-                      <option>Last 30 Days</option>
-                      <option>Last 3 Months</option>
-                    </select>
-                  </div>
-                  <div className="chart-placeholder">
-                    <div className="pie-chart-container">
-                      <svg className="pie-chart" viewBox="0 0 200 200">
-                        {/* Articulation - 35% */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="80"
-                          fill="transparent"
-                          stroke="url(#gradient1)"
-                          strokeWidth="40"
-                          strokeDasharray="175.93 502.65"
-                          strokeDashoffset="0"
-                          transform="rotate(-90 100 100)"
-                        />
-                        {/* Language - 28% */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="80"
-                          fill="transparent"
-                          stroke="url(#gradient2)"
-                          strokeWidth="40"
-                          strokeDasharray="140.74 502.65"
-                          strokeDashoffset="-175.93"
-                          transform="rotate(-90 100 100)"
-                        />
-                        {/* Fluency - 22% */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="80"
-                          fill="transparent"
-                          stroke="url(#gradient3)"
-                          strokeWidth="40"
-                          strokeDasharray="110.58 502.65"
-                          strokeDashoffset="-316.67"
-                          transform="rotate(-90 100 100)"
-                        />
-                        {/* Physical - 15% */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="80"
-                          fill="transparent"
-                          stroke="url(#gradient4)"
-                          strokeWidth="40"
-                          strokeDasharray="75.40 502.65"
-                          strokeDashoffset="-427.25"
-                          transform="rotate(-90 100 100)"
-                        />
-                        <defs>
-                          <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style={{ stopColor: '#667eea' }} />
-                            <stop offset="100%" style={{ stopColor: '#764ba2' }} />
-                          </linearGradient>
-                          <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style={{ stopColor: '#f093fb' }} />
-                            <stop offset="100%" style={{ stopColor: '#f5576c' }} />
-                          </linearGradient>
-                          <linearGradient id="gradient3" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style={{ stopColor: '#4facfe' }} />
-                            <stop offset="100%" style={{ stopColor: '#00f2fe' }} />
-                          </linearGradient>
-                          <linearGradient id="gradient4" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style={{ stopColor: '#fa709a' }} />
-                            <stop offset="100%" style={{ stopColor: '#fee140' }} />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="pie-legend">
-                        <div className="legend-item">
-                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}></span>
-                          <span className="legend-text">Articulation (35%)</span>
+                  {/* Therapy Sessions Distribution - Donut Chart */}
+                  <div className="therapy-distribution-section">
+                    <div className="chart-card full-width">
+                      <div className="chart-header">
+                        <h3 className="chart-title">
+                          <span className="chart-icon">�</span>
+                          Therapy Sessions Distribution
+                        </h3>
+                      </div>
+                      <div className="donut-chart-container">
+                        {/* Donut Chart */}
+                        <div className="donut-chart-wrapper">
+                          <svg className="donut-chart" viewBox="0 0 200 200">
+                            <defs>
+                              <linearGradient id="articulation-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style={{ stopColor: '#f59e0b', stopOpacity: 1 }} />
+                                <stop offset="100%" style={{ stopColor: '#d97706', stopOpacity: 1 }} />
+                              </linearGradient>
+                              <linearGradient id="language-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style={{ stopColor: '#8b5cf6', stopOpacity: 1 }} />
+                                <stop offset="100%" style={{ stopColor: '#7c3aed', stopOpacity: 1 }} />
+                              </linearGradient>
+                              <linearGradient id="fluency-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style={{ stopColor: '#10b981', stopOpacity: 1 }} />
+                                <stop offset="100%" style={{ stopColor: '#059669', stopOpacity: 1 }} />
+                              </linearGradient>
+                              <filter id="shadow">
+                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15"/>
+                              </filter>
+                              <filter id="shadow-hover">
+                                <feDropShadow dx="0" dy="8" stdDeviation="12" floodOpacity="0.3"/>
+                              </filter>
+                            </defs>
+                            {(() => {
+                              const total = overviewStats.total_sessions || 1;
+                              const articulationCount = overviewStats.articulation_sessions || 0;
+                              const languageCount = overviewStats.language_sessions || 0;
+                              const fluencyCount = overviewStats.fluency_sessions || 0;
+                              
+                              // Build dynamic therapy data array based on what exists
+                              const therapyData = [];
+                              
+                              if (articulationCount > 0) {
+                                therapyData.push({
+                                  name: 'Articulation',
+                                  count: articulationCount,
+                                  percentage: (articulationCount / total) * 100,
+                                  color: 'url(#articulation-gradient)',
+                                  hoverColor: 'rgba(245, 158, 11, 0.4)',
+                                  icon: '🗣️',
+                                  description: 'Sound pronunciation therapy',
+                                  className: 'articulation-slice'
+                                });
+                              }
+                              
+                              if (languageCount > 0) {
+                                therapyData.push({
+                                  name: 'Language',
+                                  count: languageCount,
+                                  percentage: (languageCount / total) * 100,
+                                  color: 'url(#language-gradient)',
+                                  hoverColor: 'rgba(139, 92, 246, 0.4)',
+                                  icon: '💬',
+                                  description: 'Receptive & expressive skills',
+                                  className: 'language-slice'
+                                });
+                              }
+                              
+                              if (fluencyCount > 0) {
+                                therapyData.push({
+                                  name: 'Fluency',
+                                  count: fluencyCount,
+                                  percentage: (fluencyCount / total) * 100,
+                                  color: 'url(#fluency-gradient)',
+                                  hoverColor: 'rgba(16, 185, 129, 0.4)',
+                                  icon: '⚡',
+                                  description: 'Speech flow & rhythm training',
+                                  className: 'fluency-slice'
+                                });
+                              }
+                              
+                              // Helper function to create pie slice path
+                              const createPieSlice = (startAngle, endAngle, radius = 85) => {
+                                const start = (startAngle - 90) * Math.PI / 180;
+                                const end = (endAngle - 90) * Math.PI / 180;
+                                
+                                const x1 = 100 + radius * Math.cos(start);
+                                const y1 = 100 + radius * Math.sin(start);
+                                const x2 = 100 + radius * Math.cos(end);
+                                const y2 = 100 + radius * Math.sin(end);
+                                
+                                const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+                                
+                                return `M 100 100 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                              };
+                              
+                              let currentAngle = 0;
+                              
+                              return (
+                                <g className="pie-chart-group">
+                                  {therapyData.length === 0 ? (
+                                    // No data - show empty state
+                                    <>
+                                      <circle cx="100" cy="100" r="85" fill="#f1f5f9" opacity="0.5" />
+                                      <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
+                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">
+                                        No Data
+                                      </text>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {/* Dynamic pie slices based on available data */}
+                                      {therapyData.map((therapy, index) => {
+                                        const angle = (therapy.percentage / 100) * 360;
+                                        const sliceStartAngle = currentAngle;
+                                        const sliceEndAngle = currentAngle + angle;
+                                        currentAngle += angle;
+                                        
+                                        return (
+                                          <path
+                                            key={therapy.name}
+                                            className={`pie-slice ${therapy.className}`}
+                                            d={createPieSlice(sliceStartAngle, sliceEndAngle)}
+                                            fill={therapy.color}
+                                            filter="url(#shadow)"
+                                            style={{ 
+                                              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                                              cursor: 'pointer',
+                                              transformOrigin: '100px 100px'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.setAttribute('filter', 'url(#shadow-hover)');
+                                              e.currentTarget.style.transform = 'scale(1.05)';
+                                              e.currentTarget.style.opacity = '0.95';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.setAttribute('filter', 'url(#shadow)');
+                                              e.currentTarget.style.transform = 'scale(1)';
+                                              e.currentTarget.style.opacity = '1';
+                                            }}
+                                            onClick={() => {
+                                              console.log(`${therapy.name} sessions:`, therapy.count);
+                                            }}
+                                          >
+                                            <title>{therapy.icon} {therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
+                                          </path>
+                                        );
+                                      })}
+                                      
+                                      {/* Separator lines between slices */}
+                                      {therapyData.map((therapy, index) => {
+                                        if (index === 0) {
+                                          // First separator at top
+                                          return <line key={`sep-0`} x1="100" y1="100" x2="100" y2="15" stroke="white" strokeWidth="2" opacity="0.8" />;
+                                        }
+                                        
+                                        // Calculate cumulative angle for each separator
+                                        let cumulativeAngle = 0;
+                                        for (let i = 0; i < index; i++) {
+                                          cumulativeAngle += (therapyData[i].percentage / 100) * 360;
+                                        }
+                                        
+                                        const angle = (cumulativeAngle - 90) * Math.PI / 180;
+                                        return (
+                                          <line 
+                                            key={`sep-${index}`}
+                                            x1="100" 
+                                            y1="100" 
+                                            x2={100 + 85 * Math.cos(angle)} 
+                                            y2={100 + 85 * Math.sin(angle)} 
+                                            stroke="white" 
+                                            strokeWidth="2" 
+                                            opacity="0.8" 
+                                          />
+                                        );
+                                      })}
+                                      
+                                      {/* Center circle with stats */}
+                                      <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
+                                      
+                                      {/* Center content */}
+                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">
+                                        {total}
+                                      </text>
+                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">
+                                        TOTAL
+                                      </text>
+                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">
+                                        SESSIONS
+                                      </text>
+                                    </>
+                                  )}
+                                </g>
+                              );
+                            })()}
+                          </svg>
+                          
+                          {/* Stats Summary Below Chart */}
+                          <div className="donut-stats-summary">
+                            <div className="donut-stat-item">
+                              <div className="donut-stat-value">{overviewStats.total_sessions || 0}</div>
+                              <div className="donut-stat-label">Total</div>
+                            </div>
+                            <div className="donut-stat-divider"></div>
+                            <div className="donut-stat-item">
+                              <div className="donut-stat-value">
+                                {overviewStats.total_sessions > 0 
+                                  ? Math.round((overviewStats.articulation_sessions || 0) + (overviewStats.language_sessions || 0) + (overviewStats.fluency_sessions || 0))
+                                  : 0}
+                              </div>
+                              <div className="donut-stat-label">Active</div>
+                            </div>
+                            <div className="donut-stat-divider"></div>
+                            <div className="donut-stat-item">
+                              <div className="donut-stat-value">
+                                {[
+                                  overviewStats.articulation_sessions || 0,
+                                  overviewStats.language_sessions || 0,
+                                  overviewStats.fluency_sessions || 0
+                                ].filter(count => count > 0).length}
+                              </div>
+                              <div className="donut-stat-label">Types</div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="legend-item">
-                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}></span>
-                          <span className="legend-text">Language (28%)</span>
-                        </div>
-                        <div className="legend-item">
-                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}></span>
-                          <span className="legend-text">Fluency (22%)</span>
-                        </div>
-                        <div className="legend-item">
-                          <span className="legend-color" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}></span>
-                          <span className="legend-text">Physical (15%)</span>
+
+                        {/* Enhanced Legend - Dynamic based on data */}
+                        <div className="donut-legend">
+                          <div className="legend-header">
+                            <h4 className="legend-title">Session Breakdown</h4>
+                            <span className="legend-total">{overviewStats.total_sessions || 0} Total</span>
+                          </div>
+                          
+                          <div className="legend-items">
+                            {/* Articulation - only show if has data */}
+                            {(overviewStats.articulation_sessions || 0) > 0 && (
+                              <div 
+                                className="legend-item"
+                                onMouseEnter={() => {
+                                  const segment = document.querySelector('.articulation-slice');
+                                  if (segment) {
+                                    segment.setAttribute('filter', 'url(#shadow-hover)');
+                                    segment.style.transform = 'scale(1.05)';
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  const segment = document.querySelector('.articulation-slice');
+                                  if (segment) {
+                                    segment.setAttribute('filter', 'url(#shadow)');
+                                    segment.style.transform = 'scale(1)';
+                                  }
+                                }}
+                              >
+                                <div className="legend-left">
+                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}>
+                                    <span className="legend-box-icon">🗣️</span>
+                                  </div>
+                                  <div className="legend-info">
+                                    <span className="legend-label">Articulation</span>
+                                    <span className="legend-description">Sound pronunciation therapy</span>
+                                  </div>
+                                </div>
+                                <div className="legend-right">
+                                  <span className="legend-count">{overviewStats.articulation_sessions || 0}</span>
+                                  <div className="legend-percentage-bar">
+                                    <div 
+                                      className="legend-percentage-fill articulation-fill"
+                                      style={{
+                                        width: `${overviewStats.total_sessions > 0 
+                                          ? ((overviewStats.articulation_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
+                                          : 0}%`
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="legend-percentage">
+                                    {overviewStats.total_sessions > 0 
+                                      ? ((overviewStats.articulation_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
+                                      : 0}%
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Language - only show if has data */}
+                            {(overviewStats.language_sessions || 0) > 0 && (
+                              <div 
+                                className="legend-item"
+                                onMouseEnter={() => {
+                                  const segment = document.querySelector('.language-slice');
+                                  if (segment) {
+                                    segment.setAttribute('filter', 'url(#shadow-hover)');
+                                    segment.style.transform = 'scale(1.05)';
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  const segment = document.querySelector('.language-slice');
+                                  if (segment) {
+                                    segment.setAttribute('filter', 'url(#shadow)');
+                                    segment.style.transform = 'scale(1)';
+                                  }
+                                }}
+                              >
+                                <div className="legend-left">
+                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}>
+                                    <span className="legend-box-icon">💬</span>
+                                  </div>
+                                  <div className="legend-info">
+                                    <span className="legend-label">Language</span>
+                                    <span className="legend-description">Receptive & expressive skills</span>
+                                  </div>
+                                </div>
+                                <div className="legend-right">
+                                  <span className="legend-count">{overviewStats.language_sessions || 0}</span>
+                                  <div className="legend-percentage-bar">
+                                    <div 
+                                      className="legend-percentage-fill language-fill"
+                                      style={{
+                                        width: `${overviewStats.total_sessions > 0 
+                                          ? ((overviewStats.language_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
+                                          : 0}%`
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="legend-percentage">
+                                    {overviewStats.total_sessions > 0 
+                                      ? ((overviewStats.language_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
+                                      : 0}%
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Fluency - only show if has data */}
+                            {(overviewStats.fluency_sessions || 0) > 0 && (
+                              <div 
+                                className="legend-item"
+                                onMouseEnter={() => {
+                                  const segment = document.querySelector('.fluency-slice');
+                                  if (segment) {
+                                    segment.setAttribute('filter', 'url(#shadow-hover)');
+                                    segment.style.transform = 'scale(1.05)';
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  const segment = document.querySelector('.fluency-slice');
+                                  if (segment) {
+                                    segment.setAttribute('filter', 'url(#shadow)');
+                                    segment.style.transform = 'scale(1)';
+                                  }
+                                }}
+                              >
+                                <div className="legend-left">
+                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                                    <span className="legend-box-icon">⚡</span>
+                                  </div>
+                                  <div className="legend-info">
+                                    <span className="legend-label">Fluency</span>
+                                    <span className="legend-description">Speech flow & rhythm training</span>
+                                  </div>
+                                </div>
+                                <div className="legend-right">
+                                  <span className="legend-count">{overviewStats.fluency_sessions || 0}</span>
+                                  <div className="legend-percentage-bar">
+                                    <div 
+                                      className="legend-percentage-fill fluency-fill"
+                                      style={{
+                                        width: `${overviewStats.total_sessions > 0 
+                                          ? ((overviewStats.fluency_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
+                                          : 0}%`
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="legend-percentage">
+                                    {overviewStats.total_sessions > 0 
+                                      ? ((overviewStats.fluency_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
+                                      : 0}%
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+                </>
+              ) : (
+                <div className="no-data-message">
+                  <span className="no-data-icon">📊</span>
+                  <h3>No Statistics Available</h3>
+                  <p>Unable to load dashboard statistics. Please try again later.</p>
                 </div>
-
-                <div className="chart-card">
-                  <div className="chart-header">
-                    <h3 className="chart-title">Therapy Types Distribution</h3>
-                  </div>
-                  <div className="chart-placeholder">
-                    <div className="therapy-type-grid">
-                      <div className="therapy-type-card">
-                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>🎤</div>
-                        <div className="therapy-info">
-                          <p className="therapy-name">Articulation</p>
-                          <p className="therapy-percentage">35%</p>
-                        </div>
-                        <div className="therapy-bar-mini">
-                          <div className="therapy-bar-fill" style={{ width: '35%', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}></div>
-                        </div>
-                      </div>
-                      <div className="therapy-type-card">
-                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>💬</div>
-                        <div className="therapy-info">
-                          <p className="therapy-name">Language</p>
-                          <p className="therapy-percentage">28%</p>
-                        </div>
-                        <div className="therapy-bar-mini">
-                          <div className="therapy-bar-fill" style={{ width: '28%', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}></div>
-                        </div>
-                      </div>
-                      <div className="therapy-type-card">
-                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>🗣️</div>
-                        <div className="therapy-info">
-                          <p className="therapy-name">Fluency</p>
-                          <p className="therapy-percentage">22%</p>
-                        </div>
-                        <div className="therapy-bar-mini">
-                          <div className="therapy-bar-fill" style={{ width: '22%', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}></div>
-                        </div>
-                      </div>
-                      <div className="therapy-type-card therapy-type-card-centered">
-                        <div className="therapy-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>🏃</div>
-                        <div className="therapy-info">
-                          <p className="therapy-name">Physical</p>
-                          <p className="therapy-percentage">15%</p>
-                        </div>
-                        <div className="therapy-bar-mini">
-                          <div className="therapy-bar-fill" style={{ width: '15%', background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="recent-activity-section">
-                <div className="activity-card">
-                  <div className="activity-header">
-                    <h3 className="activity-title">Recent Patient Activity</h3>
-                    <button className="view-all-btn">View All →</button>
-                  </div>
-                  <div className="activity-list">
-                    <div className="activity-item">
-                      <div className="activity-avatar">JD</div>
-                      <div className="activity-details">
-                        <p className="activity-name">John Doe</p>
-                        <p className="activity-desc">Completed Articulation Exercise - Level 2</p>
-                      </div>
-                      <span className="activity-time">2 hours ago</span>
-                    </div>
-                    <div className="activity-item">
-                      <div className="activity-avatar">SM</div>
-                      <div className="activity-details">
-                        <p className="activity-name">Sarah Miller</p>
-                        <p className="activity-desc">Started Language Therapy Session</p>
-                      </div>
-                      <span className="activity-time">4 hours ago</span>
-                    </div>
-                    <div className="activity-item">
-                      <div className="activity-avatar">RJ</div>
-                      <div className="activity-details">
-                        <p className="activity-name">Robert Johnson</p>
-                        <p className="activity-desc">Achieved 90% accuracy in Fluency exercises</p>
-                      </div>
-                      <span className="activity-time">6 hours ago</span>
-                    </div>
-                    <div className="activity-item">
-                      <div className="activity-avatar">EW</div>
-                      <div className="activity-details">
-                        <p className="activity-name">Emily Wilson</p>
-                        <p className="activity-desc">Completed Physical Therapy milestone</p>
-                      </div>
-                      <span className="activity-time">1 day ago</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1164,10 +1392,8 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'physical' && (
             <div className="physical-section">
-              <div className="empty-state">
-                <div className="empty-state-icon">🏃</div>
-                <h2 className="empty-state-title">Physical Therapy</h2>
-                <p className="empty-state-message">Physical therapy exercises and patient progress will be displayed here.</p>
+              <div className="coming-soon-message">
+                <h2>Coming Soon</h2>
               </div>
             </div>
           )}

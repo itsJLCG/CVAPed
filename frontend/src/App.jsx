@@ -56,9 +56,20 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Clear localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    
+    // Sign out from Firebase to clear auth state
+    try {
+      const { firebaseSignOut } = await import('./services/firebase');
+      await firebaseSignOut();
+    } catch (error) {
+      console.error('Error signing out from Firebase:', error);
+    }
+    
+    // Update app state
     setIsAuthenticated(false);
     setUserRole(null);
   };

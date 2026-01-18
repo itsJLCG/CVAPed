@@ -23,6 +23,48 @@ api.interceptors.request.use(
   }
 );
 
+// Add response interceptor to handle token expiration
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Check if error is due to token expiration or invalid token
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const errorCode = error.response?.data?.code;
+      const errorMessage = error.response?.data?.error;
+      
+      // Handle Firebase token errors
+      if (errorCode?.includes('auth/') || 
+          errorMessage === 'TOKEN_EXPIRED' || 
+          errorMessage === 'TOKEN_INVALID' ||
+          errorMessage === 'TOKEN_REVOKED') {
+        
+        // Clear all auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Sign out from Firebase
+        try {
+          const { firebaseSignOut } = await import('./firebase');
+          await firebaseSignOut();
+        } catch (err) {
+          console.error('Error signing out from Firebase:', err);
+        }
+        
+        // Redirect to login page
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
 export const authService = {
   register: async (userData) => {
     const response = await api.post('/register', userData);
@@ -61,9 +103,18 @@ export const authService = {
     return response.data;
   },
 
-  logout: () => {
+  logout: async () => {
+    // Clear localStorage first
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    
+    // Clear any cached Firebase tokens
+    try {
+      const { firebaseSignOut } = await import('./firebase');
+      await firebaseSignOut();
+    } catch (error) {
+      console.error('Error signing out from Firebase:', error);
+    }
   },
 
   getCurrentUser: async () => {

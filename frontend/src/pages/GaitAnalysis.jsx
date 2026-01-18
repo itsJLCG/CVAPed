@@ -9,7 +9,7 @@ import soleRightImage from '../assets/sole-right.png';
 
 function GaitAnalysis({ onLogout }) {
   const navigate = useNavigate();
-  const showToast = useToast();
+  const { showToast } = useToast();
   const [sensorData, setSensorData] = useState({});
   const [isActive, setIsActive] = useState(false);
   const lastUpdateRef = useRef(Date.now());

@@ -2610,4 +2610,4 @@ def wearable_data():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
-    app.run(debug=debug, port=port)
+    app.run(host='0.0.0.0', debug=debug, port=port)

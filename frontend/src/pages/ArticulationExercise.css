@@ -428,7 +428,7 @@
 /* Assessment Results - Two Column Layout */
 .assessment-results-centered {
   width: 100%;
-  max-width: 1000px;
+  max-width: 1200px;
   animation: fadeInScale 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
@@ -535,6 +535,83 @@
   margin: 0 0 1.5rem 0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Trial Selection Tabs */
+.trial-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0;
+}
+
+.trial-tab {
+  flex: 1;
+  padding: 1rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  position: relative;
+  bottom: -2px;
+}
+
+.trial-tab:hover {
+  background: #f9fafb;
+}
+
+.trial-tab.active {
+  background: #f9fafb;
+  font-weight: 700;
+}
+
+.trial-tab .tab-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.trial-tab .tab-score {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+/* Trial Content Area */
+.trial-content {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.active-trial {
+  animation: slideInContent 0.4s ease-out;
+}
+
+@keyframes slideInContent {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .trials-grid {
@@ -781,6 +858,22 @@
   
   .metric-progress-bg {
     min-width: 100px;
+  }
+  
+  .trial-tabs {
+    gap: 0.25rem;
+  }
+  
+  .trial-tab {
+    padding: 0.75rem 0.5rem;
+  }
+  
+  .trial-tab .tab-label {
+    font-size: 0.75rem;
+  }
+  
+  .trial-tab .tab-score {
+    font-size: 1rem;
   }
 }
 

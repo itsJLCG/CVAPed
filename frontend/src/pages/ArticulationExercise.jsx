@@ -35,6 +35,8 @@ function ArticulationExercise({ onLogout }) {
   const [showRecordButton, setShowRecordButton] = useState(false); // Show record button after model audio
   const [showTrialResult, setShowTrialResult] = useState(false); // Show trial result after recording
   const [currentTrialResult, setCurrentTrialResult] = useState(null); // Current trial's result data
+  const [showFinalAssessment, setShowFinalAssessment] = useState(false); // Show final assessment after trial 3
+  const [assessmentTab, setAssessmentTab] = useState('average'); // 'average' or 'trials'
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -415,15 +417,17 @@ function ArticulationExercise({ onLogout }) {
       setCurrentTrial(currentTrial + 1);
       setShowTrialResult(false);
       setCurrentTrialResult(null);
-      setShowRecordButton(false);
+      setShowRecordButton(false); // User must play model audio first
       setRecordedBlob(null);
       if (waveSurferRef.current) {
         waveSurferRef.current.empty();
       }
-    } else {
-      // All trials complete - this shouldn't happen as button should be hidden
-      // but just in case
     }
+  };
+
+  const handleShowAssessment = () => {
+    setShowTrialResult(false);
+    setShowFinalAssessment(true);
   };
 
   const resetTrials = () => {
@@ -435,6 +439,8 @@ function ArticulationExercise({ onLogout }) {
     setShowTrialResult(false);
     setCurrentTrialResult(null);
     setShowRecordButton(false);
+    setShowFinalAssessment(false);
+    setAssessmentTab('average');
     if (waveSurferRef.current) {
       waveSurferRef.current.empty();
     }
@@ -528,8 +534,8 @@ function ArticulationExercise({ onLogout }) {
 
           {/* Exercise Card - Centered Layout */}
           <div className="exercise-card">
-            {/* Show Target & Recording sections only when NOT showing trial result and trials not complete */}
-            {!showTrialResult && trialScores.length < maxTrials && (
+            {/* Show Target & Recording sections only when NOT showing trial result and NOT showing final assessment */}
+            {!showTrialResult && !showFinalAssessment && (
               <>
                 {/* Centered Target Stimulus - Always Visible */}
                 <div className={`centered-target-section ${showRecordButton ? 'compact' : ''}`}>
@@ -542,8 +548,8 @@ function ArticulationExercise({ onLogout }) {
                   </button>
                 </div>
 
-                {/* Recording Section - Shows after first audio play and stays visible */}
-                {(showRecordButton || trialScores.length > 0) && (
+                {/* Recording Section - Shows after audio play */}
+                {showRecordButton && (
                   <div className="centered-recording-section">
                 <div className="recording-box-centered">
                   <div className="recording-header">
@@ -553,7 +559,7 @@ function ArticulationExercise({ onLogout }) {
                   <div className="waveform-container" ref={waveformRef}></div>
 
                   <div className="recording-controls">
-                    {showRecordButton && !isRecording && !isProcessing && (
+                    {!isRecording && !isProcessing && (
                       <button
                         className="record-btn centered-record"
                         onClick={startRecording}
@@ -585,8 +591,8 @@ function ArticulationExercise({ onLogout }) {
               </>
             )}
 
-            {/* Show Trial Result after recording (before all trials complete) */}
-            {showTrialResult && currentTrialResult && trialScores.length < maxTrials && (
+            {/* Show Trial Result after recording (for all trials including trial 3) */}
+            {showTrialResult && currentTrialResult && !showFinalAssessment && (
               <div className="trial-result-display">
                 <h3 className="trial-result-title">Trial {currentTrialResult.trial} Result</h3>
                 
@@ -686,41 +692,179 @@ function ArticulationExercise({ onLogout }) {
 
                 {/* Next Trial Button */}
                 <div className="trial-action-section">
-                  <button
-                    className="action-btn primary"
-                    onClick={handleNextTrial}
-                    style={{ backgroundColor: soundData.color }}
-                  >
-                    {currentTrial < maxTrials ? `Next Trial (${currentTrial + 1}/${maxTrials}) →` : 'View Results →'}
-                  </button>
+                  {currentTrial < maxTrials ? (
+                    <button
+                      className="action-btn primary"
+                      onClick={handleNextTrial}
+                      style={{ backgroundColor: soundData.color }}
+                    >
+                      Next Trial ({currentTrial + 1}/{maxTrials}) →
+                    </button>
+                  ) : (
+                    <button
+                      className="action-btn primary"
+                      onClick={handleShowAssessment}
+                      style={{ backgroundColor: soundData.color }}
+                    >
+                      Show Assessment Results →
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Assessment Results - Only show average score after all trials complete */}
-            {trialScores.length >= maxTrials && (
+            {/* Assessment Results - Show after clicking "Show Assessment Results" */}
+            {showFinalAssessment && (
               <div className="assessment-results-centered">
                 <h2 className="assessment-title">Assessment Complete!</h2>
                 
-                <div className="assessment-score-display">
-                  <div className="assessment-score-circle" style={{ 
-                    borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' 
-                  }}>
-                    <div className="assessment-score-value" style={{ 
-                      color: averageScore >= passThreshold ? '#27ae60' : '#e67e22' 
-                    }}>
-                      {(averageScore * 100).toFixed(0)}%
-                    </div>
-                    <div className="assessment-score-label">Average Score</div>
-                  </div>
-                  <div className="assessment-status" style={{ 
-                    color: averageScore >= passThreshold ? '#27ae60' : '#e67e22',
-                    backgroundColor: averageScore >= passThreshold ? '#d4edda' : '#fff3cd',
-                    borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22'
-                  }}>
-                    {averageScore >= passThreshold ? '✓ PASSED' : '⚠ BELOW THRESHOLD'}
-                  </div>
+                {/* Assessment Tabs */}
+                <div className="assessment-tabs">
+                  <button
+                    className={`assessment-tab ${assessmentTab === 'average' ? 'active' : ''}`}
+                    onClick={() => setAssessmentTab('average')}
+                    style={{
+                      borderBottomColor: assessmentTab === 'average' ? soundData.color : 'transparent',
+                      color: assessmentTab === 'average' ? soundData.color : '#6b7280'
+                    }}
+                  >
+                    Average Score
+                  </button>
+                  <button
+                    className={`assessment-tab ${assessmentTab === 'trials' ? 'active' : ''}`}
+                    onClick={() => setAssessmentTab('trials')}
+                    style={{
+                      borderBottomColor: assessmentTab === 'trials' ? soundData.color : 'transparent',
+                      color: assessmentTab === 'trials' ? soundData.color : '#6b7280'
+                    }}
+                  >
+                    Trial Results
+                  </button>
                 </div>
+
+                {/* Average Score Tab Content */}
+                {assessmentTab === 'average' && (
+                  <div className="assessment-score-display">
+                    <div className="assessment-score-circle" style={{ 
+                      borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' 
+                    }}>
+                      <div className="assessment-score-value" style={{ 
+                        color: averageScore >= passThreshold ? '#27ae60' : '#e67e22' 
+                      }}>
+                        {(averageScore * 100).toFixed(0)}%
+                      </div>
+                      <div className="assessment-score-label">Average Score</div>
+                    </div>
+                    <div className="assessment-status" style={{ 
+                      color: averageScore >= passThreshold ? '#27ae60' : '#e67e22',
+                      backgroundColor: averageScore >= passThreshold ? '#d4edda' : '#fff3cd',
+                      borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22'
+                    }}>
+                      {averageScore >= passThreshold ? '✓ PASSED' : '⚠ BELOW THRESHOLD'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Trials Results Tab Content */}
+                {assessmentTab === 'trials' && (
+                  <div className="all-trials-display">
+                    {trialDetails.map((detail, index) => (
+                      <div key={index} className="trial-result-card">
+                        <div className="trial-card-header">
+                          <span className="trial-badge">Trial {index + 1}</span>
+                          <span className="trial-overall-score" style={{ 
+                            color: detail.computed_score >= passThreshold ? '#27ae60' : '#e67e22' 
+                          }}>
+                            {(detail.computed_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        
+                        <div className="trial-transcription">
+                          <span className="transcription-label">You said:</span>
+                          <span className="transcription-value">"{detail.transcription}"</span>
+                        </div>
+
+                        <div className="trial-metrics-detailed">
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#3b82f6' }}>🗣️</span>
+                              <span className="metric-name">Pronunciation</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.pronunciation_score * 100}%`,
+                                    backgroundColor: '#3b82f6'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.pronunciation_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#8b5cf6' }}>🎯</span>
+                              <span className="metric-name">Accuracy</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.accuracy_score * 100}%`,
+                                    backgroundColor: '#8b5cf6'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.accuracy_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#10b981' }}>✓</span>
+                              <span className="metric-name">Completeness</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.completeness_score * 100}%`,
+                                    backgroundColor: '#10b981'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.completeness_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#f59e0b' }}>⚡</span>
+                              <span className="metric-name">Fluency</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.fluency_score * 100}%`,
+                                    backgroundColor: '#f59e0b'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.fluency_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="action-section">

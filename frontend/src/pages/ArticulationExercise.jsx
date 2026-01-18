@@ -417,7 +417,7 @@ function ArticulationExercise({ onLogout }) {
       setCurrentTrial(currentTrial + 1);
       setShowTrialResult(false);
       setCurrentTrialResult(null);
-      setShowRecordButton(false); // User must play model audio first
+      setShowRecordButton(true); // For trials 2 and 3, show record button immediately
       setRecordedBlob(null);
       if (waveSurferRef.current) {
         waveSurferRef.current.empty();

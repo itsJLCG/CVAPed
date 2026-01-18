@@ -90,7 +90,7 @@
 /* Main Content */
 .articulation-main {
   flex: 1;
-  padding: 120px 20px 60px;
+  padding: 30px 20px 60px;
 }
 
 .articulation-container {
@@ -100,40 +100,146 @@
 
 .articulation-header-section {
   text-align: center;
-  margin-bottom: 50px;
-  padding: 35px 30px;
+  margin-bottom: 15px;
+  padding: 8px 12px;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-left: 4px solid var(--color-primary);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  border-left: 3px solid var(--color-primary);
 }
 
 .articulation-title {
-  font-size: 2.2rem;
-  font-weight: 600;
+  font-size: 1.8rem;
+  font-weight: 700;
   color: #2c3e50;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   letter-spacing: -0.5px;
 }
 
 .articulation-subtitle {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   color: #6b7280;
   font-weight: 500;
-  margin-bottom: 15px;
+  margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
 }
 
 .articulation-description {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: #4b5563;
-  max-width: 900px;
+  max-width: 750px;
   margin: 0 auto;
-  line-height: 1.65;
+  line-height: 1.4;
 }
 
-/* Sounds Grid */
+/* Carousel Container */
+.carousel-container {
+  position: relative;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 20px;
+}
+
+.carousel-wrapper {
+  flex: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  position: relative;
+  perspective: 1000px;
+  padding: 15px 0;
+}
+
+.sounds-carousel {
+  display: flex;
+  transition: transform 0.5s ease-in-out;
+  position: relative;
+  gap: 40px;
+  padding: 20px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Carousel Navigation Buttons */
+.carousel-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: white;
+  border: 2px solid #e5e7eb;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.carousel-btn:hover {
+  background: #f9fafb;
+  border-color: #ce3630;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.carousel-btn.prev {
+  left: 0;
+}
+
+.carousel-btn.next {
+  right: 0;
+}
+
+.carousel-btn span {
+  font-size: 2.5rem;
+  color: #374151;
+  font-weight: bold;
+  line-height: 1;
+  margin-top: -4px;
+}
+
+.carousel-btn:hover span {
+  color: #ce3630;
+}
+
+/* Carousel Indicators */
+.carousel-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding-bottom: 10px;
+}
+
+.indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.indicator:hover {
+  transform: scale(1.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.indicator.active {
+  width: 35px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Sounds Grid - Now for Carousel */
 .sounds-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -144,26 +250,70 @@
 
 /* Sound Card */
 .sound-card {
+  min-width: 500px;
+  max-width: 500px;
   background: white;
-  border-radius: 12px;
-  padding: 28px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border: 2px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: default;
+  border: 3px solid #e5e7eb;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+  opacity: 0.35;
+  transform: scale(0.8);
+  filter: brightness(0.5) blur(1px);
+}
+
+.sound-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 16px;
+  pointer-events: all;
+  transition: opacity 0.5s ease;
+  z-index: 100;
+  cursor: default;
+}
+
+.sound-card > * {
+  position: relative;
+  z-index: 2;
 }
 
 .sound-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: #d1d5db;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.sound-card.active {
+  opacity: 1;
+  transform: scale(1.1);
+  filter: brightness(1) blur(0);
+  border-color: var(--sound-color);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+  cursor: pointer;
+}
+
+.sound-card.active::before {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sound-card.active > * {
+  pointer-events: auto;
 }
 
 .sound-card.selected {
   border-color: var(--sound-color);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
 }
 
 .sound-header {

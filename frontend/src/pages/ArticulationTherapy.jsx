@@ -5,6 +5,7 @@ import './ArticulationTherapy.css';
 
 function ArticulationTherapy({ onLogout }) {
   const [selectedSound, setSelectedSound] = useState(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const navigate = useNavigate();
 
   const targetSounds = [
@@ -55,10 +56,30 @@ function ArticulationTherapy({ onLogout }) {
     }
   ];
 
-  const handleSoundSelect = (soundId) => {
+  const handleSoundSelect = (soundId, index) => {
+    // Only allow click if this is the active card
+    if (index !== currentIndex) {
+      return;
+    }
     setSelectedSound(soundId);
     // Navigate to exercise page for this sound
     navigate(`/articulation/${soundId}`);
+  };
+
+  const nextSlide = () => {
+    setCurrentIndex((prevIndex) => 
+      prevIndex === targetSounds.length - 1 ? 0 : prevIndex + 1
+    );
+  };
+
+  const prevSlide = () => {
+    setCurrentIndex((prevIndex) => 
+      prevIndex === 0 ? targetSounds.length - 1 : prevIndex - 1
+    );
+  };
+
+  const goToSlide = (index) => {
+    setCurrentIndex(index);
   };
 
   return (
@@ -78,50 +99,77 @@ function ArticulationTherapy({ onLogout }) {
             </p>
           </div>
 
-          {/* Sound Selection Grid */}
-          <div className="sounds-grid">
-            {targetSounds.map((sound) => (
-              <div
-                key={sound.id}
-                className={`sound-card ${selectedSound === sound.id ? 'selected' : ''}`}
-                onClick={() => handleSoundSelect(sound.id)}
-                style={{ '--sound-color': sound.color }}
-              >
-                <div className="sound-header">
-                  <div className="sound-symbol-badge" style={{ color: sound.color, borderColor: sound.color }}>
-                    {sound.symbol}
-                  </div>
-                  <h3 className="sound-name">{sound.name}</h3>
-                </div>
-                
-                <p className="sound-description">{sound.description}</p>
-                
-                <div className="sound-meta">
-                  <div className="meta-item">
-                    <span className="meta-label">Target Examples</span>
-                    <div className="examples-list">
-                      {sound.examples.map((example, index) => (
-                        <span key={index} className="example-word">{example}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="meta-item">
-                    <span className="meta-label">Intervention Levels</span>
-                    <span className="meta-value">{sound.levels} Progressive Stages</span>
-                  </div>
-                </div>
+          {/* Sound Selection Carousel */}
+          <div className="carousel-container">
+            <button className="carousel-btn prev" onClick={prevSlide}>
+              <span>‹</span>
+            </button>
 
-                <button
-                  className="sound-btn"
-                  style={{ backgroundColor: sound.color }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSoundSelect(sound.id);
-                  }}
-                >
-                  Begin Assessment
-                </button>
+            <div className="carousel-wrapper">
+              <div 
+                className="sounds-carousel"
+                style={{ transform: `translateX(calc(50% - ${currentIndex * 540}px - 250px))` }}
+              >
+                {targetSounds.map((sound, index) => (
+                  <div
+                    key={sound.id}
+                    className={`sound-card ${selectedSound === sound.id ? 'selected' : ''} ${index === currentIndex ? 'active' : ''}`}
+                    onClick={() => handleSoundSelect(sound.id, index)}
+                    style={{ '--sound-color': sound.color }}
+                  >
+                    <div className="sound-header">
+                      <div className="sound-symbol-badge" style={{ color: sound.color, borderColor: sound.color }}>
+                        {sound.symbol}
+                      </div>
+                      <h3 className="sound-name">{sound.name}</h3>
+                    </div>
+                    
+                    <p className="sound-description">{sound.description}</p>
+                    
+                    <div className="sound-meta">
+                      <div className="meta-item">
+                        <span className="meta-label">Target Examples</span>
+                        <div className="examples-list">
+                          {sound.examples.map((example, idx) => (
+                            <span key={idx} className="example-word">{example}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="meta-item">
+                        <span className="meta-label">Intervention Levels</span>
+                        <span className="meta-value">{sound.levels} Progressive Stages</span>
+                      </div>
+                    </div>
+
+                    <button
+                      className="sound-btn"
+                      style={{ backgroundColor: sound.color }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSoundSelect(sound.id, index);
+                      }}
+                    >
+                      Begin Assessment
+                    </button>
+                  </div>
+                ))}
               </div>
+            </div>
+
+            <button className="carousel-btn next" onClick={nextSlide}>
+              <span>›</span>
+            </button>
+          </div>
+
+          {/* Carousel Indicators */}
+          <div className="carousel-indicators">
+            {targetSounds.map((sound, index) => (
+              <button
+                key={sound.id}
+                className={`indicator ${index === currentIndex ? 'active' : ''}`}
+                onClick={() => goToSlide(index)}
+                style={{ backgroundColor: index === currentIndex ? sound.color : '#d1d5db' }}
+              />
             ))}
           </div>
         </div>

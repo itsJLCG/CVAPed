@@ -34,6 +34,7 @@ function ArticulationExercise({ onLogout }) {
   const [isLoadingExercises, setIsLoadingExercises] = useState(true);
   const [showRecordButton, setShowRecordButton] = useState(false); // Show record button after model audio
   const [showAssessmentModal, setShowAssessmentModal] = useState(false); // Show modal after trial 3
+  const [selectedTrialTab, setSelectedTrialTab] = useState(1); // Currently selected trial to view
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -645,105 +646,131 @@ function ArticulationExercise({ onLogout }) {
                     </div>
                   </div>
 
-                  {/* Right: Trial Results Summary */}
+                  {/* Right: Trial Results Summary with Tabs */}
                   <div className="assessment-right-column">
                     <h3 className="trials-section-title">Trial Results Summary</h3>
-                    <div className="trials-grid">
-                    {trialDetails.map((detail, index) => (
-                      <div key={index} className="trial-result-card">
-                        <div className="trial-card-header">
-                          <span className="trial-badge">Trial {index + 1}</span>
-                          <span className="trial-overall-score" style={{ 
-                            color: detail.computed_score >= passThreshold ? '#27ae60' : '#e67e22' 
+                    
+                    {/* Trial Selection Tabs */}
+                    <div className="trial-tabs">
+                      {trialDetails.map((detail, index) => (
+                        <button
+                          key={index}
+                          className={`trial-tab ${selectedTrialTab === index + 1 ? 'active' : ''}`}
+                          onClick={() => setSelectedTrialTab(index + 1)}
+                          style={{
+                            borderBottomColor: selectedTrialTab === index + 1 ? soundData.color : 'transparent',
+                            color: selectedTrialTab === index + 1 ? soundData.color : '#6b7280'
+                          }}
+                        >
+                          <span className="tab-label">Trial {index + 1}</span>
+                          <span className="tab-score" style={{
+                            color: detail.computed_score >= passThreshold ? '#27ae60' : '#e67e22'
                           }}>
                             {(detail.computed_score * 100).toFixed(0)}%
                           </span>
-                        </div>
-                        
-                        <div className="trial-transcription">
-                          <span className="transcription-label">You said:</span>
-                          <span className="transcription-value">"{detail.transcription}"</span>
-                        </div>
+                        </button>
+                      ))}
+                    </div>
 
-                        <div className="trial-metrics-detailed">
-                          <div className="metric-row">
-                            <div className="metric-info">
-                              <span className="metric-icon" style={{ backgroundColor: '#3b82f6' }}>🗣️</span>
-                              <span className="metric-name">Pronunciation</span>
+                    {/* Selected Trial Content */}
+                    <div className="trial-content">
+                      {trialDetails.map((detail, index) => (
+                        selectedTrialTab === index + 1 && (
+                          <div key={index} className="trial-result-card active-trial">
+                            <div className="trial-card-header">
+                              <span className="trial-badge">Trial {index + 1}</span>
+                              <span className="trial-overall-score" style={{ 
+                                color: detail.computed_score >= passThreshold ? '#27ae60' : '#e67e22' 
+                              }}>
+                                {(detail.computed_score * 100).toFixed(0)}%
+                              </span>
                             </div>
-                            <div className="metric-bar-wrapper">
-                              <div className="metric-progress-bg">
-                                <div 
-                                  className="metric-progress-fill" 
-                                  style={{ 
-                                    width: `${detail.pronunciation_score * 100}%`,
-                                    backgroundColor: '#3b82f6'
-                                  }}
-                                ></div>
+                            
+                            <div className="trial-transcription">
+                              <span className="transcription-label">You said:</span>
+                              <span className="transcription-value">"{detail.transcription}"</span>
+                            </div>
+
+                            <div className="trial-metrics-detailed">
+                              <div className="metric-row">
+                                <div className="metric-info">
+                                  <span className="metric-icon" style={{ backgroundColor: '#3b82f6' }}>🗣️</span>
+                                  <span className="metric-name">Pronunciation</span>
+                                </div>
+                                <div className="metric-bar-wrapper">
+                                  <div className="metric-progress-bg">
+                                    <div 
+                                      className="metric-progress-fill" 
+                                      style={{ 
+                                        width: `${detail.pronunciation_score * 100}%`,
+                                        backgroundColor: '#3b82f6'
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="metric-percent">{(detail.pronunciation_score * 100).toFixed(0)}%</span>
+                                </div>
                               </div>
-                              <span className="metric-percent">{(detail.pronunciation_score * 100).toFixed(0)}%</span>
+
+                              <div className="metric-row">
+                                <div className="metric-info">
+                                  <span className="metric-icon" style={{ backgroundColor: '#8b5cf6' }}>🎯</span>
+                                  <span className="metric-name">Accuracy</span>
+                                </div>
+                                <div className="metric-bar-wrapper">
+                                  <div className="metric-progress-bg">
+                                    <div 
+                                      className="metric-progress-fill" 
+                                      style={{ 
+                                        width: `${detail.accuracy_score * 100}%`,
+                                        backgroundColor: '#8b5cf6'
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="metric-percent">{(detail.accuracy_score * 100).toFixed(0)}%</span>
+                                </div>
+                              </div>
+
+                              <div className="metric-row">
+                                <div className="metric-info">
+                                  <span className="metric-icon" style={{ backgroundColor: '#10b981' }}>✓</span>
+                                  <span className="metric-name">Completeness</span>
+                                </div>
+                                <div className="metric-bar-wrapper">
+                                  <div className="metric-progress-bg">
+                                    <div 
+                                      className="metric-progress-fill" 
+                                      style={{ 
+                                        width: `${detail.completeness_score * 100}%`,
+                                        backgroundColor: '#10b981'
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="metric-percent">{(detail.completeness_score * 100).toFixed(0)}%</span>
+                                </div>
+                              </div>
+
+                              <div className="metric-row">
+                                <div className="metric-info">
+                                  <span className="metric-icon" style={{ backgroundColor: '#f59e0b' }}>⚡</span>
+                                  <span className="metric-name">Fluency</span>
+                                </div>
+                                <div className="metric-bar-wrapper">
+                                  <div className="metric-progress-bg">
+                                    <div 
+                                      className="metric-progress-fill" 
+                                      style={{ 
+                                        width: `${detail.fluency_score * 100}%`,
+                                        backgroundColor: '#f59e0b'
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <span className="metric-percent">{(detail.fluency_score * 100).toFixed(0)}%</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-
-                          <div className="metric-row">
-                            <div className="metric-info">
-                              <span className="metric-icon" style={{ backgroundColor: '#8b5cf6' }}>🎯</span>
-                              <span className="metric-name">Accuracy</span>
-                            </div>
-                            <div className="metric-bar-wrapper">
-                              <div className="metric-progress-bg">
-                                <div 
-                                  className="metric-progress-fill" 
-                                  style={{ 
-                                    width: `${detail.accuracy_score * 100}%`,
-                                    backgroundColor: '#8b5cf6'
-                                  }}
-                                ></div>
-                              </div>
-                              <span className="metric-percent">{(detail.accuracy_score * 100).toFixed(0)}%</span>
-                            </div>
-                          </div>
-
-                          <div className="metric-row">
-                            <div className="metric-info">
-                              <span className="metric-icon" style={{ backgroundColor: '#10b981' }}>✓</span>
-                              <span className="metric-name">Completeness</span>
-                            </div>
-                            <div className="metric-bar-wrapper">
-                              <div className="metric-progress-bg">
-                                <div 
-                                  className="metric-progress-fill" 
-                                  style={{ 
-                                    width: `${detail.completeness_score * 100}%`,
-                                    backgroundColor: '#10b981'
-                                  }}
-                                ></div>
-                              </div>
-                              <span className="metric-percent">{(detail.completeness_score * 100).toFixed(0)}%</span>
-                            </div>
-                          </div>
-
-                          <div className="metric-row">
-                            <div className="metric-info">
-                              <span className="metric-icon" style={{ backgroundColor: '#f59e0b' }}>⚡</span>
-                              <span className="metric-name">Fluency</span>
-                            </div>
-                            <div className="metric-bar-wrapper">
-                              <div className="metric-progress-bg">
-                                <div 
-                                  className="metric-progress-fill" 
-                                  style={{ 
-                                    width: `${detail.fluency_score * 100}%`,
-                                    backgroundColor: '#f59e0b'
-                                  }}
-                                ></div>
-                              </div>
-                              <span className="metric-percent">{(detail.fluency_score * 100).toFixed(0)}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        )
+                      ))}
                     </div>
                   </div>
                 </div>

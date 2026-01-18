@@ -512,6 +512,69 @@
   letter-spacing: 0.5px;
 }
 
+/* Assessment Tabs */
+.assessment-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.assessment-tab {
+  flex: 1;
+  padding: 1rem 2rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: relative;
+  bottom: -2px;
+}
+
+.assessment-tab:hover {
+  background: #f9fafb;
+}
+
+.assessment-tab.active {
+  background: #f9fafb;
+  font-weight: 700;
+}
+
+/* All Trials Display (in Trial Results tab) */
+.all-trials-display {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: 600px;
+  overflow-y: auto;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 12px;
+}
+
+.all-trials-display::-webkit-scrollbar {
+  width: 8px;
+}
+
+.all-trials-display::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 4px;
+}
+
+.all-trials-display::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 4px;
+}
+
+.all-trials-display::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
 /* Trial Result Display (shown after each trial) */
 .trial-result-display {
   width: 100%;
@@ -875,6 +938,26 @@
   
   .trial-tab .tab-score {
     font-size: 1rem;
+  }
+  
+  .assessment-tabs {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .assessment-tab {
+    padding: 0.75rem 1rem;
+    border-bottom: none;
+    border-left: 3px solid transparent;
+  }
+  
+  .assessment-tab.active {
+    border-left-color: inherit;
+  }
+  
+  .all-trials-display {
+    max-height: 500px;
+    padding: 0.75rem;
   }
 }
 

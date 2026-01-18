@@ -9,12 +9,12 @@ import './LanguageTherapy.css';
 const languageExercises = {
   receptive: {
     name: 'Receptive Language',
-    description: 'Understanding & Comprehension',
+    description: 'Master listening skills and language comprehension',
     color: '#3b82f6'
   },
   expressive: {
     name: 'Expressive Language',
-    description: 'Communication & Expression',
+    description: 'Enhance verbal communication and speaking abilities',
     color: '#8b5cf6'
   }
 };
@@ -613,7 +613,7 @@ function LanguageTherapy({ onLogout }) {
           <div className="language-container">
             <div className="language-selection-header">
               <h1 className="language-title">Language Therapy Assessment</h1>
-              <p className="language-subtitle">Choose your therapy focus area</p>
+              <p className="language-subtitle">Select a specialized therapy program tailored to your needs</p>
             </div>
 
             <div className="language-modes-grid">
@@ -624,10 +624,10 @@ function LanguageTherapy({ onLogout }) {
                 <h2 className="mode-title">{languageExercises.receptive.name}</h2>
                 <p className="mode-description">{languageExercises.receptive.description}</p>
                 <div className="mode-features">
-                  <div className="feature-item">✓ Listening Comprehension</div>
-                  <div className="feature-item">✓ Following Directions</div>
-                  <div className="feature-item">✓ Vocabulary Recognition</div>
-                  <div className="feature-item">✓ Sentence Understanding</div>
+                  <div className="feature-item">Audio-Based Comprehension Exercises</div>
+                  <div className="feature-item">Interactive Direction Following Tasks</div>
+                  <div className="feature-item">Advanced Vocabulary Recognition</div>
+                  <div className="feature-item">Context & Meaning Analysis</div>
                 </div>
                 <button 
                   className="mode-btn" 
@@ -638,7 +638,7 @@ function LanguageTherapy({ onLogout }) {
                     ? 'Loading Exercises...' 
                     : receptiveExercises.length === 0 
                       ? 'No Exercises Available' 
-                      : 'Begin Receptive Assessment'}
+                      : 'Start Listening Training'}
                 </button>
               </div>
 
@@ -649,10 +649,10 @@ function LanguageTherapy({ onLogout }) {
                 <h2 className="mode-title">{languageExercises.expressive.name}</h2>
                 <p className="mode-description">{languageExercises.expressive.description}</p>
                 <div className="mode-features">
-                  <div className="feature-item">✓ Picture Description</div>
-                  <div className="feature-item">✓ Sentence Formation</div>
-                  <div className="feature-item">✓ Story Retelling</div>
-                  <div className="feature-item">✓ Verbal Expression</div>
+                  <div className="feature-item">Visual Description & Narration</div>
+                  <div className="feature-item">Grammar & Sentence Construction</div>
+                  <div className="feature-item">Creative Story Retelling</div>
+                  <div className="feature-item">Fluent Speech Development</div>
                 </div>
                 <button 
                   className="mode-btn" 
@@ -663,7 +663,7 @@ function LanguageTherapy({ onLogout }) {
                     ? 'Loading Exercises...' 
                     : expressiveExercises.length === 0 
                       ? 'No Exercises Available' 
-                      : 'Begin Expressive Assessment'}
+                      : 'Start Speaking Training'}
                 </button>
               </div>
             </div>

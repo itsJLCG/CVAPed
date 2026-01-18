@@ -32,6 +32,8 @@ function ArticulationExercise({ onLogout }) {
   const [isLoadingProgress, setIsLoadingProgress] = useState(true);
   const [exercises, setExercises] = useState(null); // Database exercises
   const [isLoadingExercises, setIsLoadingExercises] = useState(true);
+  const [showRecordButton, setShowRecordButton] = useState(false); // Show record button after model audio
+  const [showAssessmentModal, setShowAssessmentModal] = useState(false); // Show modal after trial 3
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -247,7 +249,10 @@ function ArticulationExercise({ onLogout }) {
         completeness_score: data.scores?.completeness_score || 0,
         fluency_score: data.scores?.fluency_score || 0,
         transcription: data.transcription || '',
-        feedback: data.feedback || ''
+        feedback: data.feedback || '',
+        azure_details: data.azure_details || {},
+        words: data.words || [],
+        phonemes: data.phonemes || []
       };
       
       const newTrialScores = [...trialScores, score];
@@ -259,6 +264,12 @@ function ArticulationExercise({ onLogout }) {
       if (newTrialScores.length >= maxTrials) {
         const avg = newTrialScores.reduce((a, b) => a + b, 0) / newTrialScores.length;
         setAverageScore(avg);
+        // Assessment results will show automatically (no modal)
+      } else {
+        // Auto-advance to next trial
+        setCurrentTrial(currentTrial + 1);
+        // Keep record button visible for trials 2 and 3 (no need to play audio again)
+        setShowRecordButton(true);
       }
 
     } catch (error) {
@@ -272,6 +283,9 @@ function ArticulationExercise({ onLogout }) {
       if (newTrialScores.length >= maxTrials) {
         const avg = newTrialScores.reduce((a, b) => a + b, 0) / newTrialScores.length;
         setAverageScore(avg);
+      } else {
+        setCurrentTrial(currentTrial + 1);
+        setShowRecordButton(true);
       }
     }
 
@@ -341,6 +355,11 @@ function ArticulationExercise({ onLogout }) {
         utterance.voice = preferredVoice;
       }
 
+      // Show record button after audio completes
+      utterance.onend = () => {
+        setShowRecordButton(true);
+      };
+
       window.speechSynthesis.speak(utterance);
     } else {
       alert(`Please say: "${currentTarget}"`);
@@ -378,12 +397,14 @@ function ArticulationExercise({ onLogout }) {
     if (currentItem < totalItems - 1) {
       setCurrentItem(currentItem + 1);
       resetTrials();
+      setShowRecordButton(false); // Reset record button - user must play model audio first
     } else if (averageScore >= passThreshold) {
       if (currentLevel < 5) {
         setCurrentLevel(currentLevel + 1);
         setCurrentItem(0);
         setLevelProgress({ ...levelProgress, [currentLevel]: true });
         resetTrials();
+        setShowRecordButton(false); // Reset record button - user must play model audio first
         alert(`Level ${currentLevel} Complete! Moving to Level ${currentLevel + 1}: ${exercises.levels[currentLevel + 1].name}`);
       } else {
         alert('Congratulations! You completed all levels for this sound!');
@@ -489,12 +510,13 @@ function ArticulationExercise({ onLogout }) {
             </div>
           </div>
 
-          {/* Exercise Card - Compact 2-Column Layout */}
+          {/* Exercise Card - Centered Layout */}
           <div className="exercise-card">
-            <div className="exercise-grid">
-              {/* Left Column - Target & Recording */}
-              <div className="target-column">
-                <div className="target-section">
+            {/* Show Target & Recording sections only while trials are in progress */}
+            {trialScores.length < maxTrials && (
+              <>
+                {/* Centered Target Stimulus - Always Visible */}
+                <div className={`centered-target-section ${showRecordButton ? 'compact' : ''}`}>
                   <label className="section-label">Target Stimulus</label>
                   <div className="target-text" style={{ color: soundData.color }}>
                     "{currentTarget}"
@@ -504,7 +526,10 @@ function ArticulationExercise({ onLogout }) {
                   </button>
                 </div>
 
-                <div className="recording-box">
+                {/* Recording Section - Shows after first audio play and stays visible */}
+                {(showRecordButton || trialScores.length > 0) && (
+                  <div className="centered-recording-section">
+                <div className="recording-box-centered">
                   <div className="recording-header">
                     <label className="section-label">Recording - Trial {currentTrial}/{maxTrials}</label>
                   </div>
@@ -512,9 +537,9 @@ function ArticulationExercise({ onLogout }) {
                   <div className="waveform-container" ref={waveformRef}></div>
 
                   <div className="recording-controls">
-                    {!isRecording && !isProcessing && needsMoreTrials && (
+                    {showRecordButton && !isRecording && !isProcessing && needsMoreTrials && (
                       <button
-                        className="record-btn"
+                        className="record-btn centered-record"
                         onClick={startRecording}
                         style={{ backgroundColor: soundData.color }}
                       >
@@ -539,15 +564,11 @@ function ArticulationExercise({ onLogout }) {
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Right Column - Results & Actions */}
-              <div className="results-column">
+                {/* Show trial results as they complete - inline with recording */}
                 {trialScores.length > 0 && (
-                  <div className="scores-section">
-                    <label className="section-label">Assessment Results</label>
-                    
-                    {/* Compact 4-Metric Progress Bars per Trial */}
+                  <div className="trial-results-inline">
+                    <label className="section-label">Trial Results</label>
                     <div className="trials-compact">
                       {trialDetails.map((detail, index) => (
                         <div key={index} className="trial-metrics-card">
@@ -590,135 +611,142 @@ function ArticulationExercise({ onLogout }) {
                         </div>
                       ))}
                     </div>
-
-                    {/* 4-Metric Line Chart */}
-                    {trialDetails.length > 1 && (
-                      <div className="chart-container">
-                        <div className="chart-header">
-                          <span className="chart-title">Metric Comparison Across Trials</span>
-                        </div>
-                        <div className="line-chart">
-                          <svg width="100%" height="140" viewBox="0 0 320 140">
-                            {/* Grid lines */}
-                            <line x1="50" y1="20" x2="300" y2="20" stroke="#f3f4f6" strokeWidth="1"/>
-                            <line x1="50" y1="45" x2="300" y2="45" stroke="#f3f4f6" strokeWidth="1"/>
-                            <line x1="50" y1="70" x2="300" y2="70" stroke="#f3f4f6" strokeWidth="1"/>
-                            <line x1="50" y1="95" x2="300" y2="95" stroke="#f3f4f6" strokeWidth="1"/>
-                            
-                            {/* Y-axis labels */}
-                            <text x="5" y="24" fontSize="9" fill="#9ca3af">100</text>
-                            <text x="12" y="49" fontSize="9" fill="#9ca3af">75</text>
-                            <text x="12" y="74" fontSize="9" fill="#9ca3af">50</text>
-                            <text x="12" y="99" fontSize="9" fill="#9ca3af">25</text>
-                            <text x="18" y="116" fontSize="9" fill="#9ca3af">0</text>
-                            
-                            {/* Pronunciation line */}
-                            <polyline
-                              points={trialDetails.map((detail, index) => {
-                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                                const y = 110 - (detail.pronunciation_score * 90);
-                                return `${x},${y}`;
-                              }).join(' ')}
-                              fill="none"
-                              stroke="#3b82f6"
-                              strokeWidth="2"
-                            />
-                            {/* Pronunciation points */}
-                            {trialDetails.map((detail, index) => {
-                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                              const y = 110 - (detail.pronunciation_score * 90);
-                              return <circle key={`p${index}`} cx={x} cy={y} r="4" fill="#3b82f6" stroke="white" strokeWidth="1.5"/>;
-                            })}
-                            
-                            {/* Accuracy line */}
-                            <polyline
-                              points={trialDetails.map((detail, index) => {
-                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                                const y = 110 - (detail.accuracy_score * 90);
-                                return `${x},${y}`;
-                              }).join(' ')}
-                              fill="none"
-                              stroke="#8b5cf6"
-                              strokeWidth="2"
-                            />
-                            {/* Accuracy points */}
-                            {trialDetails.map((detail, index) => {
-                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                              const y = 110 - (detail.accuracy_score * 90);
-                              return <circle key={`a${index}`} cx={x} cy={y} r="4" fill="#8b5cf6" stroke="white" strokeWidth="1.5"/>;
-                            })}
-                            
-                            {/* Completeness line */}
-                            <polyline
-                              points={trialDetails.map((detail, index) => {
-                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                                const y = 110 - (detail.completeness_score * 90);
-                                return `${x},${y}`;
-                              }).join(' ')}
-                              fill="none"
-                              stroke="#10b981"
-                              strokeWidth="2"
-                            />
-                            {/* Completeness points */}
-                            {trialDetails.map((detail, index) => {
-                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                              const y = 110 - (detail.completeness_score * 90);
-                              return <circle key={`c${index}`} cx={x} cy={y} r="4" fill="#10b981" stroke="white" strokeWidth="1.5"/>;
-                            })}
-                            
-                            {/* Fluency line */}
-                            <polyline
-                              points={trialDetails.map((detail, index) => {
-                                const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                                const y = 110 - (detail.fluency_score * 90);
-                                return `${x},${y}`;
-                              }).join(' ')}
-                              fill="none"
-                              stroke="#f59e0b"
-                              strokeWidth="2"
-                            />
-                            {/* Fluency points */}
-                            {trialDetails.map((detail, index) => {
-                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                              const y = 110 - (detail.fluency_score * 90);
-                              return <circle key={`f${index}`} cx={x} cy={y} r="4" fill="#f59e0b" stroke="white" strokeWidth="1.5"/>;
-                            })}
-                            
-                            {/* X-axis labels */}
-                            {trialDetails.map((detail, index) => {
-                              const x = 50 + (index * (250 / Math.max(1, trialDetails.length - 1)));
-                              return (
-                                <text key={index} x={x} y="130" fontSize="10" fill="#6b7280" textAnchor="middle">T{index + 1}</text>
-                              );
-                            })}
-                          </svg>
-                        </div>
-                        <div className="chart-legend">
-                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#3b82f6' }}></span> Pronunciation</div>
-                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#8b5cf6' }}></span> Accuracy</div>
-                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#10b981' }}></span> Completeness</div>
-                          <div className="legend-item"><span className="legend-dot" style={{ backgroundColor: '#f59e0b' }}></span> Fluency</div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Average Score */}
-                    {averageScore !== null && (
-                      <div className="average-score-box" style={{ borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' }}>
-                        <div className="avg-row">
-                          <span className="avg-label">Average Score:</span>
-                          <span className="avg-value" style={{ color: averageScore >= passThreshold ? '#27ae60' : '#e67e22' }}>
-                            {(averageScore * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                        <div className="avg-status" style={{ backgroundColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' }}>
-                          {averageScore >= passThreshold ? 'PASSED' : 'BELOW THRESHOLD'}
-                        </div>
-                      </div>
-                    )}
-
                   </div>
                 )}
+              </div>
+            )}
+              </>
+            )}
+
+            {/* Assessment Results - Two Column Layout */}
+            {trialScores.length >= maxTrials && (
+              <div className="assessment-results-centered">
+                <h2 className="assessment-title">Assessment Complete!</h2>
+                
+                <div className="assessment-two-column">
+                  {/* Left: Average Score */}
+                  <div className="assessment-left-column">
+                    <div className="assessment-score-circle" style={{ 
+                      borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22' 
+                    }}>
+                      <div className="assessment-score-value" style={{ 
+                        color: averageScore >= passThreshold ? '#27ae60' : '#e67e22' 
+                      }}>
+                        {(averageScore * 100).toFixed(0)}%
+                      </div>
+                      <div className="assessment-score-label">Average Score</div>
+                    </div>
+                    <div className="assessment-status" style={{ 
+                      color: averageScore >= passThreshold ? '#27ae60' : '#e67e22',
+                      backgroundColor: averageScore >= passThreshold ? '#d4edda' : '#fff3cd',
+                      borderColor: averageScore >= passThreshold ? '#27ae60' : '#e67e22'
+                    }}>
+                      {averageScore >= passThreshold ? '✓ PASSED' : '⚠ BELOW THRESHOLD'}
+                    </div>
+                  </div>
+
+                  {/* Right: Trial Results Summary */}
+                  <div className="assessment-right-column">
+                    <h3 className="trials-section-title">Trial Results Summary</h3>
+                    <div className="trials-grid">
+                    {trialDetails.map((detail, index) => (
+                      <div key={index} className="trial-result-card">
+                        <div className="trial-card-header">
+                          <span className="trial-badge">Trial {index + 1}</span>
+                          <span className="trial-overall-score" style={{ 
+                            color: detail.computed_score >= passThreshold ? '#27ae60' : '#e67e22' 
+                          }}>
+                            {(detail.computed_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        
+                        <div className="trial-transcription">
+                          <span className="transcription-label">You said:</span>
+                          <span className="transcription-value">"{detail.transcription}"</span>
+                        </div>
+
+                        <div className="trial-metrics-detailed">
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#3b82f6' }}>🗣️</span>
+                              <span className="metric-name">Pronunciation</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.pronunciation_score * 100}%`,
+                                    backgroundColor: '#3b82f6'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.pronunciation_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#8b5cf6' }}>🎯</span>
+                              <span className="metric-name">Accuracy</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.accuracy_score * 100}%`,
+                                    backgroundColor: '#8b5cf6'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.accuracy_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#10b981' }}>✓</span>
+                              <span className="metric-name">Completeness</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.completeness_score * 100}%`,
+                                    backgroundColor: '#10b981'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.completeness_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+
+                          <div className="metric-row">
+                            <div className="metric-info">
+                              <span className="metric-icon" style={{ backgroundColor: '#f59e0b' }}>⚡</span>
+                              <span className="metric-name">Fluency</span>
+                            </div>
+                            <div className="metric-bar-wrapper">
+                              <div className="metric-progress-bg">
+                                <div 
+                                  className="metric-progress-fill" 
+                                  style={{ 
+                                    width: `${detail.fluency_score * 100}%`,
+                                    backgroundColor: '#f59e0b'
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="metric-percent">{(detail.fluency_score * 100).toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    </div>
+                  </div>
+                </div>
 
                 {/* Action Buttons */}
                 <div className="action-section">
@@ -764,7 +792,7 @@ function ArticulationExercise({ onLogout }) {
                   )}
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </main>

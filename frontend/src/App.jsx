@@ -63,6 +63,8 @@ function App() {
     // Clear localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Clear gait analysis result
+    localStorage.removeItem('gaitAnalysisResult');
     
     // Sign out from Firebase to clear auth state
     try {

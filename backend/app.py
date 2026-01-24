@@ -670,6 +670,38 @@ def get_health_logs(current_user):
                 'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
             })
 
+        # Fetch Gait Analysis Records
+        gait_progress_collection = db['gaitprogresses']
+        gait_records = list(gait_progress_collection.find({'user_id': user_id}).sort('created_at', -1))
+        for gait in gait_records:
+            # Calculate overall gait score based on metrics (0-100 scale)
+            metrics = gait.get('metrics', {})
+            stability = metrics.get('stability_score', 0) * 100
+            symmetry = metrics.get('gait_symmetry', 0) * 100
+            regularity = metrics.get('step_regularity', 0) * 100
+            overall_gait_score = int((stability + symmetry + regularity) / 3) if any([stability, symmetry, regularity]) else 0
+            
+            logs.append({
+                '_id': str(gait['_id']),
+                'therapyType': 'gait',
+                'level': 1,
+                'overallScore': overall_gait_score,
+                'gaitMetrics': {
+                    'step_count': metrics.get('step_count', 0),
+                    'cadence': metrics.get('cadence', 0),
+                    'velocity': metrics.get('velocity', 0),
+                    'stability_score': stability,
+                    'gait_symmetry': symmetry,
+                    'step_regularity': regularity,
+                    'stride_length': metrics.get('stride_length', 0),
+                    'vertical_oscillation': metrics.get('vertical_oscillation', 0),
+                },
+                'detectedProblems': gait.get('detected_problems', []),
+                'dataQuality': gait.get('data_quality', 'N/A'),
+                'duration': gait.get('analysis_duration', 0),
+                'createdAt': gait.get('created_at', datetime.datetime.utcnow()).isoformat()
+            })
+
         # Sort logs chronologically (newest first)
         logs.sort(key=lambda x: x['createdAt'], reverse=True)
 
@@ -731,6 +763,23 @@ def get_health_summary(current_user):
                 expressive_scores.append(100 if t.get('is_correct') else 0)
         expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
 
+        # Get gait analysis records
+        gait_progress_collection = db['gaitprogresses']
+        gait_records = list(gait_progress_collection.find({'user_id': user_id}))
+        gait_count = len(gait_records)
+        
+        # Calculate average gait score (based on stability, symmetry, regularity)
+        gait_scores = []
+        for gait in gait_records:
+            metrics = gait.get('metrics', {})
+            stability = metrics.get('stability_score', 0) * 100
+            symmetry = metrics.get('gait_symmetry', 0) * 100
+            regularity = metrics.get('step_regularity', 0) * 100
+            if any([stability, symmetry, regularity]):
+                avg_score = (stability + symmetry + regularity) / 3
+                gait_scores.append(avg_score)
+        gait_avg = sum(gait_scores) / len(gait_scores) if gait_scores else 0
+
         summary = {
             'articulation': {
                 'sessions': articulation_count,
@@ -747,6 +796,10 @@ def get_health_summary(current_user):
             'language': {
                 'sessions': receptive_count + expressive_count,
                 'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
+            },
+            'gait': {
+                'sessions': gait_count,
+                'avgScore': round(gait_avg, 1)
             }
         }
 

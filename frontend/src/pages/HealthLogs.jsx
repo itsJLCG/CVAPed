@@ -272,38 +272,113 @@ function HealthLogs({ onLogout }) {
                   </thead>
                   <tbody>
                     {getFilteredLogs().map(log => (
-                      <tr key={log._id}>
-                        <td>
-                          <div className="table-type-icon" style={{ backgroundColor: getTherapyColor(log.therapyType) }}>
-                            {getTherapyIcon(log.therapyType)}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="therapy-cell">
-                            <span className="therapy-type">{log.therapyType.charAt(0).toUpperCase() + log.therapyType.slice(1)}</span>
-                            {log.soundId && <span className="therapy-detail">Sound: {log.soundId}</span>}
-                            {log.therapyType === 'articulation' && log.overallScore > 0 && (
-                              <span className="therapy-detail">Trial recording</span>
-                            )}
-                            {(log.therapyType === 'receptive' || log.therapyType === 'expressive') && (
-                              <span className="therapy-detail">
-                                {log.overallScore === 100 ? '✓' : '✗'} {log.overallScore === 100 ? 'Correct' : 'Incorrect'}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <span className="level-badge">Level {log.level || 1}</span>
-                        </td>
-                        <td>
-                          <div className="score-cell" style={{ color: getScoreColor(log.overallScore) }}>
-                            <span className="score-number">{log.overallScore}%</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="date-cell">{formatDate(log.createdAt)}</span>
-                        </td>
-                      </tr>
+                      <React.Fragment key={log._id}>
+                        <tr className={log.therapyType === 'gait' ? 'gait-row' : ''}>
+                          <td>
+                            <div className="table-type-icon" style={{ backgroundColor: getTherapyColor(log.therapyType) }}>
+                              {getTherapyIcon(log.therapyType)}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="therapy-cell">
+                              <span className="therapy-type">{log.therapyType.charAt(0).toUpperCase() + log.therapyType.slice(1)}</span>
+                              {log.soundId && <span className="therapy-detail">Sound: {log.soundId}</span>}
+                              {log.therapyType === 'articulation' && log.overallScore > 0 && (
+                                <span className="therapy-detail">Trial recording</span>
+                              )}
+                              {(log.therapyType === 'receptive' || log.therapyType === 'expressive') && (
+                                <span className="therapy-detail">
+                                  {log.overallScore === 100 ? '✓' : '✗'} {log.overallScore === 100 ? 'Correct' : 'Incorrect'}
+                                </span>
+                              )}
+                              {log.therapyType === 'gait' && log.gaitMetrics && (
+                                <span className="therapy-detail">
+                                  {log.gaitMetrics.step_count} steps · {log.duration?.toFixed(0)}s duration
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <span className="level-badge">Level {log.level || 1}</span>
+                          </td>
+                          <td>
+                            <div className="score-cell" style={{ color: getScoreColor(log.overallScore) }}>
+                              <span className="score-number">{log.overallScore}%</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="date-cell">{formatDate(log.createdAt)}</span>
+                          </td>
+                        </tr>
+                        {/* Expandable Gait Details Row */}
+                        {log.therapyType === 'gait' && log.gaitMetrics && (
+                          <tr className="gait-details-row">
+                            <td colSpan="5">
+                              <div className="gait-details-container">
+                                <div className="gait-metrics-grid">
+                                  <div className="gait-metric-item">
+                                    <i className="fas fa-shoe-prints"></i>
+                                    <div>
+                                      <div className="metric-label">Steps</div>
+                                      <div className="metric-value">{log.gaitMetrics.step_count}</div>
+                                    </div>
+                                  </div>
+                                  <div className="gait-metric-item">
+                                    <i className="fas fa-tachometer-alt"></i>
+                                    <div>
+                                      <div className="metric-label">Cadence</div>
+                                      <div className="metric-value">{log.gaitMetrics.cadence?.toFixed(1)} steps/min</div>
+                                    </div>
+                                  </div>
+                                  <div className="gait-metric-item">
+                                    <i className="fas fa-walking"></i>
+                                    <div>
+                                      <div className="metric-label">Speed</div>
+                                      <div className="metric-value">{log.gaitMetrics.velocity?.toFixed(2)} m/s</div>
+                                    </div>
+                                  </div>
+                                  <div className="gait-metric-item">
+                                    <i className="fas fa-balance-scale"></i>
+                                    <div>
+                                      <div className="metric-label">Symmetry</div>
+                                      <div className="metric-value">{log.gaitMetrics.gait_symmetry?.toFixed(0)}%</div>
+                                    </div>
+                                  </div>
+                                  <div className="gait-metric-item">
+                                    <i className="fas fa-shield-alt"></i>
+                                    <div>
+                                      <div className="metric-label">Stability</div>
+                                      <div className="metric-value">{log.gaitMetrics.stability_score?.toFixed(0)}%</div>
+                                    </div>
+                                  </div>
+                                  <div className="gait-metric-item">
+                                    <i className="fas fa-heartbeat"></i>
+                                    <div>
+                                      <div className="metric-label">Regularity</div>
+                                      <div className="metric-value">{log.gaitMetrics.step_regularity?.toFixed(0)}%</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                {log.detectedProblems && log.detectedProblems.length > 0 && (
+                                  <div className="gait-problems-summary">
+                                    <div className="problems-header">
+                                      <i className="fas fa-exclamation-triangle"></i>
+                                      <strong>Detected Issues ({log.detectedProblems.length})</strong>
+                                    </div>
+                                    <div className="problems-list">
+                                      {log.detectedProblems.map((problem, idx) => (
+                                        <div key={idx} className={`problem-badge ${problem.severity}`}>
+                                          {problem.problem.replace(/_/g, ' ')}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

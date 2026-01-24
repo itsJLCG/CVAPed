@@ -216,6 +216,7 @@ function GaitRecording({ onLogout }) {
     setStepCount(0);
     setError(null);
     setAnalysisResult(null);
+    localStorage.removeItem('gaitAnalysisResult'); // Clear previous analysis from localStorage
     setLeftFootActive(false);
     setRightFootActive(false);
     

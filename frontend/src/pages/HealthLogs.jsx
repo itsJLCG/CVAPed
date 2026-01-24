@@ -16,6 +16,7 @@ function HealthLogs({ onLogout }) {
   const [receptivePrediction, setReceptivePrediction] = useState(null);
   const [expressivePrediction, setExpressivePrediction] = useState(null);
   const [overallSpeechPrediction, setOverallSpeechPrediction] = useState(null);
+  const [expandedGaitRows, setExpandedGaitRows] = useState({});
 
   useEffect(() => {
     fetchHealthData();
@@ -145,6 +146,13 @@ function HealthLogs({ onLogout }) {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const toggleGaitDetails = (logId) => {
+    setExpandedGaitRows(prev => ({
+      ...prev,
+      [logId]: !prev[logId]
+    }));
   };
 
   if (loading) {
@@ -307,11 +315,22 @@ function HealthLogs({ onLogout }) {
                             </div>
                           </td>
                           <td>
-                            <span className="date-cell">{formatDate(log.createdAt)}</span>
+                            <div className="date-cell-container">
+                              <span className="date-cell">{formatDate(log.createdAt)}</span>
+                              {log.therapyType === 'gait' && log.gaitMetrics && (
+                                <button 
+                                  className={`gait-dropdown-btn ${expandedGaitRows[log._id] ? 'expanded' : ''}`}
+                                  onClick={() => toggleGaitDetails(log._id)}
+                                  title={expandedGaitRows[log._id] ? 'Hide details' : 'Show details'}
+                                >
+                                  <i className={`fas fa-chevron-${expandedGaitRows[log._id] ? 'up' : 'down'}`}></i>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                         {/* Expandable Gait Details Row */}
-                        {log.therapyType === 'gait' && log.gaitMetrics && (
+                        {log.therapyType === 'gait' && log.gaitMetrics && expandedGaitRows[log._id] && (
                           <tr className="gait-details-row">
                             <td colSpan="5">
                               <div className="gait-details-container">

@@ -238,6 +238,12 @@ function GaitRecording({ onLogout }) {
     setSensorStatus('connected');
     clearInterval(timerRef.current);
     
+    // Check if recording is less than 30 seconds
+    if (recordingTime < 30) {
+      setError(`Recording too short. You recorded for ${recordingTime} seconds. Please record for at least 30 seconds for accurate analysis.`);
+      return;
+    }
+    
     // Check if we have enough data
     const totalDataPoints = sensorBuffer.current.LEFT_WAIST.length;
     console.log('\n' + '='.repeat(60));
@@ -256,7 +262,7 @@ function GaitRecording({ onLogout }) {
     console.log('='.repeat(60) + '\n');
     
     if (totalDataPoints < 50) {
-      setError(`Recording too short. Only ${totalDataPoints} data points collected. Please record for at least 10 seconds.`);
+      setError(`Not enough sensor data. Only ${totalDataPoints} data points collected. Make sure sensors are properly connected and record for at least 30 seconds.`);
       return;
     }
     
@@ -423,12 +429,14 @@ function GaitRecording({ onLogout }) {
                 <div className="stats-grid">
                   {/* Recording Time */}
                   <div className="stat-box">
-                    <div className="stat-icon time-icon">
+                    <div className={`stat-icon time-icon ${recordingTime >= 30 ? 'time-ready' : ''}`}>
                       <i className="fas fa-clock"></i>
                     </div>
                     <div className="stat-content">
                       <div className="stat-value">{formatTime(recordingTime)}</div>
-                      <div className="stat-label">Recording Time</div>
+                      <div className="stat-label">
+                        {recordingTime < 30 ? 'Recording Time' : 'Ready to Analyze!'}
+                      </div>
                     </div>
                   </div>
 
@@ -483,7 +491,9 @@ function GaitRecording({ onLogout }) {
                       </button>
                       <p className="control-hint recording">
                         <i className="fas fa-circle recording-dot"></i>
-                        Recording in progress - Click to stop and analyze
+                        {recordingTime < 30 
+                          ? `Recording... ${30 - recordingTime}s remaining (minimum 30s)`
+                          : 'Ready! Click to stop and analyze'}
                       </p>
                     </>
                   )}

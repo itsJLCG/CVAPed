@@ -12,6 +12,8 @@ function GaitRecording({ onLogout }) {
   const [recordingTime, setRecordingTime] = useState(0);
   const [sensorStatus, setSensorStatus] = useState('disconnected'); // 'disconnected', 'connected', 'recording'
   const [stepCount, setStepCount] = useState(0);
+  const [leftFootActive, setLeftFootActive] = useState(false);
+  const [rightFootActive, setRightFootActive] = useState(false);
   // Load analysis result from localStorage on mount
   const [analysisResult, setAnalysisResult] = useState(() => {
     const saved = localStorage.getItem('gaitAnalysisResult');
@@ -152,6 +154,8 @@ function GaitRecording({ onLogout }) {
         
         if (voltageDrop > STEP_THRESHOLD) {
           setStepCount(prev => prev + 1);
+          setLeftFootActive(true);
+          setTimeout(() => setLeftFootActive(false), 300); // Visual feedback for 300ms
           console.log(`👣 LEFT STEP #${stepCount + 1}! ${lastLeftHeelPressure.current.toFixed(2)}V → ${heel.toFixed(2)}V (Δ${voltageDrop.toFixed(2)}V)`);
           lastLeftHeelPressure.current = heel;
         } else if (heel > lastLeftHeelPressure.current + 0.15) {
@@ -179,6 +183,8 @@ function GaitRecording({ onLogout }) {
         
         if (voltageDrop > STEP_THRESHOLD) {
           setStepCount(prev => prev + 1);
+          setRightFootActive(true);
+          setTimeout(() => setRightFootActive(false), 300); // Visual feedback for 300ms
           console.log(`👣 RIGHT STEP #${stepCount + 1}! ${lastRightHeelPressure.current.toFixed(2)}V → ${heel.toFixed(2)}V (Δ${voltageDrop.toFixed(2)}V)`);
           lastRightHeelPressure.current = heel;
         } else if (heel > lastRightHeelPressure.current + 0.15) {
@@ -210,6 +216,8 @@ function GaitRecording({ onLogout }) {
     setStepCount(0);
     setError(null);
     setAnalysisResult(null);
+    setLeftFootActive(false);
+    setRightFootActive(false);
     
     // Reset FSR references to null so first reading initializes them
     lastLeftHeelPressure.current = null;
@@ -402,62 +410,83 @@ function GaitRecording({ onLogout }) {
           )}
 
           {/* Recording Controls - Only show when connected */}
-          {sensorStatus !== 'disconnected' && (
-            <div className="recording-controls-grid">
-              <div className="recording-info-card">
-                <h3 className="card-title">
+          {sensorStatus !== 'disconnected' && !analysisResult && (
+            <div className="recording-controls-enhanced">
+              {/* Live Statistics Card */}
+              <div className="stats-card">
+                <div className="stats-header">
                   <i className="fas fa-chart-line"></i>
-                  Live Statistics
-                </h3>
-                <div className="info-items">
-                  <div className="info-item">
-                    <div className="info-icon">
+                  <h3>Live Gait Statistics</h3>
+                </div>
+                
+                <div className="stats-grid">
+                  {/* Recording Time */}
+                  <div className="stat-box">
+                    <div className="stat-icon time-icon">
                       <i className="fas fa-clock"></i>
                     </div>
-                    <div className="info-content">
-                      <span className="label">Recording Time</span>
-                      <span className="value">{formatTime(recordingTime)}</span>
+                    <div className="stat-content">
+                      <div className="stat-value">{formatTime(recordingTime)}</div>
+                      <div className="stat-label">Recording Time</div>
                     </div>
                   </div>
-                  <div className="info-item">
-                    <div className="info-icon">
-                      <i className="fas fa-shoe-prints"></i>
+
+                  {/* Step Count with Footprints */}
+                  <div className="stat-box step-count-box">
+                    <div className="footprints-container">
+                      <div className={`footprint left-foot ${leftFootActive ? 'active' : ''}`}>
+                        <i className="fas fa-shoe-prints"></i>
+                        <span className="foot-label">L</span>
+                      </div>
+                      <div className={`footprint right-foot ${rightFootActive ? 'active' : ''}`}>
+                        <i className="fas fa-shoe-prints"></i>
+                        <span className="foot-label">R</span>
+                      </div>
                     </div>
-                    <div className="info-content">
-                      <span className="label">Steps Detected</span>
-                      <span className="value">{stepCount}</span>
+                    <div className="stat-content">
+                      <div className="stat-value large">{stepCount}</div>
+                      <div className="stat-label">Steps Detected</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="control-panel">
-                <h3 className="card-title">
+              {/* Control Panel */}
+              <div className="control-card">
+                <div className="control-header">
                   <i className="fas fa-sliders-h"></i>
-                  Recording Control
-                </h3>
-                <div className="control-buttons">
+                  <h3>Recording Control</h3>
+                </div>
+                
+                <div className="control-body">
                   {!isRecording ? (
-                    <button 
-                      className="start-btn"
-                      onClick={startRecording}
-                      disabled={sensorStatus !== 'connected' || isAnalyzing}
-                    >
-                      <i className="fas fa-play"></i>
-                      Start Recording
-                    </button>
+                    <>
+                      <button 
+                        className="control-btn start-btn"
+                        onClick={startRecording}
+                        disabled={sensorStatus !== 'connected' || isAnalyzing}
+                      >
+                        <i className="fas fa-play"></i>
+                        <span>Start Recording</span>
+                      </button>
+                      <p className="control-hint">
+                        <i className="fas fa-info-circle"></i>
+                        Click to begin gait analysis recording
+                      </p>
+                    </>
                   ) : (
-                    <button className="stop-btn" onClick={stopRecording}>
-                      <i className="fas fa-stop"></i>
-                      Stop & Analyze
-                    </button>
+                    <>
+                      <button className="control-btn stop-btn" onClick={stopRecording}>
+                        <i className="fas fa-stop"></i>
+                        <span>Stop & Analyze</span>
+                      </button>
+                      <p className="control-hint recording">
+                        <i className="fas fa-circle recording-dot"></i>
+                        Recording in progress - Click to stop and analyze
+                      </p>
+                    </>
                   )}
                 </div>
-                <p className="control-hint">
-                  {!isRecording 
-                    ? 'Click to begin gait analysis recording'
-                    : 'Recording in progress - Click to stop and analyze'}
-                </p>
               </div>
             </div>
           )}

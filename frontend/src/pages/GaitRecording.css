@@ -1600,6 +1600,7 @@
   font-size: 2rem;
   color: #adb5bd;
   transition: all 0.3s ease;
+  transform: rotate(-90deg); /* Rotate to face upward */
 }
 
 .foot-label {
@@ -1620,8 +1621,9 @@
   transition: all 0.3s ease;
 }
 
+/* Remove the left-foot flip, keep both facing upward */
 .footprint.left-foot i {
-  transform: scaleX(-1);
+  transform: rotate(-90deg); /* Same upward rotation for left foot */
 }
 
 /* Active Footprint Animation */
@@ -1635,11 +1637,11 @@
 
 .footprint.active i {
   color: white;
-  transform: scale(1.1);
+  transform: rotate(-90deg) scale(1.1); /* Maintain upward rotation when active */
 }
 
 .footprint.left-foot.active i {
-  transform: scaleX(-1) scale(1.1);
+  transform: rotate(-90deg) scale(1.1); /* Same upward rotation when active */
 }
 
 .footprint.active .foot-label {

@@ -93,15 +93,29 @@ function Prescription({ onLogout }) {
         <Header onLogout={onLogout} />
         <main className="blank-page-content">
           <div className="prescription-container">
-            <div className="coming-soon-state">
-              <div className="coming-soon-icon">
-                <i className="fas fa-dumbbell"></i>
-              </div>
+            <div className="coming-soon-message">
+              <div className="coming-soon-icon">🚧</div>
               <h2>Physical Therapy Prescription</h2>
-              <p className="coming-soon-text">Coming Soon</p>
-              <p className="coming-soon-description">
-                AI-powered prescriptive therapy recommendations for physical rehabilitation are currently under development.
+              <h3>Coming Soon</h3>
+              <p>AI-powered prescriptive therapy recommendations for physical rehabilitation are currently under development.</p>
+              <p className="coming-soon-detail">
+                This feature will provide personalized exercise plans, therapy prioritization, 
+                and intelligent scheduling based on your gait analysis and mobility assessments.
               </p>
+              <div className="coming-soon-features">
+                <div className="feature-item">
+                  <i className="fas fa-dumbbell"></i>
+                  <span>Personalized Exercise Plans</span>
+                </div>
+                <div className="feature-item">
+                  <i className="fas fa-clipboard-list"></i>
+                  <span>Therapy Prioritization</span>
+                </div>
+                <div className="feature-item">
+                  <i className="fas fa-calendar-alt"></i>
+                  <span>Smart Scheduling</span>
+                </div>
+              </div>
             </div>
           </div>
         </main>

@@ -481,6 +481,19 @@ export const healthService = {
       console.log('Overall speech prediction not available');
       return null;
     }
+  },
+
+  // Gait analysis endpoints
+  getGaitHistory: async (limit = 50) => {
+    try {
+      const response = await api.get('/hardware/gait/history', { 
+        params: { limit } 
+      });
+      return response.data;
+    } catch (error) {
+      console.log('Gait history not available');
+      return null;
+    }
   }
 };
 

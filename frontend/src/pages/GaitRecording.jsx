@@ -12,7 +12,11 @@ function GaitRecording({ onLogout }) {
   const [recordingTime, setRecordingTime] = useState(0);
   const [sensorStatus, setSensorStatus] = useState('disconnected'); // 'disconnected', 'connected', 'recording'
   const [stepCount, setStepCount] = useState(0);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  // Load analysis result from localStorage on mount
+  const [analysisResult, setAnalysisResult] = useState(() => {
+    const saved = localStorage.getItem('gaitAnalysisResult');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [error, setError] = useState(null);
   
   // Data buffers
@@ -273,7 +277,9 @@ function GaitRecording({ onLogout }) {
       if (result.success) {
         console.log('✅ Gait analysis successful!');
         console.log('📍 Saved to MongoDB with ID:', result.gait_id);
+        // Save to both state and localStorage
         setAnalysisResult(result.data);
+        localStorage.setItem('gaitAnalysisResult', JSON.stringify(result.data));
         setError(null);
       } else {
         console.error('❌ Analysis failed:', result.message);
@@ -805,7 +811,9 @@ function GaitRecording({ onLogout }) {
                     Object.keys(fsrBuffer.current).forEach(key => {
                       fsrBuffer.current[key] = [];
                     });
+                    // Clear analysis result from state and localStorage
                     setAnalysisResult(null);
+                    localStorage.removeItem('gaitAnalysisResult');
                     setRecordingTime(0);
                     setStepCount(0);
                   }}

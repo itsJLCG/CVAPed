@@ -13,6 +13,7 @@ import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
 import GaitAnalysis from './pages/GaitAnalysis';
 import GaitRecording from './pages/GaitRecording';
+import ExercisePlans from './pages/ExercisePlans';
 import SpeechTherapy from './pages/SpeechTherapy';
 import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
@@ -160,6 +161,12 @@ function App() {
               path="/gait-recording" 
               element={
                 isAuthenticated ? <GaitRecording onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/exercise-plans" 
+              element={
+                isAuthenticated ? <ExercisePlans onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

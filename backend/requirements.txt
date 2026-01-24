@@ -17,3 +17,4 @@ numpy
 pandas
 xgboost
 scikit-learn
+matplotlib==3.8.2

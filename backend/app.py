@@ -2815,7 +2815,7 @@ latest_wearable_data = {}
 def wearable_data():
     """
     Endpoint for wearable gait analysis sensor data
-    POST: Receive sensor data from hardware device
+    POST: Receive sensor data from hardware device (saves to DB)
     GET: Retrieve latest sensor data for web interface
     """
     global latest_wearable_data
@@ -2829,6 +2829,14 @@ def wearable_data():
             print(f"WEARABLE DATA RECEIVED AT: {datetime.datetime.now().strftime('%H:%M:%S')}")
             print(latest_wearable_data)
             print("="*30 + "\n")
+            
+            # NOTE: NOT saving to MongoDB to prevent database from filling up
+            # Only analyzed gait sessions are saved (in gaitprogresses collection)
+            # If you need raw sensor logs, uncomment below:
+            # wearable_data_collection = db['wearable_sensor_data']
+            # sensor_document = {'timestamp': utc_now(), 'data': latest_wearable_data}
+            # wearable_data_collection.insert_one(sensor_document)
+            
             return jsonify({"status": "ok"}), 200
         except Exception as e:
             print(f"Error processing wearable data: {str(e)}")
@@ -2836,6 +2844,133 @@ def wearable_data():
     
     # GET request - return latest data to web interface
     return jsonify(latest_wearable_data), 200
+
+# ============================================================
+# HARDWARE GAIT ANALYSIS API
+# ============================================================
+
+@app.route('/api/hardware/gait/analyze', methods=['POST'])
+@token_required
+def hardware_gait_analyze(current_user):
+    """
+    Analyze gait data from 6 IMU hardware sensors + FSR sensors
+    Returns same structure as mobile gait analysis for MongoDB compatibility
+    """
+    try:
+        from hardware_gait_processor import HardwareGaitProcessor
+        
+        print("\n" + "🎯" + "="*60)
+        print("GAIT ANALYSIS REQUEST RECEIVED")
+        print("="*60)
+        
+        data = request.json
+        sensor_data = data.get('sensors', {})
+        fsr_data = data.get('fsr', {})
+        
+        # Log received data sizes
+        for sensor, readings in sensor_data.items():
+            print(f"  {sensor}: {len(readings)} data points")
+        
+        # Validate required sensors
+        required_sensors = ['LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE', 'LEFT_TOE', 'RIGHT_TOE']
+        missing_sensors = [s for s in required_sensors if s not in sensor_data or not sensor_data[s]]
+        
+        if len(missing_sensors) > 2:  # Allow some sensors to be missing
+            print(f"❌ Too many sensors missing: {missing_sensors}")
+            return jsonify({
+                'success': False,
+                'message': f'Too many sensors missing: {missing_sensors}'
+            }), 400
+        
+        print(f"✅ Sensor validation passed. Processing gait analysis...")
+        
+        # Process gait data
+        processor = HardwareGaitProcessor()
+        result = processor.analyze(
+            sensor_data=sensor_data,
+            fsr_data=fsr_data,
+            user_id=str(current_user['_id'])
+        )
+        
+        if not result['success']:
+            print(f"❌ Analysis failed: {result.get('error')}")
+            return jsonify(result), 400
+        
+        print(f"✅ Analysis complete!")
+        print(f"  Steps: {result['data']['metrics']['step_count']}")
+        print(f"  Cadence: {result['data']['metrics']['cadence']} steps/min")
+        print(f"  Quality: {result['data']['data_quality']}")
+        
+        # Save to MongoDB (same collection as mobile uses: gaitprogresses)
+        gait_progress_collection = db['gaitprogresses']
+        
+        # Prepare document matching mobile's GaitProgress schema
+        gait_document = {
+            'user_id': str(current_user['_id']),
+            'session_id': result['data']['session_id'],
+            'metrics': result['data']['metrics'],
+            'sensors_used': result['data']['sensors_used'],
+            'gait_phases': result['data']['gait_phases'],
+            'analysis_duration': result['data']['analysis_duration'],
+            'data_quality': result['data']['data_quality'],
+            'detected_problems': result['data']['detected_problems'],
+            'problem_summary': result['data']['problem_summary'],
+            'created_at': utc_now(),
+            'updated_at': utc_now()
+        }
+        
+        # Insert into database
+        insert_result = gait_progress_collection.insert_one(gait_document)
+        
+        print(f"💾 Saved to MongoDB collection: gaitprogresses")
+        print(f"   Document ID: {insert_result.inserted_id}")
+        print("="*60 + "\n")
+        
+        # Return success with MongoDB ID
+        return jsonify({
+            'success': True,
+            'message': 'Hardware gait analysis completed',
+            'data': result['data'],
+            'gait_id': str(insert_result.inserted_id)
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ GAIT ANALYSIS ERROR: {str(e)}")
+        print("="*60 + "\n")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Hardware gait analysis failed'
+        }), 500
+
+
+@app.route('/api/hardware/gait/history', methods=['GET'])
+@token_required
+def hardware_gait_history(current_user):
+    """Get gait analysis history for current user (includes both mobile and hardware)"""
+    try:
+        gait_progress_collection = db['gaitprogresses']
+        
+        # Get all gait records for this user
+        history = list(gait_progress_collection.find(
+            {'user_id': str(current_user['_id'])}
+        ).sort('created_at', -1).limit(50))
+        
+        # Convert ObjectId to string
+        for record in history:
+            record['_id'] = str(record['_id'])
+        
+        return jsonify({
+            'success': True,
+            'data': history
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

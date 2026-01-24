@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "292803901437",
+    "project_id": "cvaped-mobile",
+    "storage_bucket": "cvaped-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:292803901437:android:af8a8c8637cb12f6178b94",
+        "android_client_info": {
+          "package_name": "com.cvacare.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "292803901437-v14jaibe922qvfh9a2t24v626fia5g6k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cvacare.mobile",
+            "certificate_hash": "ac5be5efebd03761ff4e77b4c534d15d40373158"
+          }
+        },
+        {
+          "client_id": "292803901437-fk6kg98k8gj8e61k39osqlvf03cq3aer.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAPwp8Sb8n23ob0Cats9KBs8brn4ok9deg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "292803901437-fk6kg98k8gj8e61k39osqlvf03cq3aer.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

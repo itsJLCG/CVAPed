@@ -10,7 +10,7 @@ import soleRightImage from '../assets/sole-right.png';
 
 function GaitAnalysis({ onLogout }) {
   const navigate = useNavigate();
-  const showToast = useToast();
+  const { showToast } = useToast();
   const { selectCategory } = useTherapyCategory();
 
   // Ensure the category is set to 'physical' when this page is loaded

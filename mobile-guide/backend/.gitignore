@@ -1,0 +1,19 @@
+node_modules/
+.env
+*.log
+.DS_Store
+
+# Python Virtual Environments (NEVER commit these!)
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Firebase Admin Service Account (NEVER commit this!)
+serviceAccountKey.json
+**/serviceAccountKey.json
+firebase-adminsdk-*.json

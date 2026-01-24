@@ -765,52 +765,49 @@ function GaitRecording({ onLogout }) {
                     </div>
                   )}
 
-                  <div className="problems-list">
+                  <div className="problems-grid">
                     {analysisResult.detected_problems.map((problem, index) => (
-                      <div key={index} className={`problem-card ${problem.severity}`}>
-                        <div className="problem-header-row">
-                          <div className="problem-title">
-                            <span className={`severity-badge ${problem.severity}`}>
-                              {problem.severity === 'severe' ? (
-                                <i className="fas fa-exclamation-circle"></i>
-                              ) : (
-                                <i className="fas fa-info-circle"></i>
-                              )}
+                      <div key={index} className={`problem-card-compact ${problem.severity}`}>
+                        <div className="problem-card-header">
+                          <div className="problem-icon">
+                            {problem.severity === 'severe' ? (
+                              <i className="fas fa-exclamation-circle"></i>
+                            ) : (
+                              <i className="fas fa-info-circle"></i>
+                            )}
+                          </div>
+                          <div className="problem-info">
+                            <h4 className="problem-name">{problem.problem.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
+                            <span className={`severity-tag ${problem.severity}`}>
                               {problem.severity.toUpperCase()}
                             </span>
-                            <h4>{problem.problem.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
                           </div>
-                          <span className="problem-category">{problem.category}</span>
                         </div>
 
-                        <div className="problem-metrics">
-                          <div className="metric-item">
-                            <span className="label">Current Value:</span>
-                            <span className="value">{problem.current_value}</span>
+                        <div className="problem-values">
+                          <div className="value-row">
+                            <span className="value-label">Current:</span>
+                            <span className="value-data">{problem.current_value}</span>
                           </div>
-                          <div className="metric-item">
-                            <span className="label">Normal Range:</span>
-                            <span className="value">{problem.normal_range}</span>
+                          <div className="value-row">
+                            <span className="value-label">Normal:</span>
+                            <span className="value-data">{problem.normal_range}</span>
                           </div>
-                          {problem.percentile && (
-                            <div className="metric-item">
-                              <span className="label">Your Percentile:</span>
-                              <span className="value">{problem.percentile}th</span>
-                            </div>
-                          )}
                         </div>
 
-                        <div className="problem-description">
-                          <p><strong>Description:</strong> {problem.description}</p>
-                          <p><strong>Impact:</strong> {problem.impact}</p>
+                        <div className="problem-brief">
+                          <p>{problem.description}</p>
                         </div>
 
-                        <div className="recommendations">
-                          <strong><i className="fas fa-heartbeat"></i> Recommended Exercises:</strong>
+                        <div className="problem-recommendations-compact">
+                          <strong>Recommended:</strong>
                           <ul>
-                            {problem.recommendations.map((rec, idx) => (
+                            {problem.recommendations.slice(0, 2).map((rec, idx) => (
                               <li key={idx}>{rec}</li>
                             ))}
+                            {problem.recommendations.length > 2 && (
+                              <li className="more-exercises">+{problem.recommendations.length - 2} more exercises</li>
+                            )}
                           </ul>
                         </div>
                       </div>

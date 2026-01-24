@@ -586,6 +586,18 @@
   .date-cell {
     font-size: 0.8rem;
   }
+  
+  .date-cell-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .gait-dropdown-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 0.8rem;
+  }
 }
 
 /* Gait Analysis Rows */
@@ -602,12 +614,64 @@
   padding: 0 !important;
 }
 
+/* Date Cell with Dropdown Button */
+.date-cell-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.gait-dropdown-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid #4CAF50;
+  background: white;
+  color: #4CAF50;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.gait-dropdown-btn:hover {
+  background: #4CAF50;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.gait-dropdown-btn.expanded {
+  background: #4CAF50;
+  color: white;
+  transform: rotate(180deg);
+}
+
+.gait-dropdown-btn i {
+  transition: transform 0.3s ease;
+}
+
 .gait-details-container {
   padding: 20px;
   background: white;
   border-radius: 8px;
   margin: 10px;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .gait-metrics-grid {

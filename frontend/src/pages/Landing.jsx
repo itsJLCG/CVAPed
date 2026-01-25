@@ -213,7 +213,11 @@ function Landing() {
             </div>
 
             <div className="team-card medical">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('mamCristine') ? (
+                <img src={images.mamCristine} alt="Ms. Christine Joy R. Cabardo" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Ms. Christine Joy R. Cabardo</h3>
               <p className="team-credentials">PTRP</p>
               <p className="team-role">Physical Medicine and Rehabilitation Unit</p>
@@ -222,7 +226,11 @@ function Landing() {
 
             {/* Thesis Adviser */}
             <div className="team-card special">
-              <div className="team-image-placeholder">👤</div>
+              {hasImage('sirNestor') ? (
+                <img src={images.sirNestor} alt="Sir. Nestor R. Valdez" className="team-image" />
+              ) : (
+                <div className="team-image-placeholder">👤</div>
+              )}
               <h3>Sir. Nestor R. Valdez</h3>
               <p className="team-role">Thesis Adviser</p>
             </div>

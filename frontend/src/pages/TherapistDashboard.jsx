@@ -100,6 +100,13 @@ function TherapistDashboard({ onLogout }) {
   const [overviewStats, setOverviewStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
+  // Physical therapy gait analyses state
+  const [gaitAnalyses, setGaitAnalyses] = useState([]);
+  const [loadingPhysical, setLoadingPhysical] = useState(false);
+  const [expandedGaitRows, setExpandedGaitRows] = useState({});
+  const [currentGaitPage, setCurrentGaitPage] = useState(1);
+  const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
+
   // Load overview statistics
   const loadOverviewStats = async () => {
     setLoadingStats(true);
@@ -692,22 +699,42 @@ function TherapistDashboard({ onLogout }) {
   };
 
   const loadPhysical = async () => {
-    setLoading(true);
+    setLoadingPhysical(true);
     try {
-      // Therapists don't have access to patient data
-      setTherapyData([
-        { id: 'info', label: 'Info', value: 'Exercise management coming soon' }
-      ]);
+      const response = await therapistService.getPhysicalPatients();
+      if (response.success) {
+        setGaitAnalyses(response.data || []);
+      }
     } catch (e) {
-      console.error('Failed to load physical', e);
-      setTherapyData([]);
+      console.error('Failed to load gait analyses', e);
+      setGaitAnalyses([]);
     } finally {
-      setLoading(false);
+      setLoadingPhysical(false);
     }
   };
 
-  const formatDate = (iso) => {
-    try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+  const toggleGaitDetails = (id) => {
+    setExpandedGaitRows(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return '#4CAF50';
+    if (score >= 60) return '#FF9800';
+    return '#F44336';
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const filtered = therapyData.filter(item => {
@@ -1392,9 +1419,299 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'physical' && (
             <div className="physical-section">
-              <div className="coming-soon-message">
-                <h2>Coming Soon</h2>
-              </div>
+              {loadingPhysical ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading gait analyses...</p>
+                </div>
+              ) : gaitAnalyses.length === 0 ? (
+                <div className="no-exercises">
+                  <div className="no-exercises-icon">🚶</div>
+                  <p className="no-exercises-text">No gait analyses found</p>
+                  <p className="no-exercises-hint">Gait analyses will appear here after patients perform them</p>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group">
+                      <div className="search-container">
+                        <input
+                          type="text"
+                          placeholder="Search by patient name or email..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="search-input"
+                        />
+                      </div>
+                      <div className="pagination-controls">
+                        <label className="entries-label">
+                          Show:
+                          <select 
+                            value={gaitEntriesPerPage} 
+                            onChange={(e) => {
+                              setGaitEntriesPerPage(Number(e.target.value));
+                              setCurrentGaitPage(1);
+                            }}
+                            className="entries-select"
+                          >
+                            <option value={5}>5</option>
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                          entries
+                        </label>
+                      </div>
+                      <div className="stats-summary">
+                        <span className="stat-item">
+                          <strong>{gaitAnalyses.length}</strong> Total Analyses
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="table-wrapper">
+                    <table className="logs-table gait-table">
+                      <thead>
+                        <tr>
+                          <th>Patient</th>
+                          <th>Email</th>
+                          <th>Problems</th>
+                          <th>Score</th>
+                          <th>Severity</th>
+                          <th>Date & Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const filteredAnalyses = gaitAnalyses.filter(analysis => 
+                            !searchTerm || 
+                            analysis.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            analysis.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+                          );
+                          const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage;
+                          const currentEntries = filteredAnalyses.slice(indexOfFirstEntry, indexOfLastEntry);
+                          return currentEntries.map(analysis => (
+                            <React.Fragment key={analysis.id}>
+                              <tr className="gait-row">
+                                <td>
+                                  <div className="patient-cell">
+                                    <div className="patient-avatar-small">
+                                      {analysis.user_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                    </div>
+                                    <span className="patient-name-text">{analysis.user_name}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="email-text">{analysis.user_email}</span>
+                                </td>
+                                <td>
+                                  <div className="problems-cell">
+                                    <span className="problems-count">{analysis.problems_count} issues</span>
+                                    {analysis.problems.length > 0 && (
+                                      <div className="problems-preview">
+                                        {analysis.problems.slice(0, 2).map((problem, idx) => (
+                                          <span key={idx} className="problem-badge">{problem.replace(/_/g, ' ')}</span>
+                                        ))}
+                                        {analysis.problems.length > 2 && (
+                                          <span className="problem-more">+{analysis.problems.length - 2}</span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <div className="score-cell" style={{ color: getScoreColor(analysis.overall_score) }}>
+                                    <span className="score-number">{analysis.overall_score}%</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`severity-badge severity-${analysis.severity}`}>
+                                    {analysis.severity}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="date-cell-container">
+                                    <span className="date-cell">{formatDate(analysis.created_at)}</span>
+                                    {analysis.gait_metrics && (
+                                      <button 
+                                        className={`gait-dropdown-btn ${expandedGaitRows[analysis.id] ? 'expanded' : ''}`}
+                                        onClick={() => toggleGaitDetails(analysis.id)}
+                                        title={expandedGaitRows[analysis.id] ? 'Hide details' : 'Show details'}
+                                      >
+                                        ▼
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                              {/* Expandable Gait Details Row */}
+                              {expandedGaitRows[analysis.id] && (
+                                <tr className="gait-details-row">
+                                  <td colSpan="6">
+                                    <div className="gait-details-container">
+                                      <div className="gait-metrics-grid">
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">👣</span>
+                                          <div>
+                                            <div className="metric-label">Steps</div>
+                                            <div className="metric-value">{analysis.gait_metrics.step_count}</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">⚡</span>
+                                          <div>
+                                            <div className="metric-label">Cadence</div>
+                                            <div className="metric-value">{analysis.gait_metrics.cadence?.toFixed(1)} steps/min</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">📏</span>
+                                          <div>
+                                            <div className="metric-label">Stride Length</div>
+                                            <div className="metric-value">{analysis.gait_metrics.stride_length?.toFixed(2)} m</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">🏃</span>
+                                          <div>
+                                            <div className="metric-label">Velocity</div>
+                                            <div className="metric-value">{analysis.gait_metrics.velocity?.toFixed(2)} m/s</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">⚖️</span>
+                                          <div>
+                                            <div className="metric-label">Symmetry</div>
+                                            <div className="metric-value">{analysis.gait_metrics.gait_symmetry?.toFixed(1)}%</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">🎯</span>
+                                          <div>
+                                            <div className="metric-label">Stability</div>
+                                            <div className="metric-value">{analysis.gait_metrics.stability_score?.toFixed(1)}%</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">📊</span>
+                                          <div>
+                                            <div className="metric-label">Step Regularity</div>
+                                            <div className="metric-value">{analysis.gait_metrics.step_regularity?.toFixed(1)}%</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">⏱️</span>
+                                          <div>
+                                            <div className="metric-label">Duration</div>
+                                            <div className="metric-value">{analysis.analysis_duration?.toFixed(0)}s</div>
+                                          </div>
+                                        </div>
+                                        <div className="gait-metric-item">
+                                          <span className="metric-icon">✨</span>
+                                          <div>
+                                            <div className="metric-label">Data Quality</div>
+                                            <div className="metric-value">{analysis.data_quality}</div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {analysis.problems.length > 0 && (
+                                        <div className="problems-detail-section">
+                                          <h4 className="problems-title">Detected Issues:</h4>
+                                          <div className="problems-list">
+                                            {analysis.problems.map((problem, idx) => (
+                                              <span key={idx} className="problem-chip">{problem.replace(/_/g, ' ')}</span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {/* Pagination Footer */}
+                  {(() => {
+                    const filteredAnalyses = gaitAnalyses.filter(analysis => 
+                      !searchTerm || 
+                      analysis.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      analysis.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filteredAnalyses.length / gaitEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    
+                    const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
+                    const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage + 1;
+                    const actualLastEntry = Math.min(indexOfLastEntry, filteredAnalyses.length);
+                    
+                    return (
+                      <div className="pagination-footer">
+                        <div className="pagination-info">
+                          Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredAnalyses.length} entries
+                        </div>
+                        <div className="pagination-buttons">
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentGaitPage(1)}
+                            disabled={currentGaitPage === 1}
+                          >
+                            «
+                          </button>
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentGaitPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentGaitPage === 1}
+                          >
+                            ‹
+                          </button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentGaitPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentGaitPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentGaitPage - 2 + i;
+                            }
+                            return (
+                              <button
+                                key={pageNum}
+                                className={`pagination-btn ${currentGaitPage === pageNum ? 'active' : ''}`}
+                                onClick={() => setCurrentGaitPage(pageNum)}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentGaitPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentGaitPage === totalPages}
+                          >
+                            ›
+                          </button>
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentGaitPage(totalPages)}
+                            disabled={currentGaitPage === totalPages}
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
 

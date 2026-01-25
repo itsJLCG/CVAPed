@@ -15,9 +15,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  position: relative;
+  z-index: 1;
 }
 
 .header-left {
@@ -545,9 +544,11 @@
 
 .admin-content {
   flex: 1;
-  padding: 30px;
+  padding: 40px 30px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #f5f7fa;
+  position: relative;
 }
 
 .section-title {
@@ -1941,6 +1942,9 @@
 
 /* Physical Therapy Section - Coming Soon */
 .physical-section {
+  padding: 1.5rem 0;
+  min-height: 400px;
+}
   animation: fadeIn 0.5s ease;
   display: flex;
   align-items: center;
@@ -4641,3 +4645,389 @@
   }
 }
 
+/* Physical Therapy - Gait Analyses Table */
+.gait-analyses-container {
+  margin-top: 2rem;
+}
+
+.table-wrapper {
+  background: white;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-top: 2rem;
+}
+
+.logs-table.gait-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.logs-table.gait-table thead {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 2px solid #dee2e6;
+}
+
+.logs-table.gait-table th {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.logs-table.gait-table tbody tr.gait-row {
+  border-bottom: 1px solid #e9ecef;
+  transition: all 0.2s ease;
+}
+
+.logs-table.gait-table tbody tr.gait-row:hover {
+  background-color: #f8f9fa;
+}
+
+.logs-table.gait-table td {
+  padding: 1rem 1.25rem;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.patient-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.patient-avatar-small {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #b52e29 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.patient-name-text {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.email-text {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.problems-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.problems-count {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.problems-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.problem-badge {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid #fca5a5;
+}
+
+.problem-more {
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.score-cell {
+  text-align: center;
+}
+
+.score-number {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.severity-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  display: inline-block;
+}
+
+.severity-mild {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+
+.severity-moderate {
+  background: #fed7aa;
+  color: #92400e;
+  border: 1px solid #fbbf24;
+}
+
+.severity-severe {
+  background: #fecaca;
+  color: #991b1b;
+  border: 1px solid #f87171;
+}
+
+.severity-unknown {
+  background: #e5e7eb;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+}
+
+.date-cell-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.date-cell {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.gait-dropdown-btn {
+  background: linear-gradient(135deg, var(--color-primary) 0%, #b52e29 100%);
+  color: white;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.gait-dropdown-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(201, 48, 44, 0.3);
+}
+
+.gait-dropdown-btn.expanded {
+  transform: rotate(180deg);
+}
+
+.gait-details-row {
+  background: #f8f9fa;
+}
+
+.gait-details-container {
+  padding: 1.5rem;
+}
+
+.gait-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.gait-metric-item {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gait-metric-item .metric-icon {
+  font-size: 1.5rem;
+}
+
+.gait-metric-item .metric-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gait-metric-item .metric-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.problems-detail-section {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.problems-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 0.75rem 0;
+}
+
+.problems-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.problem-chip {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid #fca5a5;
+}
+
+.stats-summary {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.stats-summary .stat-item {
+  font-size: 0.95rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.stats-summary .stat-item strong {
+  color: var(--color-primary);
+  font-weight: 700;
+  margin-right: 0.25rem;
+}
+/* Pagination Controls */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entries-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.entries-select {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  cursor: pointer;
+  color: #1a202c;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.entries-select:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+}
+
+.entries-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.15);
+}
+
+/* Pagination Footer */
+.pagination-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 1rem;
+  border-radius: 0 0 12px 12px;
+}
+
+.pagination-info {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pagination-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 0.75rem;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(201, 48, 44, 0.15);
+}
+
+.pagination-btn.active {
+  background: linear-gradient(135deg, var(--color-primary) 0%, #b52e29 100%);
+  color: white;
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(201, 48, 44, 0.3);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: #f8f9fa;
+}

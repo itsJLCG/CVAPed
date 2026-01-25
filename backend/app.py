@@ -3025,6 +3025,93 @@ def hardware_gait_history(current_user):
         }), 500
 
 
+@app.route('/api/therapist/physical/patients', methods=['GET'])
+@token_required
+def get_physical_therapy_patients(current_user):
+    """Get all gait analyses from all physical therapy patients (therapist only)"""
+    try:
+        # Check if user is therapist
+        if current_user.get('role') != 'therapist':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized. Therapist access required.'
+            }), 403
+        
+        gait_progress_collection = db['gaitprogresses']
+        
+        # Get all gait analyses sorted by date (most recent first)
+        all_gait_analyses = list(gait_progress_collection.find({}).sort('created_at', -1))
+        
+        analyses_data = []
+        for analysis in all_gait_analyses:
+            # Get user info for each analysis
+            user = users_collection.find_one({'_id': ObjectId(analysis['user_id'])})
+            
+            if user:
+                # Extract detected problems
+                detected_problems = analysis.get('detected_problems', [])
+                problem_names = [p.get('problem', 'Unknown') for p in detected_problems]
+                
+                # Extract metrics
+                metrics = analysis.get('metrics', {})
+                
+                # Extract problem summary
+                problem_summary = analysis.get('problem_summary', {})
+                
+                # Calculate overall score (100 - (number of problems * severity weight))
+                overall_score = 100
+                for problem in detected_problems:
+                    severity = problem.get('severity', 'mild')
+                    if severity == 'severe':
+                        overall_score -= 15
+                    elif severity == 'moderate':
+                        overall_score -= 10
+                    else:  # mild
+                        overall_score -= 5
+                overall_score = max(0, overall_score)  # Ensure not negative
+                
+                analysis_info = {
+                    'id': str(analysis['_id']),
+                    'user_id': str(user['_id']),
+                    'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                    'user_email': user.get('email', 'N/A'),
+                    'created_at': analysis.get('created_at', datetime.datetime.utcnow()).isoformat() if analysis.get('created_at') else datetime.datetime.utcnow().isoformat(),
+                    'problems_count': len(detected_problems),
+                    'problems': problem_names,
+                    'gait_metrics': {
+                        'step_count': metrics.get('step_count', 0),
+                        'cadence': metrics.get('cadence', 0),
+                        'stride_length': metrics.get('stride_length', 0),
+                        'velocity': metrics.get('velocity', 0),
+                        'gait_symmetry': metrics.get('gait_symmetry', 0) * 100,  # Convert to percentage
+                        'stability_score': metrics.get('stability_score', 0) * 100,  # Convert to percentage
+                        'step_regularity': metrics.get('step_regularity', 0) * 100  # Convert to percentage
+                    },
+                    'overall_score': overall_score,
+                    'severity': problem_summary.get('risk_level', 'unknown').lower() if problem_summary else 'unknown',
+                    'data_quality': analysis.get('data_quality', 'fair'),
+                    'analysis_duration': analysis.get('analysis_duration', 0)
+                }
+                
+                analyses_data.append(analysis_info)
+        
+        return jsonify({
+            'success': True,
+            'data': analyses_data,
+            'total': len(analyses_data)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error fetching gait analyses: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch gait analyses',
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'

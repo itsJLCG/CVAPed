@@ -13,6 +13,8 @@ import speechTherapy from './CVACare_Speech_Therapy.png';
 // Team photos
 import mayorLani from './team/mayor_lani.png';
 import drNathaniel from './team/dr_nathaniel.png';
+import sirNestor from './team/sirnestor.png';
+import mamCristine from './team/mamcristine.png';
 import jhonLudwig from './team/jhon_ludwig.jpg';
 import gwynBarte from './team/gwyn_barte.jpg';
 import kristineMae from './team/khristine_mae.jpg';
@@ -40,6 +42,8 @@ export const images = {
   // Team photos
   mayorLani: mayorLani, // Mayor Lani Cayetano
   drNathaniel: drNathaniel, // Dr. Noel Nathaniel C. Napa
+  mamCristine: mamCristine, // Ms. Christine Joy R. Cabardo
+  sirNestor: sirNestor, // Sir. Nestor R. Valdez
   jhonLudwig: jhonLudwig, // Jhon Ludwig C. Gayapa
   gwynBarte: gwynBarte, // Gwyn S. Barte
   kristineMae: kristineMae, // Kristine Mae P. Prado

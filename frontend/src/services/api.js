@@ -216,6 +216,11 @@ export const therapistService = {
     const response = await api.get('/therapist/stats');
     return response.data;
   },
+
+  getPhysicalPatients: async () => {
+    const response = await api.get('/therapist/physical/patients');
+    return response.data;
+  },
 };
 
 // Fluency Exercise CRUD API

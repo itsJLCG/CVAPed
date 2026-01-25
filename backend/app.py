@@ -1073,6 +1073,7 @@ def get_therapist_stats(current_user):
     """
     Get therapist dashboard statistics
     Returns statistics focused on therapy sessions and patient progress
+    Query params: ?days=30|90|180|365|all (default: 30)
     """
     try:
         # Verify user is a therapist
@@ -1082,6 +1083,18 @@ def get_therapist_stats(current_user):
                 'message': 'Unauthorized. Only therapists can access this endpoint.'
             }), 403
         
+        # Get time range filter from query params
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                # Default to 30 days if invalid
+                time_filter = utc_now() - datetime.timedelta(days=30)
+        
         stats = {}
         
         # Get all patients (users with role 'patient')
@@ -1089,14 +1102,127 @@ def get_therapist_stats(current_user):
         stats['total_patients'] = total_patients
         
         # Get therapy session counts
-        articulation_sessions = articulation_trials_collection.count_documents({})
-        language_sessions = language_trials_collection.count_documents({})
-        fluency_sessions = db['fluency_trials'].count_documents({})
+        # 1 session = any number of trials per therapy type per user per day
+        # Example: User does 5 fluency trials on Jan 1 = 1 fluency session
+        # Example: User does 10 articulation trials on Jan 1 = 1 articulation session
+        
+        articulation_sessions_pipeline = []
+        if time_filter:
+            articulation_sessions_pipeline.append({
+                '$match': {
+                    'timestamp': {'$gte': time_filter}
+                }
+            })
+        
+        articulation_sessions_pipeline.extend([
+            {
+                '$addFields': {
+                    'date': {
+                        '$dateToString': {
+                            'format': '%Y-%m-%d',
+                            'date': '$timestamp'
+                        }
+                    }
+                }
+            },
+            {
+                '$group': {
+                    '_id': {
+                        'user_id': '$user_id',
+                        'date': '$date'
+                    }
+                }
+            },
+            {
+                '$count': 'total'
+            }
+        ])
+        articulation_result = list(articulation_trials_collection.aggregate(articulation_sessions_pipeline))
+        articulation_sessions = articulation_result[0]['total'] if articulation_result else 0
+        
+        language_sessions_pipeline = []
+        if time_filter:
+            language_sessions_pipeline.append({
+                '$match': {
+                    'timestamp': {'$gte': time_filter}
+                }
+            })
+        
+        language_sessions_pipeline.extend([
+            {
+                '$addFields': {
+                    'date': {
+                        '$dateToString': {
+                            'format': '%Y-%m-%d',
+                            'date': '$timestamp'
+                        }
+                    }
+                }
+            },
+            {
+                '$group': {
+                    '_id': {
+                        'user_id': '$user_id',
+                        'date': '$date'
+                    }
+                }
+            },
+            {
+                '$count': 'total'
+            }
+        ])
+        language_result = list(language_trials_collection.aggregate(language_sessions_pipeline))
+        language_sessions = language_result[0]['total'] if language_result else 0
+        
+        fluency_sessions_pipeline = []
+        if time_filter:
+            fluency_sessions_pipeline.append({
+                '$match': {
+                    'timestamp': {'$gte': time_filter}
+                }
+            })
+        
+        fluency_sessions_pipeline.extend([
+            {
+                '$addFields': {
+                    'date': {
+                        '$dateToString': {
+                            'format': '%Y-%m-%d',
+                            'date': '$timestamp'
+                        }
+                    }
+                }
+            },
+            {
+                '$group': {
+                    '_id': {
+                        'user_id': '$user_id',
+                        'date': '$date'
+                    }
+                }
+            },
+            {
+                '$count': 'total'
+            }
+        ])
+        fluency_result = list(db['fluency_trials'].aggregate(fluency_sessions_pipeline))
+        fluency_sessions = fluency_result[0]['total'] if fluency_result else 0
         
         stats['articulation_sessions'] = articulation_sessions
         stats['language_sessions'] = language_sessions
         stats['fluency_sessions'] = fluency_sessions
+        
+        # Total sessions = sum of all therapy type sessions
         stats['total_sessions'] = articulation_sessions + language_sessions + fluency_sessions
+        
+        # Debug logging
+        print(f"\n=== Therapist Stats Debug (days={days_param}) ===")
+        print(f"Time filter: {time_filter}")
+        print(f"Articulation sessions: {articulation_sessions}")
+        print(f"Language sessions: {language_sessions}")
+        print(f"Fluency sessions: {fluency_sessions}")
+        print(f"Total sessions: {stats['total_sessions']}")
+        print("=" * 50)
         
         # Get active patients (patients with at least one trial in last 30 days)
         thirty_days_ago = utc_now() - datetime.timedelta(days=30)

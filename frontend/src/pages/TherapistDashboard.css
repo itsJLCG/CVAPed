@@ -606,6 +606,79 @@
   max-width: 100%;
 }
 
+/* Time Range Filter */
+.filter-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  width: fit-content;
+}
+
+.filter-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #334155;
+  margin: 0;
+}
+
+.filter-dropdown {
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #334155;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.filter-dropdown:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 1px 4px rgba(220, 38, 38, 0.1);
+}
+
+.filter-dropdown:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+}
+
+/* Inline stat filter */
+.stat-filter-inline {
+  margin-top: 8px;
+}
+
+.stat-filter-dropdown {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #64748b;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.stat-filter-dropdown:hover {
+  border-color: #4facfe;
+  background: white;
+  color: #334155;
+}
+
+.stat-filter-dropdown:focus {
+  border-color: #4facfe;
+  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.15);
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;

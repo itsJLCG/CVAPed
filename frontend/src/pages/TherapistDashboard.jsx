@@ -99,6 +99,7 @@ function TherapistDashboard({ onLogout }) {
   // Overview stats state
   const [overviewStats, setOverviewStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [selectedDays, setSelectedDays] = useState(30); // Default to 30 days
 
   // Physical therapy gait analyses state
   const [gaitAnalyses, setGaitAnalyses] = useState([]);
@@ -108,10 +109,10 @@ function TherapistDashboard({ onLogout }) {
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
 
   // Load overview statistics
-  const loadOverviewStats = async () => {
+  const loadOverviewStats = async (days = selectedDays) => {
     setLoadingStats(true);
     try {
-      const response = await therapistService.getStats();
+      const response = await therapistService.getStats(days);
       console.log('Therapist stats response:', response);
       setOverviewStats(response.stats || response);
     } catch (error) {
@@ -121,12 +122,12 @@ function TherapistDashboard({ onLogout }) {
     }
   };
 
-  // Load stats when overview tab is active
+  // Load stats when overview tab is active or filter changes
   useEffect(() => {
     if (activeTab === 'overview' && user) {
       loadOverviewStats();
     }
-  }, [activeTab, user]);
+  }, [activeTab, user, selectedDays]);
 
   // Load exercises from database and group by level
   const loadFluencyExercises = async () => {
@@ -881,7 +882,19 @@ function TherapistDashboard({ onLogout }) {
                       <div className="stat-details">
                         <h3 className="stat-value">{overviewStats.total_sessions || 0}</h3>
                         <p className="stat-label">Total Sessions</p>
-                        <span className="stat-badge">Therapy</span>
+                        <div className="stat-filter-inline">
+                          <select
+                            className="stat-filter-dropdown"
+                            value={selectedDays}
+                            onChange={(e) => setSelectedDays(e.target.value)}
+                          >
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                            <option value="180">Last 6 Months</option>
+                            <option value="365">Last Year</option>
+                            <option value="all">All Time</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 

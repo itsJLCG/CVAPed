@@ -212,8 +212,10 @@ export const adminService = {
 
 // Therapist API
 export const therapistService = {
-  getStats: async () => {
-    const response = await api.get('/therapist/stats');
+  getStats: async (days = 30) => {
+    const response = await api.get('/therapist/stats', {
+      params: { days: days === 'all' ? 'all' : days }
+    });
     return response.data;
   },
 

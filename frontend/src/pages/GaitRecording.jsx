@@ -452,10 +452,6 @@ function GaitRecording({ onLogout }) {
                         <span className="foot-label">R</span>
                       </div>
                     </div>
-                    <div className="stat-content">
-                      <div className="stat-value large">{stepCount}</div>
-                      <div className="stat-label">Steps Detected</div>
-                    </div>
                   </div>
                 </div>
               </div>

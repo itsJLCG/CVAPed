@@ -630,4 +630,92 @@ export const successStoryService = {
   },
 };
 
+// Appointment Service
+export const appointmentService = {
+  // Therapist Endpoints
+  therapist: {
+    // Get all appointments for therapist
+    getAppointments: async (filters = {}) => {
+      const params = new URLSearchParams();
+      if (filters.date) params.append('date', filters.date);
+      if (filters.status) params.append('status', filters.status);
+      if (filters.therapy_type) params.append('therapy_type', filters.therapy_type);
+      
+      const response = await api.get(`/therapist/appointments?${params.toString()}`);
+      return response.data;
+    },
+
+    // Get unassigned appointments
+    getUnassignedAppointments: async (therapyType = null) => {
+      const params = therapyType ? `?therapy_type=${therapyType}` : '';
+      const response = await api.get(`/therapist/appointments/unassigned${params}`);
+      return response.data;
+    },
+
+    // Assign therapist to appointment
+    assignToAppointment: async (appointmentId) => {
+      const response = await api.put(`/therapist/appointments/${appointmentId}/assign`);
+      return response.data;
+    },
+
+    // Create a new appointment
+    createAppointment: async (appointmentData) => {
+      const response = await api.post('/therapist/appointments', appointmentData);
+      return response.data;
+    },
+
+    // Update an appointment
+    updateAppointment: async (appointmentId, updateData) => {
+      const response = await api.put(`/therapist/appointments/${appointmentId}`, updateData);
+      return response.data;
+    },
+
+    // Cancel/delete an appointment
+    cancelAppointment: async (appointmentId) => {
+      const response = await api.delete(`/therapist/appointments/${appointmentId}`);
+      return response.data;
+    },
+
+    // Search patients by name
+    searchPatients: async (query, limit = 10) => {
+      const response = await api.get(`/therapist/patients/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+      return response.data;
+    },
+  },
+
+  // Patient Endpoints
+  patient: {
+    // Get all appointments for patient
+    getAppointments: async (status = null) => {
+      const params = status ? `?status=${status}` : '';
+      const response = await api.get(`/patient/appointments${params}`);
+      return response.data;
+    },
+
+    // Book a new appointment
+    bookAppointment: async (appointmentData) => {
+      const response = await api.post('/patient/appointments/book', appointmentData);
+      return response.data;
+    },
+
+    // Cancel an appointment
+    cancelAppointment: async (appointmentId, reason = '') => {
+      const response = await api.put(`/patient/appointments/${appointmentId}/cancel`, { reason });
+      return response.data;
+    },
+  },
+
+  // Shared Endpoints
+  getAvailableTherapists: async (therapyType = null) => {
+    const params = therapyType ? `?therapy_type=${therapyType}` : '';
+    const response = await api.get(`/therapists/available${params}`);
+    return response.data;
+  },
+
+  checkAvailability: async (therapistId, date) => {
+    const response = await api.get(`/appointments/availability?therapist_id=${therapistId}&date=${date}`);
+    return response.data;
+  },
+};
+
 export default api;

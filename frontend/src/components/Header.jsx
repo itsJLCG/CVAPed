@@ -42,6 +42,12 @@ function Header({ onLogout }) {
           >
             Health Logs
           </button>
+          <button 
+            onClick={() => navigate('/appointments')} 
+            className={`nav-btn ${isActive('/appointments') ? 'active' : ''}`}
+          >
+            Appointments
+          </button>
           {showPredictionPrescription && (
             <>
               <button 

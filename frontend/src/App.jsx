@@ -20,6 +20,7 @@ import ArticulationExercise from './pages/ArticulationExercise';
 import LanguageTherapy from './pages/LanguageTherapy';
 import FluencyTherapy from './pages/FluencyTherapy';
 import HealthLogs from './pages/HealthLogs';
+import Appointments from './pages/Appointments';
 import Prediction from './pages/Prediction';
 import Prescription from './pages/Prescription';
 import Profile from './pages/Profile';
@@ -210,6 +211,12 @@ function App() {
               path="/health-logs" 
               element={
                 isAuthenticated ? <HealthLogs onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/appointments" 
+              element={
+                isAuthenticated ? <Appointments onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 

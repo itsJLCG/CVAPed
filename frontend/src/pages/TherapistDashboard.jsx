@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 
@@ -126,6 +126,37 @@ function TherapistDashboard({ onLogout }) {
   // Reports state
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  // Appointments state
+  const [appointments, setAppointments] = useState([]);
+  const [unassignedAppointments, setUnassignedAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [loadingUnassigned, setLoadingUnassigned] = useState(false);
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
+  const [appointmentFilters, setAppointmentFilters] = useState({
+    date: '',
+    status: '',
+    therapy_type: ''
+  });
+  const [newAppointment, setNewAppointment] = useState({
+    patient_id: '',
+    therapy_type: 'articulation',
+    appointment_date: '',
+    duration: 60,
+    notes: ''
+  });
+  const [patients, setPatients] = useState([]);
+  const [showAppointmentDetails, setShowAppointmentDetails] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [showUnassignedSection, setShowUnassignedSection] = useState(true);
+  
+  // Patient search autocomplete state
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [searchingPatients, setSearchingPatients] = useState(false);
 
   // Load overview statistics
   const loadOverviewStats = async (days = selectedDays) => {
@@ -657,6 +688,10 @@ function TherapistDashboard({ onLogout }) {
     if (activeTab === 'physical') loadPhysical();
     if (activeTab === 'success-stories') loadSuccessStories();
     if (activeTab === 'reports') loadReports();
+    if (activeTab === 'appointments') {
+      loadAppointments();
+      loadUnassignedAppointments();
+    }
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
@@ -791,6 +826,239 @@ function TherapistDashboard({ onLogout }) {
       setReportsData(null);
     } finally {
       setLoadingReports(false);
+    }
+  };
+
+  // Appointments Functions
+  const loadAppointments = async () => {
+    setLoadingAppointments(true);
+    try {
+      const response = await appointmentService.therapist.getAppointments(appointmentFilters);
+      if (response.success) {
+        setAppointments(response.appointments || []);
+      }
+    } catch (e) {
+      console.error('Failed to load appointments', e);
+      setAppointments([]);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  const loadUnassignedAppointments = async () => {
+    setLoadingUnassigned(true);
+    try {
+      const response = await appointmentService.therapist.getUnassignedAppointments();
+      if (response.success) {
+        setUnassignedAppointments(response.appointments || []);
+      }
+    } catch (error) {
+      console.error('Error loading unassigned appointments:', error);
+    } finally {
+      setLoadingUnassigned(false);
+    }
+  };
+
+  const handleAssignToMe = async (appointmentId) => {
+    try {
+      const response = await appointmentService.therapist.assignToAppointment(appointmentId);
+      if (response.success) {
+        alert('Appointment approved and assigned to you! The patient will be notified.');
+        // Refresh both lists
+        loadAppointments();
+        loadUnassignedAppointments();
+      }
+    } catch (error) {
+      console.error('Error assigning to appointment:', error);
+      alert(error.response?.data?.message || 'Failed to approve and assign appointment');
+    }
+  };
+
+  const loadPatients = async () => {
+    // This would be a new endpoint to get all patients
+    // For now, we'll leave it empty and handle it when creating appointments
+    try {
+      // TODO: Add endpoint to fetch all patients
+      // const response = await therapistService.getPatients();
+      // setPatients(response.patients || []);
+    } catch (e) {
+      console.error('Failed to load patients', e);
+    }
+  };
+
+  const handleAddAppointment = () => {
+    setEditingAppointment(null);
+    setNewAppointment({
+      patient_id: '',
+      therapy_type: 'articulation',
+      appointment_date: '',
+      duration: 60,
+      notes: ''
+    });
+    // Reset patient search
+    setPatientSearchQuery('');
+    setSelectedPatient(null);
+    setPatientSearchResults([]);
+    setShowPatientDropdown(false);
+    setShowAppointmentModal(true);
+  };
+
+  const handleSaveAppointment = async () => {
+    try {
+      // Validation
+      if (!newAppointment.patient_id) {
+        alert('Please select a patient');
+        return;
+      }
+      if (!newAppointment.appointment_date) {
+        alert('Please select date and time');
+        return;
+      }
+
+      if (editingAppointment) {
+        // Update existing appointment
+        const response = await appointmentService.therapist.updateAppointment(
+          editingAppointment._id,
+          newAppointment
+        );
+        if (response.success) {
+          alert('Appointment updated successfully');
+          setShowAppointmentModal(false);
+          loadAppointments();
+        }
+      } else {
+        // Create new appointment
+        const response = await appointmentService.therapist.createAppointment(newAppointment);
+        if (response.success) {
+          alert('Appointment created successfully');
+          setShowAppointmentModal(false);
+          loadAppointments();
+        }
+      }
+    } catch (error) {
+      console.error('Error saving appointment:', error);
+      alert(error.response?.data?.message || 'Failed to save appointment');
+    }
+  };
+
+  const handleEditAppointment = (appointment) => {
+    setEditingAppointment(appointment);
+    setNewAppointment({
+      patient_id: appointment.patient_id,
+      therapy_type: appointment.therapy_type,
+      appointment_date: appointment.appointment_date,
+      duration: appointment.duration,
+      notes: appointment.notes || '',
+      status: appointment.status || 'scheduled'
+    });
+    
+    // Set patient search info for editing
+    if (appointment.patient_name) {
+      setPatientSearchQuery(appointment.patient_name);
+      setSelectedPatient({
+        _id: appointment.patient_id,
+        fullName: appointment.patient_name,
+        email: appointment.patient_email || ''
+      });
+    }
+    
+    setShowAppointmentModal(true);
+  };
+
+  const handleCancelAppointment = async (appointmentId) => {
+    if (!confirm('Are you sure you want to cancel this appointment?')) {
+      return;
+    }
+
+    try {
+      const response = await appointmentService.therapist.cancelAppointment(appointmentId);
+      if (response.success) {
+        alert('Appointment cancelled successfully');
+        loadAppointments();
+      }
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      alert('Failed to cancel appointment');
+    }
+  };
+
+  const handleViewAppointment = (appointment) => {
+    setSelectedAppointment(appointment);
+    setShowAppointmentDetails(true);
+  };
+
+  const handleMarkComplete = async (appointmentId) => {
+    try {
+      const response = await appointmentService.therapist.updateAppointment(appointmentId, {
+        status: 'completed'
+      });
+      if (response.success) {
+        alert('Appointment marked as completed');
+        loadAppointments();
+      }
+    } catch (error) {
+      console.error('Error marking appointment complete:', error);
+      alert('Failed to update appointment');
+    }
+  };
+
+  // Patient search with debouncing
+  useEffect(() => {
+    const searchPatients = async () => {
+      if (!patientSearchQuery || patientSearchQuery.trim().length < 2) {
+        setPatientSearchResults([]);
+        setShowPatientDropdown(false);
+        return;
+      }
+
+      setSearchingPatients(true);
+      try {
+        const response = await appointmentService.therapist.searchPatients(patientSearchQuery.trim(), 10);
+        if (response.success) {
+          setPatientSearchResults(response.patients || []);
+          setShowPatientDropdown(true);
+        }
+      } catch (error) {
+        console.error('Error searching patients:', error);
+        setPatientSearchResults([]);
+      } finally {
+        setSearchingPatients(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchPatients, 300);
+    return () => clearTimeout(timeoutId);
+  }, [patientSearchQuery]);
+
+  // Close autocomplete dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showPatientDropdown && !event.target.closest('.autocomplete-container')) {
+        setShowPatientDropdown(false);
+      }
+    };
+
+    if (showPatientDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showPatientDropdown]);
+
+  const handleSelectPatient = (patient) => {
+    setSelectedPatient(patient);
+    setPatientSearchQuery(patient.fullName);
+    setNewAppointment({ ...newAppointment, patient_id: patient._id });
+    setShowPatientDropdown(false);
+  };
+
+  const handlePatientSearchChange = (e) => {
+    const value = e.target.value;
+    setPatientSearchQuery(value);
+    
+    // Clear selected patient if search is cleared
+    if (!value) {
+      setSelectedPatient(null);
+      setNewAppointment({ ...newAppointment, patient_id: '' });
     }
   };
 
@@ -1019,6 +1287,11 @@ function TherapistDashboard({ onLogout }) {
             {!sidebarCollapsed && <span className="nav-label">Physical Therapy</span>}
           </button>
 
+          <button className={`nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => { setActiveTab('appointments'); setTherapyData([]); }}>
+            <span className="nav-icon">📅</span>
+            {!sidebarCollapsed && <span className="nav-label">Appointments</span>}
+          </button>
+
           <button className={`nav-item ${activeTab === 'success-stories' ? 'active' : ''}`} onClick={() => { setActiveTab('success-stories'); setTherapyData([]); }}>
             <span className="nav-icon">⭐</span>
             {!sidebarCollapsed && <span className="nav-label">Success Stories</span>}
@@ -1046,7 +1319,7 @@ function TherapistDashboard({ onLogout }) {
       <main className="admin-main">
         <header className="admin-header">
           <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : 'Therapist'}</h1>
+            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : 'Therapist'}</h1>
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
@@ -1128,6 +1401,55 @@ function TherapistDashboard({ onLogout }) {
                         <span className="stat-badge">Available</span>
                       </div>
                     </div>
+
+                    {/* Appointment Stats */}
+                    {overviewStats.appointments && (
+                      <>
+                        <div className="stat-card">
+                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' }}>
+                            <span className="stat-icon-emoji">📅</span>
+                          </div>
+                          <div className="stat-details">
+                            <h3 className="stat-value">{overviewStats.appointments.today || 0}</h3>
+                            <p className="stat-label">Today's Appointments</p>
+                            <span className="stat-badge">Scheduled</span>
+                          </div>
+                        </div>
+
+                        <div className="stat-card">
+                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
+                            <span className="stat-icon-emoji">📆</span>
+                          </div>
+                          <div className="stat-details">
+                            <h3 className="stat-value">{overviewStats.appointments.upcoming || 0}</h3>
+                            <p className="stat-label">Upcoming Appointments</p>
+                            <span className="stat-badge">Next 7 Days</span>
+                          </div>
+                        </div>
+
+                        <div className="stat-card">
+                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' }}>
+                            <span className="stat-icon-emoji">✔️</span>
+                          </div>
+                          <div className="stat-details">
+                            <h3 className="stat-value">{overviewStats.appointments.completed || 0}</h3>
+                            <p className="stat-label">Completed Appointments</p>
+                            <span className="stat-badge">{overviewStats.appointments.completion_rate || 0}% Rate</span>
+                          </div>
+                        </div>
+
+                        <div className="stat-card">
+                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' }}>
+                            <span className="stat-icon-emoji">📊</span>
+                          </div>
+                          <div className="stat-details">
+                            <h3 className="stat-value">{overviewStats.appointments.total || 0}</h3>
+                            <p className="stat-label">Total Appointments</p>
+                            <span className="stat-badge">All Time</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Therapy Sessions Distribution - Donut Chart */}
@@ -2318,6 +2640,560 @@ function TherapistDashboard({ onLogout }) {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'appointments' && (
+            <div className="appointments-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Manage Appointments</h2>
+                  <p>Schedule and track therapy sessions with patients</p>
+                </div>
+                <button className="btn-primary" onClick={handleAddAppointment}>
+                  <span>📅</span> New Appointment
+                </button>
+              </div>
+
+              {/* Unassigned Appointments Section */}
+              {unassignedAppointments.length > 0 && (
+                <div className="unassigned-appointments-container">
+                  <div className="unassigned-header">
+                    <div className="header-content">
+                      <h3>
+                        <span className="badge-count">{unassignedAppointments.length}</span>
+                        Pending Appointment Request{unassignedAppointments.length !== 1 ? 's' : ''}
+                      </h3>
+                      <p>These appointment requests need your approval. Assign yourself to approve and handle the appointment.</p>
+                    </div>
+                    <button 
+                      className="btn-toggle"
+                      onClick={() => setShowUnassignedSection(!showUnassignedSection)}
+                    >
+                      {showUnassignedSection ? '▼ Hide' : '▶ Show'}
+                    </button>
+                  </div>
+
+                  {showUnassignedSection && (
+                    <div className="unassigned-list">
+                      {loadingUnassigned ? (
+                        <div className="loading-message">Loading pending appointments...</div>
+                      ) : (
+                        <div className="unassigned-grid">
+                          {unassignedAppointments.map((appointment) => (
+                            <div key={appointment._id} className="unassigned-card">
+                              <div className="unassigned-card-header">
+                                <div className="therapy-badge-large" data-type={appointment.therapy_type}>
+                                  {appointment.therapy_type === 'articulation' && '🗣️'}
+                                  {appointment.therapy_type === 'language' && '💬'}
+                                  {appointment.therapy_type === 'fluency' && '🎯'}
+                                  {appointment.therapy_type === 'physical' && '🏃'}
+                                  <span>{appointment.therapy_type.charAt(0).toUpperCase() + appointment.therapy_type.slice(1)}</span>
+                                </div>
+                                <span className="pending-badge">Pending</span>
+                              </div>
+
+                              <div className="unassigned-card-body">
+                                <div className="patient-info-large">
+                                  <div className="patient-avatar-large">
+                                    {appointment.patient_name?.charAt(0) || 'P'}
+                                  </div>
+                                  <div>
+                                    <h4>{appointment.patient_name || 'Unknown Patient'}</h4>
+                                    <p className="patient-email">{appointment.patient_email || ''}</p>
+                                  </div>
+                                </div>
+
+                                <div className="appointment-info-grid">
+                                  <div className="info-item">
+                                    <span className="icon">📅</span>
+                                    <div>
+                                      <label>Date</label>
+                                      <span>{new Date(appointment.appointment_date).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })}</span>
+                                    </div>
+                                  </div>
+                                  <div className="info-item">
+                                    <span className="icon">🕒</span>
+                                    <div>
+                                      <label>Time</label>
+                                      <span>{new Date(appointment.appointment_date).toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}</span>
+                                    </div>
+                                  </div>
+                                  <div className="info-item">
+                                    <span className="icon">⏱️</span>
+                                    <div>
+                                      <label>Duration</label>
+                                      <span>{appointment.duration || 60} min</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {appointment.notes && (
+                                  <div className="notes-section">
+                                    <label>Notes:</label>
+                                    <p>{appointment.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="unassigned-card-footer">
+                                <button 
+                                  className="btn-assign-me"
+                                  onClick={() => handleAssignToMe(appointment._id)}
+                                >
+                                  Approve & Assign to Me
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* My Appointments Section Header */}
+              {unassignedAppointments.length > 0 && (
+                <div className="section-divider">
+                  <h3>My Confirmed Appointments</h3>
+                  <p>Appointments you've approved and are handling</p>
+                </div>
+              )}
+
+              {/* Filters */}
+              <div className="appointments-filters">
+                <div className="filter-group">
+                  <label>Date</label>
+                  <input
+                    type="date"
+                    value={appointmentFilters.date}
+                    onChange={(e) => {
+                      setAppointmentFilters({ ...appointmentFilters, date: e.target.value });
+                      loadAppointments();
+                    }}
+                  />
+                </div>
+                <div className="filter-group">
+                  <label>Status</label>
+                  <select
+                    value={appointmentFilters.status}
+                    onChange={(e) => {
+                      setAppointmentFilters({ ...appointmentFilters, status: e.target.value });
+                      loadAppointments();
+                    }}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="no-show">No Show</option>
+                  </select>
+                </div>
+                <div className="filter-group">
+                  <label>Therapy Type</label>
+                  <select
+                    value={appointmentFilters.therapy_type}
+                    onChange={(e) => {
+                      setAppointmentFilters({ ...appointmentFilters, therapy_type: e.target.value });
+                      loadAppointments();
+                    }}
+                  >
+                    <option value="">All Types</option>
+                    <option value="articulation">Articulation</option>
+                    <option value="language">Language</option>
+                    <option value="fluency">Fluency</option>
+                    <option value="physical">Physical</option>
+                  </select>
+                </div>
+                <button 
+                  className="btn-secondary"
+                  onClick={() => {
+                    setAppointmentFilters({ date: '', status: '', therapy_type: '' });
+                    loadAppointments();
+                  }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {loadingAppointments ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading appointments...</p>
+                </div>
+              ) : appointments.length > 0 ? (
+                <div className="datatable-container">
+                  <table className="appointments-datatable">
+                    <thead>
+                      <tr>
+                        <th>Patient</th>
+                        <th>Therapy Type</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {appointments.map((appointment) => (
+                        <tr key={appointment._id} className={`appointment-row status-${appointment.status}`}>
+                          <td className="patient-cell">
+                            <div className="patient-info-inline">
+                              <div className="patient-avatar-small">
+                                {appointment.patient_name?.charAt(0) || 'P'}
+                              </div>
+                              <div className="patient-details">
+                                <div className="patient-name">{appointment.patient_name || 'Unknown Patient'}</div>
+                                <div className="patient-email">{appointment.patient_email || ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="therapy-type-badge" data-type={appointment.therapy_type}>
+                              {appointment.therapy_type === 'articulation' && '🗣️'}
+                              {appointment.therapy_type === 'language' && '💬'}
+                              {appointment.therapy_type === 'fluency' && '🎯'}
+                              {appointment.therapy_type === 'physical' && '🏃'}
+                              <span>{appointment.therapy_type.charAt(0).toUpperCase() + appointment.therapy_type.slice(1)}</span>
+                            </div>
+                          </td>
+                          <td className="date-cell">
+                            {new Date(appointment.appointment_date).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric', 
+                              year: 'numeric' 
+                            })}
+                          </td>
+                          <td className="time-cell">
+                            {new Date(appointment.appointment_date).toLocaleTimeString('en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </td>
+                          <td className="duration-cell">{appointment.duration} min</td>
+                          <td>
+                            <span className={`status-badge status-${appointment.status}`}>
+                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="notes-cell">
+                            {appointment.notes ? (
+                              <div className="notes-preview" title={appointment.notes}>
+                                {appointment.notes.length > 30 ? appointment.notes.substring(0, 30) + '...' : appointment.notes}
+                              </div>
+                            ) : (
+                              <span className="no-notes">—</span>
+                            )}
+                          </td>
+                          <td className="actions-cell">
+                            <div className="action-buttons">
+                              <button 
+                                className="btn-icon-small btn-view"
+                                onClick={() => handleViewAppointment(appointment)}
+                                title="View Details"
+                              >
+                                View
+                              </button>
+                              <button 
+                                className="btn-icon-small btn-edit"
+                                onClick={() => handleEditAppointment(appointment)}
+                                title="Edit Appointment"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="no-data-message">
+                  <span className="no-data-icon">📅</span>
+                  <h3>No Appointments Found</h3>
+                  <p>No appointments match your current filters. Try adjusting the filters or create a new appointment.</p>
+                  <button className="btn-primary" onClick={handleAddAppointment}>
+                    <span>📅</span> Schedule New Appointment
+                  </button>
+                </div>
+              )}
+
+              {/* Appointment Modal */}
+              {showAppointmentModal && (
+                <div className="modal-overlay" onClick={() => setShowAppointmentModal(false)}>
+                  <div className="modal-content appointment-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h3>{editingAppointment ? 'Edit Appointment' : 'New Appointment'}</h3>
+                      <button className="modal-close" onClick={() => setShowAppointmentModal(false)}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>Patient <span className="required">*</span></label>
+                        <div className="autocomplete-container">
+                          <input
+                            type="text"
+                            value={patientSearchQuery}
+                            onChange={handlePatientSearchChange}
+                            onFocus={() => {
+                              if (patientSearchResults.length > 0) {
+                                setShowPatientDropdown(true);
+                              }
+                            }}
+                            placeholder="Search by name or email..."
+                            disabled={editingAppointment}
+                            className={selectedPatient ? 'has-selection' : ''}
+                          />
+                          {searchingPatients && (
+                            <div className="autocomplete-loading">
+                              <div className="spinner-small"></div>
+                            </div>
+                          )}
+                          {showPatientDropdown && patientSearchResults.length > 0 && (
+                            <div className="autocomplete-dropdown">
+                              {patientSearchResults.map((patient) => (
+                                <div
+                                  key={patient._id}
+                                  className="autocomplete-item"
+                                  onClick={() => handleSelectPatient(patient)}
+                                >
+                                  <div className="autocomplete-item-name">{patient.fullName}</div>
+                                  <div className="autocomplete-item-details">
+                                    {patient.email} • Age: {patient.age} • {patient.therapyType}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {showPatientDropdown && patientSearchQuery.trim().length >= 2 && patientSearchResults.length === 0 && !searchingPatients && (
+                            <div className="autocomplete-dropdown">
+                              <div className="autocomplete-empty">
+                                No patients found matching "{patientSearchQuery}"
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {selectedPatient && (
+                          <div className="selected-patient-info">
+                            ✓ Selected: <strong>{selectedPatient.fullName}</strong> ({selectedPatient.email})
+                          </div>
+                        )}
+                        <small className="form-hint">
+                          {editingAppointment 
+                            ? 'Patient cannot be changed for existing appointments' 
+                            : 'Type at least 2 characters to search for patients'}
+                        </small>
+                      </div>
+
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Therapy Type <span className="required">*</span></label>
+                          <select
+                            value={newAppointment.therapy_type}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, therapy_type: e.target.value })}
+                          >
+                            <option value="articulation">🗣️ Articulation</option>
+                            <option value="language">💬 Language</option>
+                            <option value="fluency">🎯 Fluency</option>
+                            <option value="physical">🏃 Physical</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label>Duration (minutes)</label>
+                          <select
+                            value={newAppointment.duration}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, duration: parseInt(e.target.value) })}
+                          >
+                            <option value="30">30 minutes</option>
+                            <option value="60">60 minutes</option>
+                            <option value="90">90 minutes</option>
+                            <option value="120">120 minutes</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Date & Time <span className="required">*</span></label>
+                          <input
+                            type="datetime-local"
+                            value={newAppointment.appointment_date ? new Date(newAppointment.appointment_date).toISOString().slice(0, 16) : ''}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, appointment_date: e.target.value })}
+                          />
+                        </div>
+
+                        {editingAppointment && (
+                          <div className="form-group">
+                            <label>Status <span className="required">*</span></label>
+                            <select
+                              value={newAppointment.status || 'scheduled'}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, status: e.target.value })}
+                              className="status-select"
+                            >
+                              <option value="scheduled">📅 Scheduled</option>
+                              <option value="confirmed">✅ Confirmed</option>
+                              <option value="completed">✔️ Completed</option>
+                              <option value="cancelled">❌ Cancelled</option>
+                              <option value="no-show">⚠️ No Show</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="form-group">
+                        <label>Notes</label>
+                        <textarea
+                          value={newAppointment.notes}
+                          onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
+                          placeholder="Add any additional notes or special requirements..."
+                          rows="4"
+                        />
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn-secondary" onClick={() => setShowAppointmentModal(false)}>
+                        Cancel
+                      </button>
+                      <button className="btn-primary" onClick={handleSaveAppointment}>
+                        {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Appointment Details Modal */}
+              {showAppointmentDetails && selectedAppointment && (
+                <div className="modal-overlay" onClick={() => setShowAppointmentDetails(false)}>
+                  <div className="modal-content appointment-details-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <div className="modal-header-content">
+                        <h3>Appointment Details</h3>
+                        <span className={`status-badge status-${selectedAppointment.status}`}>
+                          {selectedAppointment.status.charAt(0).toUpperCase() + selectedAppointment.status.slice(1)}
+                        </span>
+                      </div>
+                      <button className="modal-close" onClick={() => setShowAppointmentDetails(false)}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      {/* Patient Information Section */}
+                      <div className="details-section">
+                        <h4 className="section-heading">Patient Information</h4>
+                        <div className="details-grid">
+                          <div className="detail-item">
+                            <div className="detail-label">Patient Name</div>
+                            <div className="detail-value">
+                              <div className="patient-avatar-inline">
+                                {selectedAppointment.patient_name?.charAt(0) || 'P'}
+                              </div>
+                              {selectedAppointment.patient_name}
+                            </div>
+                          </div>
+                          {selectedAppointment.patient_email && (
+                            <div className="detail-item">
+                              <div className="detail-label">Email</div>
+                              <div className="detail-value">{selectedAppointment.patient_email}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Appointment Information Section */}
+                      <div className="details-section">
+                        <h4 className="section-heading">Appointment Details</h4>
+                        <div className="details-grid">
+                          <div className="detail-item">
+                            <div className="detail-label">Therapy Type</div>
+                            <div className="detail-value">
+                              <span className="therapy-type-badge" data-type={selectedAppointment.therapy_type}>
+                                {selectedAppointment.therapy_type === 'articulation' && '🗣️ '}
+                                {selectedAppointment.therapy_type === 'language' && '💬 '}
+                                {selectedAppointment.therapy_type === 'fluency' && '🎯 '}
+                                {selectedAppointment.therapy_type === 'physical' && '🏃 '}
+                                {selectedAppointment.therapy_type.charAt(0).toUpperCase() + selectedAppointment.therapy_type.slice(1)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="detail-item">
+                            <div className="detail-label">Duration</div>
+                            <div className="detail-value">
+                              <span className="duration-badge">{selectedAppointment.duration} minutes</span>
+                            </div>
+                          </div>
+                          <div className="detail-item">
+                            <div className="detail-label">Date</div>
+                            <div className="detail-value date-value">
+                              {new Date(selectedAppointment.appointment_date).toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                month: 'long', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              })}
+                            </div>
+                          </div>
+                          <div className="detail-item">
+                            <div className="detail-label">Time</div>
+                            <div className="detail-value time-value">
+                              {new Date(selectedAppointment.appointment_date).toLocaleTimeString('en-US', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Additional Information Section */}
+                      {(selectedAppointment.notes || selectedAppointment.session_summary || selectedAppointment.cancellation_reason) && (
+                        <div className="details-section">
+                          <h4 className="section-heading">Additional Information</h4>
+                          {selectedAppointment.notes && (
+                            <div className="detail-block">
+                              <div className="detail-label">Notes</div>
+                              <div className="detail-text">{selectedAppointment.notes}</div>
+                            </div>
+                          )}
+                          {selectedAppointment.session_summary && (
+                            <div className="detail-block">
+                              <div className="detail-label">Session Summary</div>
+                              <div className="detail-text">{selectedAppointment.session_summary}</div>
+                            </div>
+                          )}
+                          {selectedAppointment.cancellation_reason && (
+                            <div className="detail-block">
+                              <div className="detail-label">Cancellation Reason</div>
+                              <div className="detail-text cancellation-text">{selectedAppointment.cancellation_reason}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn-secondary" onClick={() => setShowAppointmentDetails(false)}>
+                        Close
+                      </button>
+                      <button className="btn-primary" onClick={() => {
+                        setShowAppointmentDetails(false);
+                        handleEditAppointment(selectedAppointment);
+                      }}>
+                        Edit Appointment
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

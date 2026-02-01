@@ -54,6 +54,7 @@ articulation_trials_collection = db['articulation_trials']
 articulation_exercises_collection = db['articulation_exercises']
 language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
+appointments_collection = db['appointments']
 
 # Register fluency CRUD blueprint
 app.register_blueprint(fluency_bp)
@@ -121,6 +122,18 @@ def token_required(f):
         
         return f(current_user, *args, **kwargs)
     
+    return decorated
+
+# Therapist required decorator
+def therapist_required(f):
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if current_user.get('role') != 'therapist':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized. Only therapists can access this endpoint.'
+            }), 403
+        return f(current_user, *args, **kwargs)
     return decorated
 
 @app.route('/api/register', methods=['POST'])
@@ -1380,10 +1393,39 @@ def get_therapist_stats(current_user):
             'fluency': round(fluency_avg[0]['avg_accuracy'] * 100, 1) if (fluency_avg and fluency_avg[0].get('avg_accuracy') is not None) else 0
         }
         
+        # Get appointment statistics
+        from datetime import datetime as dt
+        
+        # Get appointment counts by status
+        total_appointments = appointments_collection.count_documents({})
+        upcoming_appointments = appointments_collection.count_documents({
+            'appointment_date': {'$gte': utc_now()},
+            'status': {'$in': ['scheduled', 'confirmed']}
+        })
+        today_appointments = appointments_collection.count_documents({
+            'appointment_date': {
+                '$gte': utc_now().replace(hour=0, minute=0, second=0, microsecond=0),
+                '$lt': utc_now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            },
+            'status': {'$in': ['scheduled', 'confirmed']}
+        })
+        completed_appointments = appointments_collection.count_documents({'status': 'completed'})
+        cancelled_appointments = appointments_collection.count_documents({'status': 'cancelled'})
+        
+        stats['appointments'] = {
+            'total': total_appointments,
+            'upcoming': upcoming_appointments,
+            'today': today_appointments,
+            'completed': completed_appointments,
+            'cancelled': cancelled_appointments,
+            'completion_rate': round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0
+        }
+        
         print(f"✅ Therapist stats retrieved successfully")
         print(f"   Total Patients: {total_patients}")
         print(f"   Active Patients: {stats['active_patients']}")
         print(f"   Total Sessions: {stats['total_sessions']}")
+        print(f"   Total Appointments: {total_appointments}")
         
         return jsonify({
             'success': True,
@@ -1536,6 +1578,745 @@ def get_therapist_reports(current_user):
         return jsonify({
             'success': False,
             'message': 'Failed to fetch therapist reports',
+            'error': str(e)
+        }), 500
+
+
+# ========================================
+# APPOINTMENT MANAGEMENT ENDPOINTS
+# ========================================
+
+@app.route('/api/therapist/appointments', methods=['GET'])
+@token_required
+@therapist_required
+def get_therapist_appointments(current_user):
+    """Get all appointments for the logged-in therapist"""
+    try:
+        from datetime import datetime, timedelta
+        
+        therapist_id = str(current_user['_id'])
+        
+        # Get query parameters for filtering
+        date_filter = request.args.get('date')  # YYYY-MM-DD format
+        status_filter = request.args.get('status')  # scheduled, confirmed, completed, cancelled
+        therapy_type = request.args.get('therapy_type')  # articulation, language, fluency, physical
+        
+        # Build query
+        query = {'therapist_id': therapist_id}
+        
+        if date_filter:
+            # Filter by specific date
+            start_date = datetime.strptime(date_filter, '%Y-%m-%d')
+            end_date = start_date + timedelta(days=1)
+            query['appointment_date'] = {'$gte': start_date, '$lt': end_date}
+        
+        if status_filter:
+            query['status'] = status_filter
+            
+        if therapy_type:
+            query['therapy_type'] = therapy_type
+        
+        # Fetch appointments
+        appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
+        
+        # Convert ObjectId to string and format dates
+        for appt in appointments:
+            appt['_id'] = str(appt['_id'])
+            appt['patient_id'] = str(appt['patient_id'])
+            appt['therapist_id'] = str(appt['therapist_id'])
+            if isinstance(appt.get('appointment_date'), datetime):
+                appt['appointment_date'] = appt['appointment_date'].isoformat()
+            if isinstance(appt.get('created_at'), datetime):
+                appt['created_at'] = appt['created_at'].isoformat()
+            if isinstance(appt.get('updated_at'), datetime):
+                appt['updated_at'] = appt['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'appointments': appointments
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching therapist appointments: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch appointments',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/unassigned', methods=['GET'])
+@token_required
+@therapist_required
+def get_unassigned_appointments(current_user):
+    """Get all unassigned/pending appointments that need therapist assignment"""
+    try:
+        from datetime import datetime
+        
+        # Get query parameters for filtering
+        therapy_type = request.args.get('therapy_type')  # articulation, language, fluency, physical
+        
+        # Build query for pending appointments without therapist
+        query = {
+            '$or': [
+                {'therapist_id': None},
+                {'therapist_id': {'$exists': False}},
+                {'status': 'pending'}
+            ]
+        }
+        
+        if therapy_type:
+            query['therapy_type'] = therapy_type
+        
+        # Fetch unassigned appointments
+        appointments = list(appointments_collection.find(query).sort('created_at', -1))
+        
+        # Convert ObjectId to string and format dates
+        for appt in appointments:
+            appt['_id'] = str(appt['_id'])
+            appt['patient_id'] = str(appt['patient_id'])
+            if appt.get('therapist_id'):
+                appt['therapist_id'] = str(appt['therapist_id'])
+            if isinstance(appt.get('appointment_date'), datetime):
+                appt['appointment_date'] = appt['appointment_date'].isoformat()
+            if isinstance(appt.get('created_at'), datetime):
+                appt['created_at'] = appt['created_at'].isoformat()
+            if isinstance(appt.get('updated_at'), datetime):
+                appt['updated_at'] = appt['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'appointments': appointments,
+            'count': len(appointments)
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching unassigned appointments: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch unassigned appointments',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments', methods=['POST'])
+@token_required
+@therapist_required
+def create_therapist_appointment(current_user):
+    """Create a new appointment (therapist side)"""
+    try:
+        from datetime import datetime
+        
+        data = request.get_json()
+        therapist_id = str(current_user['_id'])
+        
+        # Validate required fields
+        if not data.get('patient_id'):
+            return jsonify({'success': False, 'message': 'Patient ID is required'}), 400
+        if not data.get('appointment_date'):
+            return jsonify({'success': False, 'message': 'Appointment date is required'}), 400
+        if not data.get('therapy_type'):
+            return jsonify({'success': False, 'message': 'Therapy type is required'}), 400
+        
+        # Validate therapy type
+        valid_therapy_types = ['articulation', 'language', 'fluency', 'physical']
+        if data['therapy_type'] not in valid_therapy_types:
+            return jsonify({'success': False, 'message': 'Invalid therapy type'}), 400
+        
+        # Get patient info
+        patient = users_collection.find_one({'_id': ObjectId(data['patient_id'])})
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+        
+        # Parse appointment date
+        try:
+            appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+        
+        # Create appointment document
+        appointment = {
+            'patient_id': data['patient_id'],
+            'therapist_id': therapist_id,
+            'therapy_type': data['therapy_type'],
+            'appointment_date': appointment_date,
+            'duration': data.get('duration', 60),  # Default 60 minutes
+            'status': 'confirmed',  # Therapist-created appointments are auto-approved
+            'approved': True,
+            'approved_at': datetime.utcnow(),
+            'approved_by': therapist_id,
+            'notes': data.get('notes', ''),
+            'patient_name': f"{patient.get('firstName', '')} {patient.get('lastName', '')}".strip(),
+            'patient_email': patient.get('email', ''),
+            'therapist_name': f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip(),
+            'therapist_email': current_user.get('email', ''),
+            'reminder_sent': False,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Insert appointment
+        result = appointments_collection.insert_one(appointment)
+        appointment['_id'] = str(result.inserted_id)
+        appointment['appointment_date'] = appointment['appointment_date'].isoformat()
+        appointment['created_at'] = appointment['created_at'].isoformat()
+        appointment['updated_at'] = appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment created successfully',
+            'appointment': appointment
+        }), 201
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error creating appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to create appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/<appointment_id>', methods=['PUT'])
+@token_required
+@therapist_required
+def update_therapist_appointment(current_user, appointment_id):
+    """Update an existing appointment"""
+    try:
+        from datetime import datetime
+        
+        data = request.get_json()
+        therapist_id = str(current_user['_id'])
+        
+        # Find appointment
+        appointment = appointments_collection.find_one({
+            '_id': ObjectId(appointment_id),
+            'therapist_id': therapist_id
+        })
+        
+        if not appointment:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        # Build update document
+        update_doc = {'updated_at': datetime.utcnow()}
+        
+        # Update allowed fields
+        if 'appointment_date' in data:
+            try:
+                update_doc['appointment_date'] = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+            except ValueError:
+                return jsonify({'success': False, 'message': 'Invalid date format'}), 400
+        
+        if 'duration' in data:
+            update_doc['duration'] = int(data['duration'])
+        
+        if 'status' in data:
+            valid_statuses = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no-show']
+            if data['status'] not in valid_statuses:
+                return jsonify({'success': False, 'message': 'Invalid status'}), 400
+            update_doc['status'] = data['status']
+        
+        if 'notes' in data:
+            update_doc['notes'] = data['notes']
+        
+        if 'session_summary' in data:
+            update_doc['session_summary'] = data['session_summary']
+        
+        if 'cancellation_reason' in data:
+            update_doc['cancellation_reason'] = data['cancellation_reason']
+        
+        # Update appointment
+        appointments_collection.update_one(
+            {'_id': ObjectId(appointment_id)},
+            {'$set': update_doc}
+        )
+        
+        # Fetch updated appointment
+        updated_appointment = appointments_collection.find_one({'_id': ObjectId(appointment_id)})
+        updated_appointment['_id'] = str(updated_appointment['_id'])
+        updated_appointment['patient_id'] = str(updated_appointment['patient_id'])
+        updated_appointment['therapist_id'] = str(updated_appointment['therapist_id'])
+        if isinstance(updated_appointment.get('appointment_date'), datetime):
+            updated_appointment['appointment_date'] = updated_appointment['appointment_date'].isoformat()
+        if isinstance(updated_appointment.get('created_at'), datetime):
+            updated_appointment['created_at'] = updated_appointment['created_at'].isoformat()
+        if isinstance(updated_appointment.get('updated_at'), datetime):
+            updated_appointment['updated_at'] = updated_appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment updated successfully',
+            'appointment': updated_appointment
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error updating appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/<appointment_id>', methods=['DELETE'])
+@token_required
+@therapist_required
+def delete_therapist_appointment(current_user, appointment_id):
+    """Cancel/delete an appointment"""
+    try:
+        from datetime import datetime
+        
+        therapist_id = str(current_user['_id'])
+        
+        # Find and update appointment status to cancelled
+        result = appointments_collection.update_one(
+            {
+                '_id': ObjectId(appointment_id),
+                'therapist_id': therapist_id
+            },
+            {
+                '$set': {
+                    'status': 'cancelled',
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment cancelled successfully'
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error deleting appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to cancel appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/patient/appointments', methods=['GET'])
+@token_required
+def get_patient_appointments(current_user):
+    """Get all appointments for the logged-in patient"""
+    try:
+        patient_id = str(current_user['_id'])
+        
+        # Get query parameters
+        status_filter = request.args.get('status')
+        
+        # Build query
+        query = {'patient_id': patient_id}
+        if status_filter:
+            query['status'] = status_filter
+        
+        # Fetch appointments
+        appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
+        
+        # Convert ObjectId to string and format dates
+        from datetime import datetime
+        for appt in appointments:
+            appt['_id'] = str(appt['_id'])
+            appt['patient_id'] = str(appt['patient_id'])
+            appt['therapist_id'] = str(appt['therapist_id'])
+            if isinstance(appt.get('appointment_date'), datetime):
+                appt['appointment_date'] = appt['appointment_date'].isoformat()
+            if isinstance(appt.get('created_at'), datetime):
+                appt['created_at'] = appt['created_at'].isoformat()
+            if isinstance(appt.get('updated_at'), datetime):
+                appt['updated_at'] = appt['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'appointments': appointments
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching patient appointments: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch appointments',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/patient/appointments/book', methods=['POST'])
+@token_required
+def book_patient_appointment(current_user):
+    """Book a new appointment (patient side)"""
+    try:
+        from datetime import datetime
+        
+        data = request.get_json()
+        patient_id = str(current_user['_id'])
+        
+        # Validate required fields
+        if not data.get('appointment_date'):
+            return jsonify({'success': False, 'message': 'Appointment date is required'}), 400
+        if not data.get('therapy_type'):
+            return jsonify({'success': False, 'message': 'Therapy type is required'}), 400
+        
+        # Validate therapy type
+        valid_therapy_types = ['articulation', 'language', 'fluency', 'physical']
+        if data['therapy_type'] not in valid_therapy_types:
+            return jsonify({'success': False, 'message': 'Invalid therapy type'}), 400
+        
+        # Parse appointment date
+        try:
+            appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+        
+        # Create appointment document (therapist assignment is optional)
+        appointment = {
+            'patient_id': patient_id,
+            'therapist_id': data.get('therapist_id', None),  # Optional - can be assigned later
+            'therapy_type': data['therapy_type'],
+            'appointment_date': appointment_date,
+            'duration': data.get('duration', 60),
+            'status': 'pending' if not data.get('therapist_id') else 'scheduled',
+            'notes': data.get('notes', ''),
+            'patient_name': f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip(),
+            'patient_email': current_user.get('email', ''),
+            'therapist_name': None,
+            'therapist_email': None,
+            'reminder_sent': False,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # If therapist is specified, get therapist info
+        if data.get('therapist_id'):
+            therapist = users_collection.find_one({'_id': ObjectId(data['therapist_id']), 'role': 'therapist'})
+            if therapist:
+                appointment['therapist_name'] = f"{therapist.get('firstName', '')} {therapist.get('lastName', '')}".strip()
+                appointment['therapist_email'] = therapist.get('email', '')
+        
+        # Insert appointment
+        result = appointments_collection.insert_one(appointment)
+        appointment['_id'] = str(result.inserted_id)
+        appointment['patient_id'] = str(appointment['patient_id'])
+        if appointment.get('therapist_id'):
+            appointment['therapist_id'] = str(appointment['therapist_id'])
+        appointment['appointment_date'] = appointment['appointment_date'].isoformat()
+        appointment['created_at'] = appointment['created_at'].isoformat()
+        appointment['updated_at'] = appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment request submitted successfully' if not data.get('therapist_id') else 'Appointment booked successfully',
+            'appointment': appointment
+        }), 201
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error booking appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to book appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/patient/appointments/<appointment_id>/cancel', methods=['PUT'])
+@token_required
+def cancel_patient_appointment(current_user, appointment_id):
+    """Cancel an appointment (patient side)"""
+    try:
+        from datetime import datetime
+        
+        patient_id = str(current_user['_id'])
+        data = request.get_json()
+        
+        # Find and update appointment
+        result = appointments_collection.update_one(
+            {
+                '_id': ObjectId(appointment_id),
+                'patient_id': patient_id
+            },
+            {
+                '$set': {
+                    'status': 'cancelled',
+                    'cancellation_reason': data.get('reason', 'Cancelled by patient'),
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment cancelled successfully'
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error cancelling appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to cancel appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/<appointment_id>/assign', methods=['PUT'])
+@token_required
+@therapist_required
+def assign_therapist_to_appointment(current_user, appointment_id):
+    """Assign therapist to an appointment"""
+    try:
+        from datetime import datetime
+        
+        therapist_id = str(current_user['_id'])
+        
+        # Get the appointment
+        appointment = appointments_collection.find_one({'_id': ObjectId(appointment_id)})
+        if not appointment:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        # Check if appointment already has a therapist
+        if appointment.get('therapist_id') and appointment.get('therapist_id') != therapist_id:
+            return jsonify({
+                'success': False, 
+                'message': 'This appointment is already assigned to another therapist'
+            }), 400
+        
+        # Update appointment with therapist info
+        therapist_name = f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip()
+        therapist_email = current_user.get('email', '')
+        
+        result = appointments_collection.update_one(
+            {'_id': ObjectId(appointment_id)},
+            {
+                '$set': {
+                    'therapist_id': therapist_id,
+                    'therapist_name': therapist_name,
+                    'therapist_email': therapist_email,
+                    'status': 'confirmed',  # Approved and confirmed
+                    'approved': True,
+                    'approved_at': datetime.utcnow(),
+                    'approved_by': therapist_id,
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Failed to assign therapist'}), 400
+        
+        # Get updated appointment
+        updated_appointment = appointments_collection.find_one({'_id': ObjectId(appointment_id)})
+        updated_appointment['_id'] = str(updated_appointment['_id'])
+        updated_appointment['patient_id'] = str(updated_appointment['patient_id'])
+        updated_appointment['therapist_id'] = str(updated_appointment['therapist_id'])
+        if isinstance(updated_appointment.get('appointment_date'), datetime):
+            updated_appointment['appointment_date'] = updated_appointment['appointment_date'].isoformat()
+        if isinstance(updated_appointment.get('created_at'), datetime):
+            updated_appointment['created_at'] = updated_appointment['created_at'].isoformat()
+        if isinstance(updated_appointment.get('updated_at'), datetime):
+            updated_appointment['updated_at'] = updated_appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Successfully assigned to appointment',
+            'appointment': updated_appointment
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error assigning therapist: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to assign therapist',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapists/available', methods=['GET'])
+@token_required
+def get_available_therapists(current_user):
+    """Get list of available therapists"""
+    try:
+        therapy_type = request.args.get('therapy_type')
+        
+        # Build query
+        query = {'role': 'therapist'}
+        if therapy_type:
+            query['therapyType'] = therapy_type
+        
+        # Fetch therapists
+        therapists = list(users_collection.find(
+            query,
+            {'firstName': 1, 'lastName': 1, 'email': 1, 'therapyType': 1}
+        ))
+        
+        # Convert ObjectId to string
+        for therapist in therapists:
+            therapist['_id'] = str(therapist['_id'])
+        
+        return jsonify({
+            'success': True,
+            'therapists': therapists
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching available therapists: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch therapists',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/patients/search', methods=['GET'])
+@token_required
+@therapist_required
+def search_patients(current_user):
+    """Search patients by name for autocomplete (therapist only)"""
+    try:
+        search_query = request.args.get('query', '').strip()
+        limit = int(request.args.get('limit', 10))
+        
+        if not search_query:
+            return jsonify({
+                'success': True,
+                'patients': []
+            }), 200
+        
+        # Build regex search for first name or last name
+        regex_pattern = {'$regex': search_query, '$options': 'i'}  # case-insensitive
+        
+        # Search for patients
+        query = {
+            'role': 'patient',
+            '$or': [
+                {'firstName': regex_pattern},
+                {'lastName': regex_pattern},
+                {'email': regex_pattern}
+            ]
+        }
+        
+        # Fetch matching patients
+        patients = list(users_collection.find(
+            query,
+            {
+                'firstName': 1,
+                'lastName': 1,
+                'email': 1,
+                'age': 1,
+                'gender': 1,
+                'therapyType': 1,
+                'patientType': 1
+            }
+        ).limit(limit))
+        
+        # Convert ObjectId to string and format full name
+        for patient in patients:
+            patient['_id'] = str(patient['_id'])
+            patient['fullName'] = f"{patient.get('firstName', '')} {patient.get('lastName', '')}".strip()
+        
+        return jsonify({
+            'success': True,
+            'patients': patients
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error searching patients: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to search patients',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/appointments/availability', methods=['GET'])
+@token_required
+def check_appointment_availability(current_user):
+    """Check available time slots for a therapist on a specific date"""
+    try:
+        from datetime import datetime, timedelta
+        
+        therapist_id = request.args.get('therapist_id')
+        date_str = request.args.get('date')  # YYYY-MM-DD
+        
+        if not therapist_id or not date_str:
+            return jsonify({'success': False, 'message': 'Therapist ID and date are required'}), 400
+        
+        # Parse date
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        
+        # Get all appointments for this therapist on this date
+        start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        
+        appointments = list(appointments_collection.find({
+            'therapist_id': therapist_id,
+            'appointment_date': {'$gte': start_of_day, '$lt': end_of_day},
+            'status': {'$in': ['scheduled', 'confirmed']}
+        }))
+        
+        # Generate available time slots (9 AM to 5 PM, 30-minute increments)
+        available_slots = []
+        current_time = start_of_day.replace(hour=9, minute=0)
+        end_time = start_of_day.replace(hour=17, minute=0)
+        
+        while current_time < end_time:
+            # Check if this slot is available
+            slot_available = True
+            for appt in appointments:
+                appt_start = appt['appointment_date']
+                appt_end = appt_start + timedelta(minutes=appt.get('duration', 60))
+                
+                # Check for overlap
+                if current_time >= appt_start and current_time < appt_end:
+                    slot_available = False
+                    break
+            
+            if slot_available:
+                available_slots.append(current_time.isoformat())
+            
+            current_time += timedelta(minutes=30)
+        
+        return jsonify({
+            'success': True,
+            'availableSlots': available_slots
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error checking availability: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to check availability',
             'error': str(e)
         }), 500
 

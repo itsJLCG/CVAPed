@@ -129,7 +129,7 @@ def register():
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['email', 'password', 'firstName', 'lastName', 'therapyType', 'patientType']
+        required_fields = ['email', 'password', 'firstName', 'lastName', 'age', 'gender', 'therapyType', 'patientType']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'message': f'{field} is required'}), 400
@@ -138,9 +138,24 @@ def register():
         password = data['password']
         first_name = data['firstName']
         last_name = data['lastName']
+        age = data['age']
+        gender = data['gender']
         therapy_type = data['therapyType']  # 'speech' or 'physical'
         patient_type = data['patientType']  # 'myself', 'child', 'dependent'
         role = 'patient'  # Default role for all new registrations
+        
+        # Validate age
+        try:
+            age_int = int(age)
+            if age_int < 1 or age_int > 120:
+                return jsonify({'message': 'Age must be between 1 and 120'}), 400
+        except ValueError:
+            return jsonify({'message': 'Age must be a valid number'}), 400
+        
+        # Validate gender
+        valid_genders = ['male', 'female', 'other', 'prefer-not-to-say']
+        if gender not in valid_genders:
+            return jsonify({'message': 'Invalid gender value'}), 400
         
         # Check if user already exists
         if users_collection.find_one({'email': email}):
@@ -155,6 +170,8 @@ def register():
             'password': hashed_password,
             'firstName': first_name,
             'lastName': last_name,
+            'age': age_int,
+            'gender': gender,
             'role': role,
             'therapyType': therapy_type,
             'patientType': patient_type,
@@ -223,6 +240,8 @@ def register():
                 'email': email,
                 'firstName': first_name,
                 'lastName': last_name,
+                'age': age_int,
+                'gender': gender,
                 'role': role,
                 'therapyType': therapy_type,
                 'patientType': patient_type
@@ -442,16 +461,33 @@ def complete_profile(current_user):
             return jsonify({'message': 'Profile is already complete'}), 400
         
         # Validate required fields
-        required_fields = ['therapyType', 'patientType']
+        required_fields = ['age', 'gender', 'therapyType', 'patientType']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'message': f'{field} is required'}), 400
         
+        age = data['age']
+        gender = data['gender']
         therapy_type = data['therapyType']
         patient_type = data['patientType']
         
+        # Validate age
+        try:
+            age_int = int(age)
+            if age_int < 1 or age_int > 120:
+                return jsonify({'message': 'Age must be between 1 and 120'}), 400
+        except ValueError:
+            return jsonify({'message': 'Age must be a valid number'}), 400
+        
+        # Validate gender
+        valid_genders = ['male', 'female', 'other', 'prefer-not-to-say']
+        if gender not in valid_genders:
+            return jsonify({'message': 'Invalid gender value'}), 400
+        
         # Prepare update data
         update_data = {
+            'age': age_int,
+            'gender': gender,
             'therapyType': therapy_type,
             'patientType': patient_type,
             'isProfileComplete': True,
@@ -517,6 +553,8 @@ def complete_profile(current_user):
                 'email': updated_user['email'],
                 'firstName': updated_user['firstName'],
                 'lastName': updated_user['lastName'],
+                'age': updated_user.get('age'),
+                'gender': updated_user.get('gender'),
                 'role': updated_user.get('role', 'patient'),
                 'isProfileComplete': True,
                 'therapyType': updated_user['therapyType'],

@@ -13,6 +13,8 @@ function Register({ onLogin }) {
     email: '',
     password: '',
     confirmPassword: '',
+    age: '',
+    gender: '',
     therapyType: '',
     patientType: '',
     // Pediatric Speech Therapy fields
@@ -404,6 +406,40 @@ function Register({ onLogin }) {
                       placeholder="Enter your email"
                       autoComplete="email"
                     />
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="age">Age</label>
+                      <input
+                        type="number"
+                        id="age"
+                        name="age"
+                        value={formData.age}
+                        onChange={handleChange}
+                        required
+                        placeholder="Enter your age"
+                        min="1"
+                        max="120"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="gender">Gender</label>
+                      <select
+                        id="gender"
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleChange}
+                        required
+                      >
+                        <option value="">Select gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                        <option value="prefer-not-to-say">Prefer not to say</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="form-group">

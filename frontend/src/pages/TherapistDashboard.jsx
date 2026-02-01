@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 
@@ -107,6 +107,21 @@ function TherapistDashboard({ onLogout }) {
   const [expandedGaitRows, setExpandedGaitRows] = useState({});
   const [currentGaitPage, setCurrentGaitPage] = useState(1);
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
+
+  // Success Stories state
+  const [successStories, setSuccessStories] = useState([]);
+  const [loadingStories, setLoadingStories] = useState(false);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [editingStory, setEditingStory] = useState(null);
+  const [currentStoryPage, setCurrentStoryPage] = useState(1);
+  const [storyEntriesPerPage, setStoryEntriesPerPage] = useState(10);
+  const [storySearchTerm, setStorySearchTerm] = useState('');
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
+  const [newStory, setNewStory] = useState({
+    patientName: '',
+    story: ''
+  });
 
   // Load overview statistics
   const loadOverviewStats = async (days = selectedDays) => {
@@ -636,6 +651,7 @@ function TherapistDashboard({ onLogout }) {
       loadFluencyExercises(); // Always load exercises for fluency
     }
     if (activeTab === 'physical') loadPhysical();
+    if (activeTab === 'success-stories') loadSuccessStories();
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
@@ -738,6 +754,168 @@ function TherapistDashboard({ onLogout }) {
     });
   };
 
+  // Success Stories Functions
+  const loadSuccessStories = async () => {
+    console.log('🔍 Loading success stories...');
+    setLoadingStories(true);
+    try {
+      const response = await successStoryService.getAll();
+      console.log('📦 Success stories response:', response);
+      if (response.success) {
+        setSuccessStories(response.data || []);
+        console.log('✅ Success stories loaded:', response.data?.length || 0);
+      }
+    } catch (e) {
+      console.error('❌ Failed to load success stories', e);
+      setSuccessStories([]);
+    } finally {
+      setLoadingStories(false);
+    }
+  };
+
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setSelectedImages(files);
+    
+    // Create preview URLs
+    const previews = files.map(file => URL.createObjectURL(file));
+    setImagePreviewUrls(previews);
+  };
+
+  const handleRemoveImage = (index) => {
+    const newImages = selectedImages.filter((_, i) => i !== index);
+    const newPreviews = imagePreviewUrls.filter((_, i) => i !== index);
+    setSelectedImages(newImages);
+    setImagePreviewUrls(newPreviews);
+  };
+
+  const handleAddStory = () => {
+    setEditingStory(null);
+    setNewStory({
+      patientName: '',
+      story: ''
+    });
+    setSelectedImages([]);
+    setImagePreviewUrls([]);
+    setShowStoryModal(true);
+  };
+
+  const handleSaveStory = async () => {
+    try {
+      // Validation
+      if (!newStory.patientName.trim()) {
+        alert('Patient name is required');
+        return;
+      }
+      if (!newStory.story.trim()) {
+        alert('Success story content is required');
+        return;
+      }
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('patientName', newStory.patientName);
+      formData.append('story', newStory.story);
+      
+      // Append images
+      selectedImages.forEach((image) => {
+        formData.append('images', image);
+      });
+
+      const response = await successStoryService.create(formData);
+      
+      if (response.success) {
+        setShowStoryModal(false);
+        setSelectedImages([]);
+        setImagePreviewUrls([]);
+        loadSuccessStories();
+        alert('Success story added successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to add success story:', error);
+      alert(error.response?.data?.message || 'Failed to add success story');
+    }
+  };
+
+  const handleEditStory = (story) => {
+    setEditingStory(story);
+    setNewStory({
+      patientName: story.patientName,
+      story: story.story
+    });
+    setSelectedImages([]);
+    setImagePreviewUrls([]);
+    setShowStoryModal(true);
+  };
+
+  const handleUpdateStory = async () => {
+    try {
+      // Validation
+      if (!newStory.patientName.trim()) {
+        alert('Patient name is required');
+        return;
+      }
+      if (!newStory.story.trim()) {
+        alert('Success story content is required');
+        return;
+      }
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('patientName', newStory.patientName);
+      formData.append('story', newStory.story);
+      
+      // Append new images
+      selectedImages.forEach((image) => {
+        formData.append('images', image);
+      });
+
+      const response = await successStoryService.update(editingStory.id, formData);
+      
+      if (response.success) {
+        setShowStoryModal(false);
+        setEditingStory(null);
+        setSelectedImages([]);
+        setImagePreviewUrls([]);
+        loadSuccessStories();
+        alert('Success story updated successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to update success story:', error);
+      alert(error.response?.data?.message || 'Failed to update success story');
+    }
+  };
+
+  const handleDeleteStory = async (storyId) => {
+    if (!window.confirm('Are you sure you want to delete this success story?')) return;
+    
+    try {
+      const response = await successStoryService.delete(storyId);
+      if (response.success) {
+        loadSuccessStories();
+        alert('Success story deleted successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to delete success story:', error);
+      alert(error.response?.data?.message || 'Failed to delete success story');
+    }
+  };
+
+  const handleRemoveExistingImage = async (storyId, imagePath) => {
+    if (!window.confirm('Are you sure you want to remove this image?')) return;
+    
+    try {
+      const response = await successStoryService.removeImage(storyId, imagePath);
+      if (response.success) {
+        loadSuccessStories();
+        alert('Image removed successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to remove image:', error);
+      alert(error.response?.data?.message || 'Failed to remove image');
+    }
+  };
+
   const filtered = therapyData.filter(item => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -819,6 +997,11 @@ function TherapistDashboard({ onLogout }) {
             <span className="nav-icon">🏃</span>
             {!sidebarCollapsed && <span className="nav-label">Physical Therapy</span>}
           </button>
+
+          <button className={`nav-item ${activeTab === 'success-stories' ? 'active' : ''}`} onClick={() => { setActiveTab('success-stories'); setTherapyData([]); }}>
+            <span className="nav-icon">⭐</span>
+            {!sidebarCollapsed && <span className="nav-label">Success Stories</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -837,7 +1020,7 @@ function TherapistDashboard({ onLogout }) {
       <main className="admin-main">
         <header className="admin-header">
           <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : 'Therapist'}</h1>
+            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'success-stories' ? 'Success Stories' : 'Therapist'}</h1>
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
@@ -1863,6 +2046,181 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
+          {activeTab === 'success-stories' && (
+            <div className="success-stories-section">
+              <div className="controls-section">
+                <div className="control-group">
+                  <button className="btn-primary" onClick={handleAddStory}>
+                    ➕ Add Success Story
+                  </button>
+                  <div className="search-container">
+                    <input
+                      type="text"
+                      placeholder="Search by patient name..."
+                      value={storySearchTerm}
+                      onChange={(e) => setStorySearchTerm(e.target.value)}
+                      className="search-input"
+                    />
+                  </div>
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select 
+                        value={storyEntriesPerPage} 
+                        onChange={(e) => {
+                          setStoryEntriesPerPage(Number(e.target.value));
+                          setCurrentStoryPage(1);
+                        }}
+                        className="entries-select"
+                      >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                  <div className="stats-summary">
+                    <span className="stat-item">
+                      <strong>{successStories.length}</strong> Total Stories
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingStories ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading success stories...</p>
+                </div>
+              ) : successStories.length === 0 ? (
+                <div className="no-exercises">
+                  <div className="no-exercises-icon">⭐</div>
+                  <p className="no-exercises-text">No success stories yet</p>
+                  <p className="no-exercises-hint">Click "Add Success Story" to share patient achievements</p>
+                </div>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="logs-table stories-table">
+                    <thead>
+                      <tr>
+                        <th>Patient Name</th>
+                        <th>Story Preview</th>
+                        <th>Images</th>
+                        <th>Date Added</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filteredStories = successStories.filter(story =>
+                          !storySearchTerm ||
+                          story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                        );
+                        const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
+                        const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
+                        const currentEntries = filteredStories.slice(indexOfFirstEntry, indexOfLastEntry);
+                        return currentEntries.map(story => (
+                          <tr key={story.id}>
+                            <td>
+                              <div className="patient-cell">
+                                <div className="patient-avatar-small">
+                                  {story.patientName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                </div>
+                                <span className="patient-name-text">{story.patientName}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="story-preview">
+                                {story.story.length > 100 
+                                  ? `${story.story.substring(0, 100)}...` 
+                                  : story.story}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="story-images-preview">
+                                {story.images && story.images.length > 0 ? (
+                                  <div className="image-thumbnails">
+                                    {story.images.slice(0, 3).map((imagePath, idx) => (
+                                      <img 
+                                        key={idx}
+                                        src={`http://localhost:5000/${imagePath}`}
+                                        alt={`${story.patientName} - Image ${idx + 1}`}
+                                        className="story-thumbnail"
+                                        title={`Image ${idx + 1} of ${story.images.length}`}
+                                      />
+                                    ))}
+                                    {story.images.length > 3 && (
+                                      <div className="more-images-badge">
+                                        +{story.images.length - 3}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="no-images-text">No images</span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <span className="date-cell">{formatDate(story.createdAt)}</span>
+                            </td>
+                            <td>
+                              <div className="exercise-actions">
+                                <button 
+                                  className="btn-edit" 
+                                  onClick={() => handleEditStory(story)}
+                                >
+                                  Edit
+                                </button>
+                                <button 
+                                  className="btn-delete" 
+                                  onClick={() => handleDeleteStory(story.id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+
+                  {/* Pagination */}
+                  <div className="pagination">
+                    <button 
+                      onClick={() => setCurrentStoryPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentStoryPage === 1}
+                      className="pagination-btn"
+                    >
+                      Previous
+                    </button>
+                    <span className="pagination-info">
+                      Page {currentStoryPage} of {Math.ceil(successStories.filter(story =>
+                        !storySearchTerm ||
+                        story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                      ).length / storyEntriesPerPage) || 1}
+                    </span>
+                    <button 
+                      onClick={() => setCurrentStoryPage(prev => Math.min(Math.ceil(successStories.filter(story =>
+                        !storySearchTerm ||
+                        story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                      ).length / storyEntriesPerPage), prev + 1))}
+                      disabled={currentStoryPage === Math.ceil(successStories.filter(story =>
+                        !storySearchTerm ||
+                        story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                      ).length / storyEntriesPerPage)}
+                      className="pagination-btn"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'fluency' && (
             <div className="fluency-section">
               <div className="controls-section">
@@ -2777,6 +3135,147 @@ function TherapistDashboard({ onLogout }) {
             <div className="modal-footer">
               <button className="secondary-btn" onClick={() => setEditingArticulationExercise(null)}>Cancel</button>
               <button className="primary-btn" onClick={handleUpdateArticulationExercise}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Story Modal */}
+      {showStoryModal && (
+        <div className="modal-overlay" onClick={() => setShowStoryModal(false)}>
+          <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingStory ? 'Edit Success Story' : 'Add New Success Story'}</h2>
+              <button className="modal-close" onClick={() => setShowStoryModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Patient Name *</label>
+                <input 
+                  type="text" 
+                  value={newStory.patientName}
+                  onChange={(e) => setNewStory({ ...newStory, patientName: e.target.value })}
+                  placeholder="Enter patient's name"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Success Story *</label>
+                <textarea 
+                  value={newStory.story}
+                  onChange={(e) => setNewStory({ ...newStory, story: e.target.value })}
+                  placeholder="Share the patient's journey, challenges overcome, and achievements..."
+                  rows={8}
+                  required
+                  style={{ resize: 'vertical', minHeight: '150px' }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Upload Images</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '8px', width: '100%' }}
+                />
+                <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '8px', display: 'block' }}>
+                  Supported formats: PNG, JPG, JPEG, GIF, WebP. Max size: 5MB per image.
+                </small>
+              </div>
+
+              {/* Image Preview */}
+              {imagePreviewUrls.length > 0 && (
+                <div className="form-group">
+                  <label>Selected Images ({imagePreviewUrls.length})</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                    {imagePreviewUrls.map((url, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
+                        <img 
+                          src={url} 
+                          alt={`Preview ${index + 1}`} 
+                          style={{ width: '100%', height: '120px', objectFit: 'cover' }}
+                        />
+                        <button
+                          onClick={() => handleRemoveImage(index)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: '1'
+                          }}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Existing Images (when editing) */}
+              {editingStory && editingStory.images && editingStory.images.length > 0 && (
+                <div className="form-group">
+                  <label>Existing Images ({editingStory.images.length})</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                    {editingStory.images.map((imagePath, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
+                        <img 
+                          src={`http://localhost:5000/${imagePath}`} 
+                          alt={`Existing ${index + 1}`} 
+                          style={{ width: '100%', height: '120px', objectFit: 'cover' }}
+                        />
+                        <button
+                          onClick={() => handleRemoveExistingImage(editingStory.id, imagePath)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: '1'
+                          }}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowStoryModal(false)}>Cancel</button>
+              <button 
+                className="primary-btn" 
+                onClick={editingStory ? handleUpdateStory : handleSaveStory}
+              >
+                {editingStory ? 'Update Story' : 'Add Story'}
+              </button>
             </div>
           </div>
         </div>

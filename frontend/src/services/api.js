@@ -582,4 +582,47 @@ export const predictionService = {
   }
 };
 
+// Success Stories Service
+export const successStoryService = {
+  // Get all success stories
+  getAll: async () => {
+    const response = await api.get('/success-stories');
+    return response.data;
+  },
+
+  // Create a new success story
+  create: async (formData) => {
+    const response = await api.post('/success-stories', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Update an existing success story
+  update: async (storyId, formData) => {
+    const response = await api.put(`/success-stories/${storyId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Delete a success story
+  delete: async (storyId) => {
+    const response = await api.delete(`/success-stories/${storyId}`);
+    return response.data;
+  },
+
+  // Remove an image from a success story
+  removeImage: async (storyId, imagePath) => {
+    const response = await api.post(`/success-stories/${storyId}/remove-image`, {
+      imagePath,
+    });
+    return response.data;
+  },
+};
+
 export default api;

@@ -23,6 +23,7 @@ import HealthLogs from './pages/HealthLogs';
 import Prediction from './pages/Prediction';
 import Prescription from './pages/Prescription';
 import Profile from './pages/Profile';
+import SuccessStoryPage from './pages/SuccessStoryPage';
 import './App.css';
 
 function App() {
@@ -104,6 +105,10 @@ function App() {
             <Route 
               path="/home" 
               element={<Landing />} 
+            />
+            <Route 
+              path="/success-story/:storyId" 
+              element={<SuccessStoryPage />} 
             />
             <Route 
               path="/login" 

@@ -21,6 +21,8 @@ from receptive_crud import receptive_bp, init_receptive_crud
 from articulation_crud import articulation_bp, init_articulation_crud
 # Import admin management blueprint
 from admin.AdminManagement import admin_bp, init_admin_management
+# Import success story CRUD blueprint
+from success_story_crud import success_story_bp, init_success_story_crud
 
 # Load environment variables from .env file
 load_dotenv()
@@ -72,6 +74,10 @@ init_articulation_crud(db, app.config['SECRET_KEY'])
 # Register admin management blueprint
 app.register_blueprint(admin_bp)
 init_admin_management(db)
+
+# Register success story CRUD blueprint
+app.register_blueprint(success_story_bp, url_prefix='/api')
+init_success_story_crud(db)
 
 # Initialize XGBoost Prediction Service (Standalone - all 4 predictors)
 print("\n🤖 Initializing XGBoost Prediction Models...")
@@ -3237,6 +3243,13 @@ def get_physical_therapy_patients(current_user):
             'error': str(e)
         }), 500
 
+# Serve uploaded files
+@app.route('/uploads/<path:filename>')
+def serve_uploaded_file(filename):
+    """Serve uploaded files (images, etc.)"""
+    from flask import send_from_directory
+    upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    return send_from_directory(upload_dir, filename)
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

@@ -1401,6 +1401,145 @@ def get_therapist_stats(current_user):
         }), 500
 
 
+@app.route('/api/therapist/reports', methods=['GET'])
+@token_required
+def get_therapist_reports(current_user):
+    """
+    Get therapist reports including age bracket analysis and gender distribution
+    """
+    try:
+        # Verify user is a therapist
+        if current_user.get('role') != 'therapist':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized. Only therapists can access this endpoint.'
+            }), 403
+        
+        # Get all patients
+        patients = list(users_collection.find({'role': 'patient'}))
+        
+        if not patients:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'totalPatients': 0,
+                    'ageBrackets': [],
+                    'genderDistribution': [],
+                    'highestAgeBracket': None
+                }
+            }), 200
+        
+        total_patients = len(patients)
+        
+        # Calculate age brackets
+        age_brackets = {
+            '0-12': 0,
+            '13-17': 0,
+            '18-25': 0,
+            '26-35': 0,
+            '36-45': 0,
+            '46-55': 0,
+            '56-65': 0,
+            '66+': 0
+        }
+        
+        # Calculate gender distribution
+        gender_counts = {
+            'male': 0,
+            'female': 0,
+            'other': 0,
+            'prefer-not-to-say': 0
+        }
+        
+        for patient in patients:
+            # Age bracket calculation
+            age = patient.get('age')
+            if age is not None:
+                if age <= 12:
+                    age_brackets['0-12'] += 1
+                elif age <= 17:
+                    age_brackets['13-17'] += 1
+                elif age <= 25:
+                    age_brackets['18-25'] += 1
+                elif age <= 35:
+                    age_brackets['26-35'] += 1
+                elif age <= 45:
+                    age_brackets['36-45'] += 1
+                elif age <= 55:
+                    age_brackets['46-55'] += 1
+                elif age <= 65:
+                    age_brackets['56-65'] += 1
+                else:
+                    age_brackets['66+'] += 1
+            
+            # Gender distribution
+            gender = patient.get('gender', 'prefer-not-to-say')
+            if gender in gender_counts:
+                gender_counts[gender] += 1
+            else:
+                gender_counts['other'] += 1
+        
+        # Format age brackets data
+        age_brackets_list = []
+        highest_bracket = None
+        highest_count = 0
+        
+        for bracket_range, count in age_brackets.items():
+            percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
+            bracket_data = {
+                'range': bracket_range,
+                'count': count,
+                'percentage': percentage,
+                'isHighest': False
+            }
+            age_brackets_list.append(bracket_data)
+            
+            if count > highest_count:
+                highest_count = count
+                highest_bracket = bracket_data
+        
+        # Mark the highest bracket
+        if highest_bracket:
+            highest_bracket['isHighest'] = True
+            for bracket in age_brackets_list:
+                if bracket['range'] == highest_bracket['range']:
+                    bracket['isHighest'] = True
+        
+        # Format gender distribution data
+        gender_distribution_list = []
+        for gender, count in gender_counts.items():
+            if count > 0:  # Only include genders with patients
+                percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
+                gender_distribution_list.append({
+                    'gender': gender,
+                    'count': count,
+                    'percentage': percentage
+                })
+        
+        # Sort by count descending
+        gender_distribution_list.sort(key=lambda x: x['count'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'totalPatients': total_patients,
+                'ageBrackets': age_brackets_list,
+                'genderDistribution': gender_distribution_list,
+                'highestAgeBracket': highest_bracket
+            }
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching therapist reports: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch therapist reports',
+            'error': str(e)
+        }), 500
+
+
 # Azure Speech Configuration
 AZURE_SPEECH_KEY = os.getenv('AZURE_SPEECH_KEY')
 AZURE_SPEECH_REGION = os.getenv('AZURE_SPEECH_REGION', 'eastus')

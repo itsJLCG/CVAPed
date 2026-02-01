@@ -123,6 +123,10 @@ function TherapistDashboard({ onLogout }) {
     story: ''
   });
 
+  // Reports state
+  const [reportsData, setReportsData] = useState(null);
+  const [loadingReports, setLoadingReports] = useState(false);
+
   // Load overview statistics
   const loadOverviewStats = async (days = selectedDays) => {
     setLoadingStats(true);
@@ -652,6 +656,7 @@ function TherapistDashboard({ onLogout }) {
     }
     if (activeTab === 'physical') loadPhysical();
     if (activeTab === 'success-stories') loadSuccessStories();
+    if (activeTab === 'reports') loadReports();
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
@@ -770,6 +775,22 @@ function TherapistDashboard({ onLogout }) {
       setSuccessStories([]);
     } finally {
       setLoadingStories(false);
+    }
+  };
+
+  // Reports Functions
+  const loadReports = async () => {
+    setLoadingReports(true);
+    try {
+      const response = await therapistService.getReports();
+      if (response.success) {
+        setReportsData(response.data || null);
+      }
+    } catch (e) {
+      console.error('Failed to load reports', e);
+      setReportsData(null);
+    } finally {
+      setLoadingReports(false);
     }
   };
 
@@ -1002,6 +1023,11 @@ function TherapistDashboard({ onLogout }) {
             <span className="nav-icon">⭐</span>
             {!sidebarCollapsed && <span className="nav-label">Success Stories</span>}
           </button>
+
+          <button className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => { setActiveTab('reports'); setTherapyData([]); }}>
+            <span className="nav-icon">📊</span>
+            {!sidebarCollapsed && <span className="nav-label">Reports</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -1020,7 +1046,7 @@ function TherapistDashboard({ onLogout }) {
       <main className="admin-main">
         <header className="admin-header">
           <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'success-stories' ? 'Success Stories' : 'Therapist'}</h1>
+            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : 'Therapist'}</h1>
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
@@ -2292,6 +2318,140 @@ function TherapistDashboard({ onLogout }) {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <div className="reports-section">
+              {loadingReports ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading reports...</p>
+                </div>
+              ) : reportsData ? (
+                <div className="reports-container">
+                  {/* Age Bracket Analysis */}
+                  <div className="report-card">
+                    <div className="report-card-header">
+                      <h3 className="report-card-title">
+                        <span className="report-icon">👥</span>
+                        Age Distribution
+                      </h3>
+                      <p className="report-card-subtitle">Patient distribution across age brackets</p>
+                    </div>
+                    <div className="report-card-body">
+                      {reportsData.ageBrackets && reportsData.ageBrackets.length > 0 ? (
+                        <>
+                          <div className="age-brackets-grid">
+                            {reportsData.ageBrackets.map((bracket, index) => (
+                              <div 
+                                key={index} 
+                                className={`age-bracket-item ${bracket.isHighest ? 'highest' : ''}`}
+                              >
+                                <div className="bracket-label">{bracket.range}</div>
+                                <div className="bracket-count">{bracket.count}</div>
+                                <div className="bracket-percentage">{bracket.percentage}%</div>
+                                {bracket.isHighest && (
+                                  <div className="highest-badge">Highest</div>
+                                )}
+                                <div className="bracket-bar">
+                                  <div 
+                                    className="bracket-bar-fill" 
+                                    style={{ width: `${bracket.percentage}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="report-summary">
+                            <div className="summary-item highlight">
+                              <span className="summary-icon">🎯</span>
+                              <div className="summary-content">
+                                <span className="summary-label">Highest Age Bracket:</span>
+                                <span className="summary-value">{reportsData.highestAgeBracket?.range || 'N/A'}</span>
+                              </div>
+                              <div className="summary-count">{reportsData.highestAgeBracket?.count || 0} patients</div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="no-data">
+                          <div className="no-data-icon">📊</div>
+                          <p>No age data available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Gender Distribution */}
+                  <div className="report-card">
+                    <div className="report-card-header">
+                      <h3 className="report-card-title">
+                        <span className="report-icon">⚧️</span>
+                        Gender Distribution
+                      </h3>
+                      <p className="report-card-subtitle">Patient distribution by gender</p>
+                    </div>
+                    <div className="report-card-body">
+                      {reportsData.genderDistribution && reportsData.genderDistribution.length > 0 ? (
+                        <>
+                          <div className="gender-distribution-grid">
+                            {reportsData.genderDistribution.map((gender, index) => (
+                              <div key={index} className="gender-item">
+                                <div className="gender-icon-wrapper">
+                                  <span className="gender-emoji">
+                                    {gender.gender === 'male' ? '👨' : 
+                                     gender.gender === 'female' ? '👩' : 
+                                     gender.gender === 'other' ? '🧑' : '❓'}
+                                  </span>
+                                </div>
+                                <div className="gender-info">
+                                  <div className="gender-label">
+                                    {gender.gender.charAt(0).toUpperCase() + gender.gender.slice(1)}
+                                  </div>
+                                  <div className="gender-stats">
+                                    <span className="gender-count">{gender.count} patients</span>
+                                    <span className="gender-percentage">{gender.percentage}%</span>
+                                  </div>
+                                  <div className="gender-bar">
+                                    <div 
+                                      className={`gender-bar-fill ${gender.gender}`}
+                                      style={{ width: `${gender.percentage}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="report-summary">
+                            <div className="summary-stats-row">
+                              <div className="summary-stat">
+                                <span className="stat-label">Total Patients</span>
+                                <span className="stat-value">{reportsData.totalPatients || 0}</span>
+                              </div>
+                              <div className="summary-stat">
+                                <span className="stat-label">Gender Categories</span>
+                                <span className="stat-value">{reportsData.genderDistribution.length}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="no-data">
+                          <div className="no-data-icon">⚧️</div>
+                          <p>No gender data available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="no-data-large">
+                  <div className="no-data-icon">📊</div>
+                  <p className="no-data-text">No reports data available</p>
+                  <p className="no-data-hint">Reports will appear here once patient data is available</p>
                 </div>
               )}
             </div>

@@ -223,6 +223,11 @@ export const therapistService = {
     const response = await api.get('/therapist/physical/patients');
     return response.data;
   },
+
+  getReports: async () => {
+    const response = await api.get('/therapist/reports');
+    return response.data;
+  },
 };
 
 // Fluency Exercise CRUD API

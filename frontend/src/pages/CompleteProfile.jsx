@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/api';
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
 import './Auth.css';
 
 function CompleteProfile({ onLogin }) {
@@ -30,6 +31,8 @@ function CompleteProfile({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [copyParentInfo, setCopyParentInfo] = useState(false);
   const [copyPatientInfo, setCopyPatientInfo] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
   const navigate = useNavigate();
   const toast = useToast();
@@ -110,6 +113,15 @@ function CompleteProfile({ onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Validate Terms and Conditions
+    if (!agreedToTerms) {
+      const errorMsg = 'You must agree to the Terms and Conditions';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setLoading(false);
+      return;
+    }
 
     // Validate therapy type and patient type
     if (!formData.therapyType) {
@@ -566,6 +578,28 @@ function CompleteProfile({ onLogin }) {
                   </div>
                 )}
 
+                {/* Terms and Conditions Checkbox */}
+                <div className="form-group terms-checkbox-group">
+                  <label className="terms-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="terms-checkbox"
+                    />
+                    <span className="terms-text">
+                      I have read and agree to the{' '}
+                      <button
+                        type="button"
+                        className="terms-link"
+                        onClick={() => setShowTermsModal(true)}
+                      >
+                        Terms and Conditions
+                      </button>
+                    </span>
+                  </label>
+                </div>
+
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? 'Completing Profile...' : 'Complete Profile'}
                 </button>
@@ -583,6 +617,12 @@ function CompleteProfile({ onLogin }) {
           </div>
         </div>
       </footer>
+
+      {/* Terms and Conditions Modal */}
+      <TermsAndConditionsModal 
+        isOpen={showTermsModal} 
+        onClose={() => setShowTermsModal(false)} 
+      />
     </div>
   );
 }

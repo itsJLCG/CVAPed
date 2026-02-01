@@ -92,20 +92,19 @@ function TherapySelection({ onLogout }) {
               </div>
               
               <div className="therapy-details">
-                <div className="therapy-description">
-                  <p>
-                    Comprehensive speech therapy programs designed to improve communication skills for children. 
-                    Choose from three specialized therapy types tailored to specific needs.
-                  </p>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', marginTop: '20px' }}>
-                    Available Therapy Types:
-                  </h3>
-                  <ul className="therapy-features">
-                    <li><strong>Articulation Therapy:</strong> Sound production and pronunciation improvement</li>
-                    <li><strong>Language Therapy:</strong> Receptive and expressive language development</li>
-                    <li><strong>Fluency Therapy:</strong> Stuttering reduction and speech rate control</li>
-                  </ul>
-                </div>
+              <div className="therapy-description">
+                <p>
+                  Comprehensive speech therapy programs designed to improve communication skills for children. 
+                  Choose from three specialized therapy types tailored to specific needs.
+                </p>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '15px', marginTop: '20px' }}>
+                  Available Therapy Types:
+                </h3>
+                <ul className="therapy-features">
+                  <li><strong>Articulation Therapy:</strong> Sound production and pronunciation improvement</li>
+                  <li><strong>Language Therapy:</strong> Receptive, expressive, and fluency development</li>
+                </ul>
+              </div>
                 <button className="therapy-btn" onClick={() => handleTherapyClick('speech')}>
                   Explore Speech Therapy Options
                 </button>

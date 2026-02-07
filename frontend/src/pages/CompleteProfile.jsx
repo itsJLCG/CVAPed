@@ -289,7 +289,7 @@ function CompleteProfile({ onLogin }) {
                           required
                         />
                         <span className="radio-label">
-                          <strong>Speech Therapy</strong>
+                          <strong>Speech/Language Therapy</strong>
                           <small>For communication disorders (pediatric)</small>
                         </span>
                       </label>

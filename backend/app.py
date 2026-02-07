@@ -200,11 +200,11 @@ def register():
             
             for field in child_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             for field in parent_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             user['childInfo'] = {
                 'firstName': data['childFirstName'],
@@ -515,11 +515,11 @@ def complete_profile(current_user):
             
             for field in child_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             for field in parent_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             update_data['childInfo'] = {
                 'firstName': data['childFirstName'],

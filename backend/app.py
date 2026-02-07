@@ -301,7 +301,8 @@ def login():
                 'email': user['email'],
                 'firstName': user['firstName'],
                 'lastName': user['lastName'],
-                'role': user.get('role', 'user')
+                'role': user.get('role', 'user'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
             }
         }), 200
         
@@ -372,7 +373,8 @@ def firebase_auth():
                     'role': user.get('role', 'patient'),
                     'isProfileComplete': user.get('isProfileComplete', True),
                     'therapyType': user.get('therapyType'),
-                    'patientType': user.get('patientType')
+                    'patientType': user.get('patientType'),
+                    'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
                 }
             }), 200
         
@@ -417,7 +419,8 @@ def firebase_auth():
                         'role': existing_user.get('role', 'patient'),
                         'isProfileComplete': existing_user.get('isProfileComplete', True),
                         'therapyType': existing_user.get('therapyType'),
-                        'patientType': existing_user.get('patientType')
+                        'patientType': existing_user.get('patientType'),
+                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic')
                     }
                 }), 200
             else:
@@ -571,7 +574,8 @@ def complete_profile(current_user):
                 'role': updated_user.get('role', 'patient'),
                 'isProfileComplete': True,
                 'therapyType': updated_user['therapyType'],
-                'patientType': updated_user['patientType']
+                'patientType': updated_user['patientType'],
+                'hasInitialDiagnostic': updated_user.get('hasInitialDiagnostic')
             }
         }), 200
         
@@ -645,6 +649,48 @@ def update_user(current_user):
         
     except Exception as e:
         return jsonify({'message': 'Failed to update profile', 'error': str(e)}), 500
+
+@app.route('/api/user/diagnostic-status', methods=['PUT'])
+@token_required
+def update_diagnostic_status(current_user):
+    try:
+        data = request.get_json()
+        
+        if 'hasInitialDiagnostic' not in data:
+            return jsonify({'message': 'hasInitialDiagnostic is required'}), 400
+        
+        has_initial_diagnostic = bool(data['hasInitialDiagnostic'])
+        
+        # Update user document
+        users_collection.update_one(
+            {'_id': current_user['_id']},
+            {'$set': {
+                'hasInitialDiagnostic': has_initial_diagnostic,
+                'diagnosticStatusUpdatedAt': datetime.datetime.utcnow(),
+                'updatedAt': datetime.datetime.utcnow()
+            }}
+        )
+        
+        # Get updated user
+        updated_user = users_collection.find_one({'_id': current_user['_id']})
+        
+        return jsonify({
+            'message': 'Diagnostic status updated successfully',
+            'user': {
+                'id': str(updated_user['_id']),
+                'email': updated_user['email'],
+                'firstName': updated_user['firstName'],
+                'lastName': updated_user['lastName'],
+                'role': updated_user.get('role', 'patient'),
+                'therapyType': updated_user.get('therapyType'),
+                'patientType': updated_user.get('patientType'),
+                'hasInitialDiagnostic': updated_user.get('hasInitialDiagnostic', False),
+                'diagnosticStatusUpdatedAt': str(updated_user.get('diagnosticStatusUpdatedAt', ''))
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': 'Failed to update diagnostic status', 'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():

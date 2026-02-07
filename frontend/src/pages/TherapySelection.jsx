@@ -1,19 +1,86 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import InitialDiagnosticModal from '../components/InitialDiagnosticModal';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
+import { authService } from '../services/api';
+import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './TherapySelection.css';
 
 function TherapySelection({ onLogout }) {
   const [hoveredTherapy, setHoveredTherapy] = useState(null);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [diagnosticStatus, setDiagnosticStatus] = useState(null);
+  const [showBanner, setShowBanner] = useState(false);
   const navigate = useNavigate();
   const { selectCategory, clearCategory } = useTherapyCategory();
+  const toast = useToast();
 
   // Clear category when user comes back to therapy selection
   useEffect(() => {
     clearCategory();
   }, [clearCategory]);
+
+  // Check if user has already answered the diagnostic question
+  useEffect(() => {
+    const storedUser = authService.getStoredUser();
+    if (storedUser) {
+      if (storedUser.hasInitialDiagnostic == null) {
+        // Never answered — show modal
+        setShowDiagnosticModal(true);
+      } else if (storedUser.hasInitialDiagnostic === true) {
+        // Already diagnosed — auto-navigate if they have a therapy type
+        setDiagnosticStatus(true);
+        if (storedUser.therapyType) {
+          // Use setTimeout to ensure clearCategory runs first
+          setTimeout(() => {
+            selectCategory(storedUser.therapyType);
+            if (storedUser.therapyType === 'physical') {
+              navigate('/physical-therapy', { replace: true });
+            } else if (storedUser.therapyType === 'speech') {
+              navigate('/speech-therapy', { replace: true });
+            }
+          }, 0);
+        }
+      } else {
+        // Answered "No" — show guidance banner
+        setDiagnosticStatus(false);
+        setShowBanner(true);
+      }
+    }
+  }, []);
+
+  const handleDiagnosticConfirm = async (hasVisited) => {
+    setDiagnosticLoading(true);
+    try {
+      await authService.updateDiagnosticStatus(hasVisited);
+      setShowDiagnosticModal(false);
+      setDiagnosticStatus(hasVisited);
+      if (hasVisited) {
+        toast.success('Thank you! Your diagnostic status has been recorded.');
+        // Auto-navigate for "Yes" users with a therapy type
+        const storedUser = authService.getStoredUser();
+        if (storedUser && storedUser.therapyType) {
+          selectCategory(storedUser.therapyType);
+          if (storedUser.therapyType === 'physical') {
+            navigate('/physical-therapy', { replace: true });
+          } else if (storedUser.therapyType === 'speech') {
+            navigate('/speech-therapy', { replace: true });
+          }
+        }
+      } else {
+        toast.info('We recommend scheduling an initial diagnostic assessment.');
+        setShowBanner(true);
+      }
+    } catch (error) {
+      console.error('Error updating diagnostic status:', error);
+      toast.error('Failed to save your response. Please try again.');
+    } finally {
+      setDiagnosticLoading(false);
+    }
+  };
 
   const handleTherapyClick = (therapyType) => {
     // Set the selected category in context
@@ -36,6 +103,31 @@ function TherapySelection({ onLogout }) {
         <div className="therapy-container">
           <h1 className="therapy-title">Choose Your Therapy Type</h1>
           <p className="therapy-subtitle">Select the therapy service you need</p>
+
+          {/* Guidance Banner for users without initial diagnostic */}
+          {diagnosticStatus === false && showBanner && (
+            <div className="diagnostic-banner">
+              <div className="diagnostic-banner-content">
+                <span className="diagnostic-banner-icon">ℹ️</span>
+                <div className="diagnostic-banner-text">
+                  <strong>No initial assessment on file.</strong> For the best therapy results, we recommend visiting our facility for a professional diagnostic assessment. You can still explore therapy exercises in the meantime.
+                </div>
+                <button
+                  className="diagnostic-banner-close"
+                  onClick={() => setShowBanner(false)}
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+              <button
+                className="diagnostic-banner-btn"
+                onClick={() => navigate('/appointments')}
+              >
+                📅 Book Your Initial Assessment
+              </button>
+            </div>
+          )}
 
           <div className="therapy-options">
             {/* Physical Therapy Option */}
@@ -120,6 +212,14 @@ function TherapySelection({ onLogout }) {
           <p>&copy; 2025 CVAPed. All rights reserved.</p>
         </div>
       </footer>
+
+      {/* Initial Diagnostic Check Modal */}
+      <InitialDiagnosticModal
+        isOpen={showDiagnosticModal}
+        onClose={() => setShowDiagnosticModal(false)}
+        onConfirm={handleDiagnosticConfirm}
+        loading={diagnosticLoading}
+      />
     </div>
   );
 }

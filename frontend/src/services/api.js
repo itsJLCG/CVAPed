@@ -134,6 +134,14 @@ export const authService = {
     }
     return response.data;
   },
+
+  updateDiagnosticStatus: async (hasInitialDiagnostic) => {
+    const response = await api.put('/user/diagnostic-status', { hasInitialDiagnostic });
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
 };
 
 // Articulation Progress API

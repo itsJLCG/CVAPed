@@ -759,6 +759,12 @@ export const diagnosticComparisonService = {
     return response.data;
   },
 
+  // Therapist: Get comparison history (all diagnostics with scores for trend chart)
+  getComparisonHistory: async (userId) => {
+    const response = await api.get(`/therapist/diagnostics/${userId}/comparison-history`);
+    return response.data;
+  },
+
   // Patient: Get own comparison (read-only)
   getMyComparison: async () => {
     const response = await api.get('/diagnostic-comparison');

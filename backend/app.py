@@ -1368,6 +1368,15 @@ def get_therapist_stats(current_user):
                 # If that fails, try as string (for test users like 'testuser1')
                 return users_collection.find_one({'_id': user_id})
         
+        # Helper to get display name from user doc
+        def get_user_display_name(user):
+            if user.get('name'):
+                return user['name']
+            first = user.get('firstName', '')
+            last = user.get('lastName', '')
+            full = f"{first} {last}".strip()
+            return full if full else 'Unknown'
+        
         # Get recent articulation trials
         articulation_recent = list(articulation_trials_collection.find(
             {},
@@ -1378,7 +1387,7 @@ def get_therapist_stats(current_user):
             user = find_user_by_id(trial['user_id'])
             if user:
                 recent_activities.append({
-                    'patient_name': user.get('name', 'Unknown'),
+                    'patient_name': get_user_display_name(user),
                     'therapy_type': 'Articulation',
                     'detail': f"/{trial.get('sound_id', '').upper()}/ sound",
                     'score': round(trial.get('accuracy', 0) * 100),
@@ -1395,7 +1404,7 @@ def get_therapist_stats(current_user):
             user = find_user_by_id(trial['user_id'])
             if user:
                 recent_activities.append({
-                    'patient_name': user.get('name', 'Unknown'),
+                    'patient_name': get_user_display_name(user),
                     'therapy_type': 'Language',
                     'detail': f"Level {trial.get('level', 1)}",
                     'score': round(trial.get('accuracy', 0) * 100),
@@ -1412,7 +1421,7 @@ def get_therapist_stats(current_user):
             user = find_user_by_id(trial['user_id'])
             if user:
                 recent_activities.append({
-                    'patient_name': user.get('name', 'Unknown'),
+                    'patient_name': get_user_display_name(user),
                     'therapy_type': 'Fluency',
                     'detail': f"Level {trial.get('level', 1)}",
                     'score': round(trial.get('accuracy', 0) * 100),
@@ -4274,6 +4283,35 @@ def create_facility_diagnostic(current_user):
         if not data.get('assessment_date'):
             return jsonify({'success': False, 'message': 'assessment_date is required'}), 400
 
+        # Validate score ranges (0-100)
+        for field_name in ['fluency_score', 'receptive_score', 'expressive_score']:
+            val = data.get(field_name)
+            if val is not None and val != '':
+                try:
+                    num_val = float(val)
+                    if num_val < 0 or num_val > 100:
+                        return jsonify({'success': False, 'message': f'{field_name} must be between 0 and 100'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'message': f'{field_name} must be a number'}), 400
+
+        for sound, val in data.get('articulation_scores', {}).items():
+            if val is not None and val != '':
+                try:
+                    num_val = float(val)
+                    if num_val < 0 or num_val > 100:
+                        return jsonify({'success': False, 'message': f'Articulation score for {sound} must be between 0 and 100'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'message': f'Articulation score for {sound} must be a number'}), 400
+
+        for gait_key, val in data.get('gait_scores', {}).items():
+            if val is not None and val != '':
+                try:
+                    num_val = float(val)
+                    if num_val < 0 or num_val > 100:
+                        return jsonify({'success': False, 'message': f'Gait score {gait_key} must be between 0 and 100'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'message': f'Gait score {gait_key} must be a number'}), 400
+
         # Verify the patient exists
         try:
             patient = users_collection.find_one({'_id': ObjectId(data['user_id'])})
@@ -4593,6 +4631,31 @@ def get_diagnostic_comparison(current_user, user_id):
         except Exception:
             assessor_name = 'Unknown'
 
+        # Compute summary insights
+        all_deltas = []
+        art_deltas = deltas.get('articulation', {})
+        for sound, d in art_deltas.items():
+            if d is not None:
+                all_deltas.append({'metric': f'/{sound.upper()}/ Sound', 'delta': d, 'category': 'articulation'})
+        for key in ['fluency', 'receptive', 'expressive']:
+            if deltas.get(key) is not None:
+                all_deltas.append({'metric': key.capitalize(), 'delta': deltas[key], 'category': key})
+        if deltas.get('gait') is not None:
+            all_deltas.append({'metric': 'Gait', 'delta': deltas['gait'], 'category': 'gait'})
+
+        summary_insights = {}
+        if all_deltas:
+            valid_deltas = [d['delta'] for d in all_deltas]
+            summary_insights['overall_avg_delta'] = round(sum(valid_deltas) / len(valid_deltas), 1)
+            best = max(all_deltas, key=lambda x: x['delta'])
+            worst = min(all_deltas, key=lambda x: x['delta'])
+            summary_insights['strongest_area'] = {'metric': best['metric'], 'delta': best['delta']}
+            summary_insights['weakest_area'] = {'metric': worst['metric'], 'delta': worst['delta']}
+            summary_insights['total_metrics'] = len(all_deltas)
+            summary_insights['improving_count'] = len([d for d in valid_deltas if d > 0])
+            summary_insights['declining_count'] = len([d for d in valid_deltas if d < 0])
+            summary_insights['stable_count'] = len([d for d in valid_deltas if d == 0])
+
         return jsonify({
             'success': True,
             'has_facility_data': True,
@@ -4602,9 +4665,11 @@ def get_diagnostic_comparison(current_user, user_id):
             'assessor_name': assessor_name,
             'severity_level': facility_diag.get('severity_level', ''),
             'notes': facility_diag.get('notes', ''),
+            'recommended_focus': facility_diag.get('recommended_focus', []),
             'facility_scores': facility_scores,
             'home_scores': home_scores,
-            'deltas': deltas
+            'deltas': deltas,
+            'summary_insights': summary_insights
         }), 200
 
     except Exception as e:
@@ -4614,18 +4679,70 @@ def get_diagnostic_comparison(current_user, user_id):
         return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison', 'error': str(e)}), 500
 
 
+@app.route('/api/therapist/diagnostics/<user_id>/comparison-history', methods=['GET'])
+@token_required
+@therapist_required
+def get_diagnostic_comparison_history(current_user, user_id):
+    """Get all historical facility diagnostics with scores for trend visualization"""
+    try:
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        diagnostics = list(facility_diagnostics_collection.find({'user_id': user_id}).sort('assessment_date', 1))
+
+        history = []
+        for diag in diagnostics:
+            entry = {
+                '_id': str(diag['_id']),
+                'assessment_date': diag['assessment_date'].isoformat() if isinstance(diag['assessment_date'], datetime.datetime) else str(diag['assessment_date']),
+                'assessment_type': diag.get('assessment_type', 'initial'),
+                'severity_level': diag.get('severity_level', ''),
+                'articulation_scores': diag.get('articulation_scores', {}),
+                'fluency_score': diag.get('fluency_score'),
+                'receptive_score': diag.get('receptive_score'),
+                'expressive_score': diag.get('expressive_score'),
+                'gait_scores': diag.get('gait_scores', {}),
+            }
+            history.append(entry)
+
+        return jsonify({
+            'success': True,
+            'patient_name': f"{patient['firstName']} {patient['lastName']}",
+            'history': history,
+            'total': len(history)
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching diagnostic history: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic history', 'error': str(e)}), 500
+
+
 @app.route('/api/diagnostic-comparison', methods=['GET'])
 @token_required
 def get_patient_diagnostic_comparison(current_user):
-    """Get the patient's own facility vs home comparison (read-only)"""
+    """Get the patient's own facility vs home comparison (read-only) - with full data parity"""
     try:
         user_id = str(current_user['_id'])
 
-        # Get the latest facility diagnostic for this patient
-        facility_diag = facility_diagnostics_collection.find_one(
-            {'user_id': user_id},
-            sort=[('assessment_date', -1)]
-        )
+        # Support selecting a specific diagnostic via query param
+        diagnostic_id = request.args.get('diagnostic_id')
+        if diagnostic_id:
+            try:
+                facility_diag = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id), 'user_id': user_id})
+            except Exception:
+                facility_diag = None
+        else:
+            facility_diag = facility_diagnostics_collection.find_one(
+                {'user_id': user_id},
+                sort=[('assessment_date', -1)]
+            )
 
         if not facility_diag:
             return jsonify({
@@ -4634,12 +4751,13 @@ def get_patient_diagnostic_comparison(current_user):
                 'message': 'No facility diagnostic found'
             }), 200
 
-        # Build facility scores
+        # Build facility scores (now includes gait)
         facility_scores = {
             'articulation': facility_diag.get('articulation_scores', {}),
             'fluency': facility_diag.get('fluency_score'),
             'receptive': facility_diag.get('receptive_score'),
-            'expressive': facility_diag.get('expressive_score')
+            'expressive': facility_diag.get('expressive_score'),
+            'gait': facility_diag.get('gait_scores', {})
         }
 
         # Aggregate at-home scores (same logic as therapist comparison)
@@ -4650,6 +4768,8 @@ def get_patient_diagnostic_comparison(current_user):
         art_scores = {}
         for prog in articulation_progress:
             sound = prog.get('sound_id', '')
+            if not sound:
+                continue
             mastery = prog.get('overall_mastery', 0)
             art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
         home_scores['articulation'] = art_scores
@@ -4676,12 +4796,32 @@ def get_patient_diagnostic_comparison(current_user):
         else:
             home_scores['expressive'] = None
 
+        # Gait: get average from gaitprogresses
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        if gait_records:
+            gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+            for gait in gait_records:
+                metrics = gait.get('metrics', {})
+                gait_metrics_avg['stability_score'] += metrics.get('stability_score', 0)
+                gait_metrics_avg['gait_symmetry'] += metrics.get('gait_symmetry', 0)
+                gait_metrics_avg['step_regularity'] += metrics.get('step_regularity', 0)
+            count = len(gait_records)
+            home_scores['gait'] = {
+                'stability_score': round((gait_metrics_avg['stability_score'] / count) * 100, 1),
+                'gait_symmetry': round((gait_metrics_avg['gait_symmetry'] / count) * 100, 1),
+                'step_regularity': round((gait_metrics_avg['step_regularity'] / count) * 100, 1),
+                'overall_gait': round(((gait_metrics_avg['stability_score'] + gait_metrics_avg['gait_symmetry'] + gait_metrics_avg['step_regularity']) / (count * 3)) * 100, 1)
+            }
+        else:
+            home_scores['gait'] = {}
+
         # Compute deltas
         deltas = {}
         facility_art = facility_scores.get('articulation', {})
         home_art = home_scores.get('articulation', {})
         art_deltas = {}
-        for sound in set(list(facility_art.keys()) + list(home_art.keys())):
+        all_sounds = set([k for k in list(facility_art.keys()) + list(home_art.keys()) if k])
+        for sound in all_sounds:
             f_val = facility_art.get(sound)
             h_val = home_art.get(sound)
             if f_val is not None and h_val is not None:
@@ -4698,14 +4838,61 @@ def get_patient_diagnostic_comparison(current_user):
             else:
                 deltas[key] = None
 
+        # Gait delta (overall)
+        facility_gait = facility_scores.get('gait', {})
+        home_gait = home_scores.get('gait', {})
+        f_gait_overall = facility_gait.get('overall_gait')
+        h_gait_overall = home_gait.get('overall_gait')
+        if f_gait_overall is not None and h_gait_overall is not None:
+            deltas['gait'] = round(h_gait_overall - f_gait_overall, 1)
+        else:
+            deltas['gait'] = None
+
+        # Look up assessor name (data parity with therapist endpoint)
+        try:
+            assessor = users_collection.find_one({'_id': ObjectId(facility_diag.get('assessed_by', ''))})
+            assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
+        except Exception:
+            assessor_name = 'Unknown'
+
+        # Compute summary insights
+        all_deltas = []
+        for sound, d in art_deltas.items():
+            if d is not None:
+                all_deltas.append({'metric': f'/{sound.upper()}/ Sound', 'delta': d, 'category': 'articulation'})
+        for key in ['fluency', 'receptive', 'expressive']:
+            if deltas.get(key) is not None:
+                all_deltas.append({'metric': key.capitalize(), 'delta': deltas[key], 'category': key})
+        if deltas.get('gait') is not None:
+            all_deltas.append({'metric': 'Gait', 'delta': deltas['gait'], 'category': 'gait'})
+
+        summary_insights = {}
+        if all_deltas:
+            valid_deltas = [d['delta'] for d in all_deltas]
+            summary_insights['overall_avg_delta'] = round(sum(valid_deltas) / len(valid_deltas), 1)
+            best = max(all_deltas, key=lambda x: x['delta'])
+            worst = min(all_deltas, key=lambda x: x['delta'])
+            summary_insights['strongest_area'] = {'metric': best['metric'], 'delta': best['delta']}
+            summary_insights['weakest_area'] = {'metric': worst['metric'], 'delta': worst['delta']}
+            summary_insights['total_metrics'] = len(all_deltas)
+            summary_insights['improving_count'] = len([d for d in valid_deltas if d > 0])
+            summary_insights['declining_count'] = len([d for d in valid_deltas if d < 0])
+            summary_insights['stable_count'] = len([d for d in valid_deltas if d == 0])
+
         return jsonify({
             'success': True,
             'has_facility_data': True,
+            'patient_name': f"{current_user['firstName']} {current_user['lastName']}",
             'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
             'assessment_type': facility_diag.get('assessment_type', 'initial'),
+            'assessor_name': assessor_name,
+            'severity_level': facility_diag.get('severity_level', ''),
+            'notes': facility_diag.get('notes', ''),
+            'recommended_focus': facility_diag.get('recommended_focus', []),
             'facility_scores': facility_scores,
             'home_scores': home_scores,
-            'deltas': deltas
+            'deltas': deltas,
+            'summary_insights': summary_insights
         }), 200
 
     except Exception as e:

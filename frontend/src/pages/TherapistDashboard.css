@@ -545,7 +545,7 @@
 
 .admin-content {
   flex: 1;
-  padding: 40px 30px;
+  padding: 20px 30px;
   overflow-y: auto;
   overflow-x: hidden;
   background: #f5f7fa;
@@ -568,7 +568,7 @@
 }
 
 .loading-overlay {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
@@ -578,7 +578,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 100;
+  min-height: 300px;
 }
 
 .loading-spinner {
@@ -604,8 +605,12 @@
 /* Overview Section - Enhanced */
 .overview-section {
   animation: fadeIn 0.5s ease;
-  padding: 24px;
+  padding: 0;
   max-width: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 /* Time Range Filter */
@@ -802,6 +807,585 @@
 .stat-change.negative {
   background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
   color: #991b1b;
+}
+
+/* Stat Badge */
+.stat-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ===================================
+   OVERVIEW DASHBOARD LAYOUT
+   =================================== */
+
+/* Stats Rows - 4 columns */
+.overview-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .overview-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-stats-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Unified Dashboard Grid */
+.overview-unified-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "sessions sessions activity"
+    "scores   engage   activity";
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .overview-unified-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "sessions sessions"
+      "activity activity"
+      "scores   engage";
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-unified-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "sessions"
+      "scores"
+      "engage"
+      "activity";
+  }
+}
+
+/* Shared Overview Card */
+.overview-card {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.overview-card-header {
+  padding: 18px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.overview-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.overview-card-icon {
+  font-size: 1.2rem;
+}
+
+/* Chart Card Body */
+.overview-chart-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  padding: 28px 24px;
+}
+
+@media (max-width: 800px) {
+  .overview-chart-body {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+.overview-donut-wrapper {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overview-donut-wrapper .donut-chart {
+  width: 220px;
+  height: 220px;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.06));
+}
+
+/* Chart Legend */
+.overview-chart-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.overview-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.overview-legend-item:hover {
+  background: white;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateX(4px);
+}
+
+.overview-legend-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.overview-legend-color {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.overview-legend-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.overview-legend-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.overview-legend-desc {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.overview-legend-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.overview-legend-count {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1f2937;
+  min-width: 36px;
+  text-align: right;
+}
+
+.overview-legend-bar {
+  width: 80px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.overview-legend-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.overview-legend-bar-fill.articulation-fill {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.overview-legend-bar-fill.language-fill {
+  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+}
+
+.overview-legend-bar-fill.fluency-fill {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.overview-legend-pct {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  min-width: 44px;
+  text-align: right;
+}
+
+.overview-legend-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: #94a3b8;
+  gap: 8px;
+}
+
+.overview-legend-empty span {
+  font-size: 2rem;
+}
+
+.overview-legend-empty p {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Activities Card */
+.overview-activities-card {
+  min-height: 0;
+}
+
+.overview-activities-body {
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.overview-activities-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.overview-activities-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overview-activities-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.overview-activities-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s;
+}
+
+.overview-activity-item:last-child {
+  border-bottom: none;
+}
+
+.overview-activity-item:hover {
+  background: #f9fafb;
+}
+
+.overview-activity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.overview-activity-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.overview-activity-patient {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-activity-detail {
+  font-size: 0.78rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-activity-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.overview-activity-score {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+.overview-activity-score.score-high {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.overview-activity-score.score-mid {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.overview-activity-score.score-low {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.overview-activity-time {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.overview-activities-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  color: #94a3b8;
+  gap: 8px;
+}
+
+.overview-activities-empty span {
+  font-size: 2rem;
+}
+
+.overview-activities-empty p {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* --- Average Scores Card --- */
+.overview-avg-scores-body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  justify-content: center;
+}
+
+.avg-score-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.avg-score-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.avg-score-icon {
+  font-size: 1.1rem;
+}
+
+.avg-score-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.avg-score-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avg-score-bar-track {
+  flex: 1;
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.avg-score-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 1s ease-out;
+  min-width: 0;
+}
+
+.avg-score-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-width: 42px;
+  text-align: right;
+}
+
+.avg-score-value.score-high { color: #10b981; }
+.avg-score-value.score-mid  { color: #f59e0b; }
+.avg-score-value.score-low  { color: #ef4444; }
+
+.avg-scores-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 0;
+  color: #94a3b8;
+}
+
+.avg-scores-empty span {
+  font-size: 1.8rem;
+}
+
+.avg-scores-empty p {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* --- Patient Engagement Ring Card --- */
+.overview-engagement-body {
+  padding: 20px 24px 24px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.engagement-ring-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.engagement-ring-wrapper {
+  position: relative;
+  width: 128px;
+  height: 128px;
+}
+
+.engagement-ring-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.engagement-ring-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.engagement-ring-pct {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.engagement-ring-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.engagement-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.engagement-detail-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.engagement-detail-label {
+  color: #64748b;
+  font-weight: 500;
+  flex: 1;
+}
+
+.engagement-detail-value {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.engagement-detail-total {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+.engagement-detail-total .engagement-detail-label {
+  color: #1e293b;
+  font-weight: 600;
+  padding-left: 18px;
 }
 
 /* Charts Section */
@@ -2147,11 +2731,12 @@
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
+  gap: 4px;
 }
 
 .no-data-icon {
   font-size: 4rem;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   opacity: 0.5;
 }
 
@@ -2159,26 +2744,53 @@
   font-size: 1.5rem;
   font-weight: 700;
   color: #1a202c;
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
 }
 
 .no-data-message p {
   font-size: 1rem;
   color: #64748b;
-  margin: 0;
+  margin: 0 0 16px 0;
   max-width: 400px;
 }
 
-/* Physical Therapy Section - Coming Soon */
+/* Physical Therapy Section */
 .physical-section {
-  padding: 1.5rem 0;
-  min-height: 400px;
-  animation: fadeIn 0.5s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
+  padding: 1.5rem;
+  background: #f5f7fa;
   width: 100%;
+  max-width: 100%;
+  margin: 0;
+  position: relative;
+  animation: fadeIn 0.5s ease;
+}
+
+.physical-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 3px solid #e5e7eb;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.physical-section .section-header .header-left h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #b52e29 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.physical-section .section-header .header-left p {
+  font-size: 1rem;
+  color: #64748b;
+  margin: 0;
 }
 
 .coming-soon-message {
@@ -2203,6 +2815,7 @@
   animation: fadeIn 0.5s ease;
   width: 100%;
   max-width: 100%;
+  position: relative;
 }
 
 /* Language Section */
@@ -2210,6 +2823,7 @@
   animation: fadeIn 0.5s ease;
   width: 100%;
   max-width: 100%;
+  position: relative;
 }
 
 .language-levels-container {
@@ -2567,6 +3181,7 @@
   animation: fadeIn 0.5s ease;
   width: 100%;
   max-width: 100%;
+  position: relative;
 }
 
 .fluency-levels-container {
@@ -3098,6 +3713,8 @@
   text-align: center;
   padding: 80px 20px;
   color: #64748b;
+  background: white;
+  border-radius: 12px;
 }
 
 .no-exercises-icon {
@@ -4895,29 +5512,55 @@
 
 /* Physical Therapy - Gait Analyses Table */
 .gait-analyses-container {
-  margin-top: 2rem;
+  width: 100%;
 }
 
-.table-wrapper {
+.physical-section .controls-section {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: 1.25rem;
   background: white;
   border-radius: 12px;
-  border: 2px solid #e5e7eb;
-  overflow: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  margin-top: 2rem;
-  display: block;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
   width: 100%;
-  min-height: 200px;
+  box-sizing: border-box;
+}
+
+.physical-section .controls-section .control-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+  width: 100%;
+}
+
+.physical-section .datatable-container {
+  background: white;
+  border-radius: 12px;
+  overflow-x: auto;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .logs-table.gait-table {
   width: 100%;
-  border-collapse: collapse;
+  min-width: 750px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
 }
 
 .logs-table.gait-table thead {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-bottom: 2px solid #dee2e6;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .logs-table.gait-table th {
@@ -4925,24 +5568,32 @@
   text-align: left;
   font-weight: 700;
   font-size: 0.85rem;
-  color: #495057;
+  color: #ffffff;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border-bottom: 3px solid var(--color-primary);
+  white-space: nowrap;
 }
 
 .logs-table.gait-table tbody tr.gait-row {
-  border-bottom: 1px solid #e9ecef;
   transition: all 0.2s ease;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .logs-table.gait-table tbody tr.gait-row:hover {
-  background-color: #f8f9fa;
+  background-color: #f8fafc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.logs-table.gait-table tbody tr.gait-row:last-child {
+  border-bottom: none;
 }
 
 .logs-table.gait-table td {
-  padding: 1rem 1.25rem;
-  font-size: 0.9rem;
-  color: #495057;
+  padding: 0.85rem 1rem;
+  font-size: 0.88rem;
+  color: #334155;
+  vertical-align: middle;
 }
 
 .patient-cell {
@@ -5283,15 +5934,341 @@
   background: #f8f9fa;
 }
 
+/* Physical Therapy / Gait Analyses Responsive */
+
+/* Large screens */
+@media (min-width: 1801px) {
+  .physical-section {
+    padding: 2rem 3rem;
+  }
+  .logs-table.gait-table th,
+  .logs-table.gait-table td {
+    padding: 0.85rem 1.25rem;
+  }
+}
+
+/* Medium-large screens */
+@media (min-width: 1401px) and (max-width: 1800px) {
+  .physical-section {
+    padding: 1.75rem 2rem;
+  }
+  .logs-table.gait-table th,
+  .logs-table.gait-table td {
+    padding: 0.75rem 1rem;
+  }
+}
+
+/* Medium screens */
+@media (min-width: 1201px) and (max-width: 1400px) {
+  .physical-section {
+    padding: 1.5rem;
+  }
+  .logs-table.gait-table th,
+  .logs-table.gait-table td {
+    padding: 0.6rem 0.8rem;
+  }
+  .physical-section .controls-section {
+    padding: 1rem;
+    gap: 0.85rem;
+  }
+}
+
+/* Compact screens */
+@media (max-width: 1200px) {
+  .physical-section {
+    padding: 1.25rem;
+  }
+  .logs-table.gait-table th,
+  .logs-table.gait-table td {
+    padding: 0.55rem 0.7rem;
+  }
+  .physical-section .controls-section {
+    gap: 0.75rem;
+  }
+}
+
+/* Tablet screens */
+@media (max-width: 992px) {
+  .physical-section {
+    padding: 1rem;
+  }
+  .physical-section .section-header {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.875rem;
+  }
+  .physical-section .section-header .header-left h2 {
+    font-size: 1.75rem;
+  }
+  .physical-section .controls-section {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+  .physical-section .controls-section .control-group {
+    flex-wrap: wrap;
+  }
+  .gait-analyses-container .search-container {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .physical-section .datatable-container {
+    border-radius: 10px;
+  }
+  .logs-table.gait-table {
+    min-width: 750px;
+  }
+  .gait-details-container {
+    padding: 1rem;
+  }
+  .gait-metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+/* Mobile screens */
+@media (max-width: 768px) {
+  .physical-section {
+    padding: 0.875rem;
+  }
+  .physical-section .section-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+  .physical-section .section-header .header-left h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .physical-section .section-header .header-left p {
+    font-size: 0.9rem;
+  }
+  .physical-section .controls-section {
+    padding: 0.875rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .physical-section .controls-section .control-group {
+    gap: 8px;
+  }
+  .physical-section .datatable-container {
+    border-radius: 8px;
+  }
+  .logs-table.gait-table {
+    min-width: 650px;
+  }
+  .logs-table.gait-table th {
+    font-size: 0.75rem;
+  }
+  .logs-table.gait-table th,
+  .logs-table.gait-table td {
+    padding: 0.65rem 0.5rem;
+    font-size: 0.8rem;
+  }
+  .patient-avatar-small {
+    width: 32px;
+    height: 32px;
+    font-size: 0.875rem;
+  }
+  .score-number {
+    font-size: 1rem;
+  }
+  .severity-badge {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+  }
+  .gait-metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.5rem;
+  }
+  .gait-metric-item {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+  .gait-metric-item .metric-icon {
+    font-size: 1.25rem;
+  }
+  .gait-metric-item .metric-value {
+    font-size: 1rem;
+  }
+  .gait-metric-item .metric-label {
+    font-size: 0.7rem;
+  }
+  .gait-dropdown-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 0.65rem;
+  }
+  .pagination-footer {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    align-items: center;
+    text-align: center;
+  }
+  .pagination-buttons {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .pagination-btn {
+    min-width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+    padding: 0 0.5rem;
+  }
+  .stats-summary {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .stats-summary .stat-item {
+    font-size: 0.85rem;
+  }
+}
+
+/* Extra small mobile screens */
+@media (max-width: 480px) {
+  .physical-section {
+    padding: 0.75rem;
+  }
+  .physical-section .section-header .header-left h2 {
+    font-size: 1.35rem;
+  }
+  .physical-section .controls-section {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+  .physical-section .controls-section .control-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .logs-table.gait-table {
+    min-width: 550px;
+  }
+  .logs-table.gait-table th,
+  .logs-table.gait-table td {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.75rem;
+  }
+  .gait-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .gait-details-container {
+    padding: 0.75rem;
+  }
+  .problem-badge,
+  .problem-more {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+  }
+  .problem-chip {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.7rem;
+  }
+  .pagination-footer {
+    padding: 0.75rem;
+  }
+  .pagination-info {
+    font-size: 0.8rem;
+  }
+  .date-cell-container {
+    gap: 0.5rem;
+  }
+  .date-cell {
+    font-size: 0.78rem;
+  }
+  .email-text {
+    font-size: 0.78rem;
+  }
+  .no-exercises {
+    padding: 40px 15px;
+  }
+  .no-exercises-icon {
+    font-size: 2.5rem;
+  }
+}
+
 /* Success Stories Section */
 .success-stories-section { 
   animation: fadeIn 0.5s ease;
   width: 100%;
-  min-height: 400px;
+  max-width: 100%;
   display: block;
   visibility: visible;
   opacity: 1;
-  margin-top: -150px; /* Reduce gap from header */
+  padding: 1.5rem;
+  background: #f5f7fa;
+  box-sizing: border-box;
+  position: relative;
+  margin: 0;
+}
+
+.success-stories-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 3px solid #e5e7eb;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.success-stories-section .section-header .header-left h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #b52e29 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.success-stories-section .section-header .header-left p {
+  font-size: 1rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Stories Toolbar */
+.stories-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stories-toolbar .toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.stories-toolbar .toolbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.stories-toolbar .search-container {
+  flex: 1;
+  min-width: 200px;
+  max-width: 350px;
+}
+
+.stories-toolbar .search-container .search-input {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .story-preview { 
@@ -5367,16 +6344,50 @@
 }
 
 /* Stories Table Styling */
+.success-stories-section .datatable-container {
+  background: white;
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 520px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.success-stories-section .datatable-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.success-stories-section .datatable-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.success-stories-section .datatable-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.success-stories-section .datatable-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 .logs-table.stories-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   display: table;
   table-layout: auto;
+  min-width: 700px;
 }
 
 .logs-table.stories-table thead {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-bottom: 2px solid #dee2e6;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .logs-table.stories-table th {
@@ -5384,24 +6395,31 @@
   text-align: left;
   font-weight: 700;
   font-size: 0.85rem;
-  color: #495057;
+  color: #ffffff;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border-bottom: 3px solid var(--color-primary);
+  white-space: nowrap;
 }
 
 .logs-table.stories-table tbody tr {
-  border-bottom: 1px solid #e9ecef;
   transition: all 0.2s ease;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .logs-table.stories-table tbody tr:hover {
-  background-color: #f8f9fa;
+  background-color: #f8fafc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.logs-table.stories-table tbody tr:last-child {
+  border-bottom: none;
 }
 
 .logs-table.stories-table td {
-  padding: 1rem 1.25rem;
-  font-size: 0.9rem;
-  color: #495057;
+  padding: 0.85rem 1rem;
+  font-size: 0.88rem;
+  color: #334155;
   vertical-align: middle;
 }
 
@@ -5411,11 +6429,235 @@
   white-space: nowrap;
 }
 
+/* Success Stories Responsive */
+
+/* Large screens */
+@media (min-width: 1801px) {
+  .success-stories-section {
+    padding: 2rem 3rem;
+  }
+  .logs-table.stories-table th,
+  .logs-table.stories-table td {
+    padding: 0.85rem 1.25rem;
+  }
+}
+
+/* Medium-large screens */
+@media (min-width: 1401px) and (max-width: 1800px) {
+  .success-stories-section {
+    padding: 1.75rem 2rem;
+  }
+  .logs-table.stories-table th,
+  .logs-table.stories-table td {
+    padding: 0.75rem 1rem;
+  }
+}
+
+/* Medium screens */
+@media (min-width: 1201px) and (max-width: 1400px) {
+  .success-stories-section {
+    padding: 1.5rem;
+  }
+  .logs-table.stories-table th,
+  .logs-table.stories-table td {
+    padding: 0.6rem 0.8rem;
+  }
+  .stories-toolbar {
+    padding: 1rem;
+    gap: 0.85rem;
+  }
+}
+
+/* Compact screens */
+@media (max-width: 1200px) {
+  .success-stories-section {
+    padding: 1.25rem;
+  }
+  .logs-table.stories-table th,
+  .logs-table.stories-table td {
+    padding: 0.55rem 0.7rem;
+  }
+  .stories-toolbar {
+    gap: 0.75rem;
+  }
+}
+
+/* Tablet screens */
+@media (max-width: 992px) {
+  .success-stories-section {
+    padding: 1rem;
+  }
+  .success-stories-section .section-header {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.875rem;
+  }
+  .success-stories-section .section-header .header-left h2 {
+    font-size: 1.75rem;
+  }
+  .stories-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .stories-toolbar .toolbar-left,
+  .stories-toolbar .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .stories-toolbar .search-container {
+    flex: 1;
+    max-width: 100%;
+  }
+  .success-stories-section .datatable-container {
+    border-radius: 10px;
+  }
+  .story-preview {
+    max-width: 300px;
+  }
+}
+
+/* Mobile screens */
+@media (max-width: 768px) {
+  .success-stories-section {
+    padding: 0.875rem;
+  }
+  .success-stories-section .section-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+  .success-stories-section .section-header .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .success-stories-section .section-header .header-left h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+  .success-stories-section .section-header .header-left p {
+    font-size: 0.9rem;
+  }
+  .stories-toolbar {
+    padding: 0.875rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .stories-toolbar .toolbar-left {
+    flex-direction: column;
+  }
+  .success-stories-section .datatable-container {
+    border-radius: 8px;
+  }
+  .logs-table.stories-table {
+    min-width: 600px;
+  }
+  .logs-table.stories-table th {
+    font-size: 0.75rem;
+  }
+  .logs-table.stories-table th,
+  .logs-table.stories-table td {
+    padding: 0.65rem 0.5rem;
+    font-size: 0.8rem;
+  }
+  .story-preview {
+    max-width: 220px;
+    font-size: 0.82rem;
+  }
+  .story-thumbnail {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+  }
+  .more-images-badge {
+    width: 40px;
+    height: 40px;
+    font-size: 0.65rem;
+  }
+  .success-stories-section .pagination-footer {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    align-items: center;
+    text-align: center;
+  }
+  .success-stories-section .pagination-buttons {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .success-stories-section .pagination-btn {
+    min-width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Extra small mobile screens */
+@media (max-width: 480px) {
+  .success-stories-section {
+    padding: 0.75rem;
+  }
+  .success-stories-section .section-header .header-left h2 {
+    font-size: 1.35rem;
+  }
+  .stories-toolbar {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+  .stories-toolbar .search-container {
+    min-width: 0;
+  }
+  .logs-table.stories-table {
+    min-width: 450px;
+  }
+  .logs-table.stories-table th,
+  .logs-table.stories-table td {
+    padding: 0.5rem 0.4rem;
+    font-size: 0.75rem;
+  }
+  .story-preview {
+    max-width: 160px;
+    font-size: 0.78rem;
+  }
+  .story-thumbnail {
+    width: 34px;
+    height: 34px;
+    border-radius: 5px;
+  }
+  .more-images-badge {
+    width: 34px;
+    height: 34px;
+    font-size: 0.6rem;
+    border-radius: 5px;
+  }
+  .image-thumbnails {
+    gap: 4px;
+  }
+  .success-stories-section .datatable-container {
+    max-height: 400px;
+  }
+  .success-stories-section .pagination-footer {
+    padding: 0.75rem;
+  }
+  .success-stories-section .pagination-info {
+    font-size: 0.8rem;
+  }
+  .image-count {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+  .no-images-text {
+    font-size: 0.75rem;
+  }
+}
+
 /* Reports Section */
 .reports-section {
   animation: fadeIn 0.5s ease;
   width: 100%;
   min-height: 400px;
+  position: relative;
 }
 
 .reports-container {
@@ -5813,6 +7055,7 @@
   width: 100%;
   max-width: 100%;
   margin: 0;
+  position: relative;
 }
 
 .appointments-section .section-header {
@@ -6215,7 +7458,6 @@
   background: white;
   border-radius: 12px;
   overflow-x: auto;
-  overflow-y: visible;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   -webkit-overflow-scrolling: touch;
   width: 100%;
@@ -6224,10 +7466,10 @@
 
 .appointments-datatable {
   width: 100%;
-  min-width: 100%;
+  min-width: 900px;
   border-collapse: separate;
   border-spacing: 0;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .appointments-datatable thead {
@@ -6277,17 +7519,15 @@
 }
 
 .appointments-datatable tbody td {
-  padding: 0.65rem 0.8rem;
+  padding: 0.85rem 1rem;
   font-size: 0.88rem;
   color: #334155;
   vertical-align: middle;
-  height: 68px;
 }
 
 /* Patient Cell */
 .patient-cell {
   min-width: 200px;
-  width: 22%;
 }
 
 .patient-info-inline {
@@ -6376,7 +7616,6 @@
   font-weight: 600;
   color: #475569;
   white-space: nowrap;
-  width: 12%;
 }
 
 .time-cell {
@@ -6384,14 +7623,12 @@
   color: #64748b;
   font-family: 'Courier New', monospace;
   white-space: nowrap;
-  width: 10%;
 }
 
 .duration-cell {
   color: #64748b;
   font-weight: 500;
   white-space: nowrap;
-  width: 10%;
 }
 
 /* Status Badge in Table */
@@ -6445,7 +7682,7 @@
 
 /* Notes Cell */
 .notes-cell {
-  width: 18%;
+  max-width: 200px;
 }
 
 .notes-preview {
@@ -6468,7 +7705,6 @@
   text-align: center;
   white-space: nowrap;
   padding: 0.5rem 0.8rem !important;
-  width: 12%;
 }
 
 .action-buttons {
@@ -6494,14 +7730,6 @@
   .appointments-datatable tbody td {
     padding: 0.85rem 1.25rem;
   }
-  
-  .patient-cell {
-    width: 24%;
-  }
-  
-  .notes-cell {
-    width: 20%;
-  }
 }
 
 /* When sidebar is expanded - optimize for medium-large screens */
@@ -6517,14 +7745,6 @@
   .appointments-datatable thead tr th,
   .appointments-datatable tbody td {
     padding: 0.75rem 1rem;
-  }
-  
-  .patient-cell {
-    width: 23%;
-  }
-  
-  .notes-cell {
-    width: 18%;
   }
 }
 
@@ -6550,20 +7770,8 @@
     height: 30px;
   }
   
-  .patient-cell {
-    width: 21%;
-  }
-  
   .action-buttons {
     gap: 5px;
-  }
-  
-  .actions-cell {
-    width: 11%;
-  }
-  
-  .notes-cell {
-    width: 16%;
   }
   
   .appointments-filters {
@@ -6582,13 +7790,8 @@
     padding: 1.25rem;
   }
   
-  .datatable-container {
-    overflow-x: auto;
-  }
-  
   .appointments-datatable {
-    min-width: 950px;
-    table-layout: auto;
+    min-width: 900px;
   }
   
   .appointments-datatable thead tr th,
@@ -6603,20 +7806,8 @@
     height: 29px;
   }
   
-  .patient-cell {
-    min-width: 170px;
-  }
-  
-  .actions-cell {
-    min-width: 120px;
-  }
-  
   .action-buttons {
     gap: 4px;
-  }
-  
-  .notes-cell {
-    min-width: 140px;
   }
   
   .appointments-filters {
@@ -7647,6 +8838,7 @@
   width: 100%;
   box-sizing: border-box;
   overflow: visible;
+  position: relative;
 }
 
 /* Search Bar */

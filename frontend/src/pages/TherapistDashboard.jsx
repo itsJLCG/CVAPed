@@ -12,7 +12,6 @@ function TherapistDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSub, setActiveSub] = useState('receptive');
   const [therapyData, setTherapyData] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFluencyLevels, setShowFluencyLevels] = useState(false);
   const [fluencyExercises, setFluencyExercises] = useState({});
@@ -114,7 +113,7 @@ function TherapistDashboard({ onLogout }) {
   const [showStoryModal, setShowStoryModal] = useState(false);
   const [editingStory, setEditingStory] = useState(null);
   const [currentStoryPage, setCurrentStoryPage] = useState(1);
-  const [storyEntriesPerPage, setStoryEntriesPerPage] = useState(10);
+  const [storyEntriesPerPage, setStoryEntriesPerPage] = useState(5);
   const [storySearchTerm, setStorySearchTerm] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
@@ -178,6 +177,8 @@ function TherapistDashboard({ onLogout }) {
   const [showAppointmentDetails, setShowAppointmentDetails] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showUnassignedSection, setShowUnassignedSection] = useState(true);
+  const [currentAppointmentPage, setCurrentAppointmentPage] = useState(1);
+  const [appointmentEntriesPerPage, setAppointmentEntriesPerPage] = useState(5);
   
   // Patient search autocomplete state
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
@@ -727,7 +728,6 @@ function TherapistDashboard({ onLogout }) {
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
-    setLoading(true);
     try {
       // Therapists don't have access to admin stats
       // Show a simple welcome message instead
@@ -737,13 +737,10 @@ function TherapistDashboard({ onLogout }) {
       ]);
     } catch (e) {
       console.error('Failed to load overview', e);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadArticulation = async () => {
-    setLoading(true);
     try {
       // Therapists don't have access to patient data
       // This is for managing exercises only
@@ -753,13 +750,10 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load articulation', e);
       setTherapyData([]);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadLanguage = async (mode) => {
-    setLoading(true);
     try {
       // Therapists don't have access to patient data
       setTherapyData([
@@ -768,13 +762,10 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load language', e);
       setTherapyData([]);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadFluency = async () => {
-    setLoading(true);
     try {
       // Therapists don't have access to patient session data
       // They can only manage exercises via the Therapy Levels tab
@@ -782,8 +773,6 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load fluency', e);
       setTherapyData([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -1527,13 +1516,6 @@ function TherapistDashboard({ onLogout }) {
         </header>
 
         <div className="admin-content">
-          {loading && (
-            <div className="loading-overlay">
-              <div className="loading-spinner"></div>
-              <p>Loading...</p>
-            </div>
-          )}
-
           {activeTab === 'overview' && (
             <div className="overview-section">
               {loadingStats ? (
@@ -1543,8 +1525,8 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               ) : overviewStats ? (
                 <>
-                  {/* Stats Cards */}
-                  <div className="stats-grid">
+                  {/* Primary Stats Row */}
+                  <div className="overview-stats-row">
                     <div className="stat-card">
                       <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
                         <span className="stat-icon-emoji">👥</span>
@@ -1558,7 +1540,7 @@ function TherapistDashboard({ onLogout }) {
 
                     <div className="stat-card">
                       <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-                        <span className="stat-icon-emoji">�</span>
+                        <span className="stat-icon-emoji">📋</span>
                       </div>
                       <div className="stat-details">
                         <h3 className="stat-value">{overviewStats.total_sessions || 0}</h3>
@@ -1600,69 +1582,70 @@ function TherapistDashboard({ onLogout }) {
                         <span className="stat-badge">Available</span>
                       </div>
                     </div>
-
-                    {/* Appointment Stats */}
-                    {overviewStats.appointments && (
-                      <>
-                        <div className="stat-card">
-                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' }}>
-                            <span className="stat-icon-emoji">📅</span>
-                          </div>
-                          <div className="stat-details">
-                            <h3 className="stat-value">{overviewStats.appointments.today || 0}</h3>
-                            <p className="stat-label">Today's Appointments</p>
-                            <span className="stat-badge">Scheduled</span>
-                          </div>
-                        </div>
-
-                        <div className="stat-card">
-                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
-                            <span className="stat-icon-emoji">📆</span>
-                          </div>
-                          <div className="stat-details">
-                            <h3 className="stat-value">{overviewStats.appointments.upcoming || 0}</h3>
-                            <p className="stat-label">Upcoming Appointments</p>
-                            <span className="stat-badge">Next 7 Days</span>
-                          </div>
-                        </div>
-
-                        <div className="stat-card">
-                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' }}>
-                            <span className="stat-icon-emoji">✔️</span>
-                          </div>
-                          <div className="stat-details">
-                            <h3 className="stat-value">{overviewStats.appointments.completed || 0}</h3>
-                            <p className="stat-label">Completed Appointments</p>
-                            <span className="stat-badge">{overviewStats.appointments.completion_rate || 0}% Rate</span>
-                          </div>
-                        </div>
-
-                        <div className="stat-card">
-                          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' }}>
-                            <span className="stat-icon-emoji">📊</span>
-                          </div>
-                          <div className="stat-details">
-                            <h3 className="stat-value">{overviewStats.appointments.total || 0}</h3>
-                            <p className="stat-label">Total Appointments</p>
-                            <span className="stat-badge">All Time</span>
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </div>
 
-                  {/* Therapy Sessions Distribution - Donut Chart */}
-                  <div className="therapy-distribution-section">
-                    <div className="chart-card full-width">
-                      <div className="chart-header">
-                        <h3 className="chart-title">
-                          <span className="chart-icon">�</span>
+                  {/* Appointments Stats Row */}
+                  {overviewStats.appointments && (
+                    <div className="overview-stats-row">
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' }}>
+                          <span className="stat-icon-emoji">📅</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.today || 0}</h3>
+                          <p className="stat-label">Today's Appointments</p>
+                          <span className="stat-badge">Scheduled</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
+                          <span className="stat-icon-emoji">📆</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.upcoming || 0}</h3>
+                          <p className="stat-label">Upcoming</p>
+                          <span className="stat-badge">Next 7 Days</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' }}>
+                          <span className="stat-icon-emoji">✔️</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.completed || 0}</h3>
+                          <p className="stat-label">Completed</p>
+                          <span className="stat-badge">{overviewStats.appointments.completion_rate || 0}% Rate</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' }}>
+                          <span className="stat-icon-emoji">📊</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.total || 0}</h3>
+                          <p className="stat-label">Total Appointments</p>
+                          <span className="stat-badge">All Time</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unified Dashboard Grid */}
+                  <div className="overview-unified-grid">
+                    {/* 1 - Therapy Sessions Distribution */}
+                    <div className="overview-card overview-chart-card" style={{ gridArea: 'sessions' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">📊</span>
                           Therapy Sessions Distribution
                         </h3>
                       </div>
-                      <div className="donut-chart-container">
+                      <div className="overview-chart-body">
                         {/* Donut Chart */}
-                        <div className="donut-chart-wrapper">
+                        <div className="overview-donut-wrapper">
                           <svg className="donut-chart" viewBox="0 0 200 200">
                             <defs>
                               <linearGradient id="articulation-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1690,60 +1673,38 @@ function TherapistDashboard({ onLogout }) {
                               const languageCount = overviewStats.language_sessions || 0;
                               const fluencyCount = overviewStats.fluency_sessions || 0;
                               
-                              // Build dynamic therapy data array based on what exists
                               const therapyData = [];
                               
                               if (articulationCount > 0) {
                                 therapyData.push({
-                                  name: 'Articulation',
-                                  count: articulationCount,
+                                  name: 'Articulation', count: articulationCount,
                                   percentage: (articulationCount / total) * 100,
-                                  color: 'url(#articulation-gradient)',
-                                  hoverColor: 'rgba(245, 158, 11, 0.4)',
-                                  icon: '🗣️',
-                                  description: 'Sound pronunciation therapy',
-                                  className: 'articulation-slice'
+                                  color: 'url(#articulation-gradient)', className: 'articulation-slice'
                                 });
                               }
-                              
                               if (languageCount > 0) {
                                 therapyData.push({
-                                  name: 'Language',
-                                  count: languageCount,
+                                  name: 'Language', count: languageCount,
                                   percentage: (languageCount / total) * 100,
-                                  color: 'url(#language-gradient)',
-                                  hoverColor: 'rgba(139, 92, 246, 0.4)',
-                                  icon: '💬',
-                                  description: 'Receptive & expressive skills',
-                                  className: 'language-slice'
+                                  color: 'url(#language-gradient)', className: 'language-slice'
                                 });
                               }
-                              
                               if (fluencyCount > 0) {
                                 therapyData.push({
-                                  name: 'Fluency',
-                                  count: fluencyCount,
+                                  name: 'Fluency', count: fluencyCount,
                                   percentage: (fluencyCount / total) * 100,
-                                  color: 'url(#fluency-gradient)',
-                                  hoverColor: 'rgba(16, 185, 129, 0.4)',
-                                  icon: '⚡',
-                                  description: 'Speech flow & rhythm training',
-                                  className: 'fluency-slice'
+                                  color: 'url(#fluency-gradient)', className: 'fluency-slice'
                                 });
                               }
                               
-                              // Helper function to create pie slice path
                               const createPieSlice = (startAngle, endAngle, radius = 85) => {
                                 const start = (startAngle - 90) * Math.PI / 180;
                                 const end = (endAngle - 90) * Math.PI / 180;
-                                
                                 const x1 = 100 + radius * Math.cos(start);
                                 const y1 = 100 + radius * Math.sin(start);
                                 const x2 = 100 + radius * Math.cos(end);
                                 const y2 = 100 + radius * Math.sin(end);
-                                
                                 const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-                                
                                 return `M 100 100 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
                               };
                               
@@ -1752,23 +1713,18 @@ function TherapistDashboard({ onLogout }) {
                               return (
                                 <g className="pie-chart-group">
                                   {therapyData.length === 0 ? (
-                                    // No data - show empty state
                                     <>
                                       <circle cx="100" cy="100" r="85" fill="#f1f5f9" opacity="0.5" />
                                       <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">
-                                        No Data
-                                      </text>
+                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">No Data</text>
                                     </>
                                   ) : (
                                     <>
-                                      {/* Dynamic pie slices based on available data */}
-                                      {therapyData.map((therapy, index) => {
+                                      {therapyData.map((therapy) => {
                                         const angle = (therapy.percentage / 100) * 360;
                                         const sliceStartAngle = currentAngle;
                                         const sliceEndAngle = currentAngle + angle;
                                         currentAngle += angle;
-                                        
                                         return (
                                           <path
                                             key={therapy.name}
@@ -1776,297 +1732,205 @@ function TherapistDashboard({ onLogout }) {
                                             d={createPieSlice(sliceStartAngle, sliceEndAngle)}
                                             fill={therapy.color}
                                             filter="url(#shadow)"
-                                            style={{ 
-                                              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                                              cursor: 'pointer',
-                                              transformOrigin: '100px 100px'
-                                            }}
-                                            onMouseEnter={(e) => {
-                                              e.currentTarget.setAttribute('filter', 'url(#shadow-hover)');
-                                              e.currentTarget.style.transform = 'scale(1.05)';
-                                              e.currentTarget.style.opacity = '0.95';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              e.currentTarget.setAttribute('filter', 'url(#shadow)');
-                                              e.currentTarget.style.transform = 'scale(1)';
-                                              e.currentTarget.style.opacity = '1';
-                                            }}
-                                            onClick={() => {
-                                              console.log(`${therapy.name} sessions:`, therapy.count);
-                                            }}
+                                            style={{ transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'pointer', transformOrigin: '100px 100px' }}
+                                            onMouseEnter={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow-hover)'); e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                            onMouseLeave={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow)'); e.currentTarget.style.transform = 'scale(1)'; }}
                                           >
-                                            <title>{therapy.icon} {therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
+                                            <title>{therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
                                           </path>
                                         );
                                       })}
-                                      
-                                      {/* Separator lines between slices */}
                                       {therapyData.map((therapy, index) => {
-                                        if (index === 0) {
-                                          // First separator at top
-                                          return <line key={`sep-0`} x1="100" y1="100" x2="100" y2="15" stroke="white" strokeWidth="2" opacity="0.8" />;
-                                        }
-                                        
-                                        // Calculate cumulative angle for each separator
                                         let cumulativeAngle = 0;
                                         for (let i = 0; i < index; i++) {
                                           cumulativeAngle += (therapyData[i].percentage / 100) * 360;
                                         }
-                                        
                                         const angle = (cumulativeAngle - 90) * Math.PI / 180;
                                         return (
-                                          <line 
-                                            key={`sep-${index}`}
-                                            x1="100" 
-                                            y1="100" 
-                                            x2={100 + 85 * Math.cos(angle)} 
-                                            y2={100 + 85 * Math.sin(angle)} 
-                                            stroke="white" 
-                                            strokeWidth="2" 
-                                            opacity="0.8" 
-                                          />
+                                          <line key={`sep-${index}`} x1="100" y1="100"
+                                            x2={index === 0 ? 100 : 100 + 85 * Math.cos(angle)}
+                                            y2={index === 0 ? 15 : 100 + 85 * Math.sin(angle)}
+                                            stroke="white" strokeWidth="2" opacity="0.8" />
                                         );
                                       })}
-                                      
-                                      {/* Center circle with stats */}
                                       <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      
-                                      {/* Center content */}
-                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">
-                                        {total}
-                                      </text>
-                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">
-                                        TOTAL
-                                      </text>
-                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">
-                                        SESSIONS
-                                      </text>
+                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">{total}</text>
+                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">TOTAL</text>
+                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">SESSIONS</text>
                                     </>
                                   )}
                                 </g>
                               );
                             })()}
                           </svg>
-                          
-                          {/* Stats Summary Below Chart */}
-                          <div className="donut-stats-summary">
-                            <div className="donut-stat-item">
-                              <div className="donut-stat-value">{overviewStats.total_sessions || 0}</div>
-                              <div className="donut-stat-label">Total</div>
-                            </div>
-                            <div className="donut-stat-divider"></div>
-                            <div className="donut-stat-item">
-                              <div className="donut-stat-value">
-                                {overviewStats.total_sessions > 0 
-                                  ? Math.round((overviewStats.articulation_sessions || 0) + (overviewStats.language_sessions || 0) + (overviewStats.fluency_sessions || 0))
-                                  : 0}
-                              </div>
-                              <div className="donut-stat-label">Active</div>
-                            </div>
-                            <div className="donut-stat-divider"></div>
-                            <div className="donut-stat-item">
-                              <div className="donut-stat-value">
-                                {[
-                                  overviewStats.articulation_sessions || 0,
-                                  overviewStats.language_sessions || 0,
-                                  overviewStats.fluency_sessions || 0
-                                ].filter(count => count > 0).length}
-                              </div>
-                              <div className="donut-stat-label">Types</div>
-                            </div>
-                          </div>
                         </div>
 
-                        {/* Enhanced Legend - Dynamic based on data */}
-                        <div className="donut-legend">
-                          <div className="legend-header">
-                            <h4 className="legend-title">Session Breakdown</h4>
-                            <span className="legend-total">{overviewStats.total_sessions || 0} Total</span>
-                          </div>
-                          
-                          <div className="legend-items">
-                            {/* Articulation - only show if has data */}
-                            {(overviewStats.articulation_sessions || 0) > 0 && (
-                              <div 
-                                className="legend-item"
-                                onMouseEnter={() => {
-                                  const segment = document.querySelector('.articulation-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow-hover)');
-                                    segment.style.transform = 'scale(1.05)';
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  const segment = document.querySelector('.articulation-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow)');
-                                    segment.style.transform = 'scale(1)';
-                                  }
-                                }}
-                              >
-                                <div className="legend-left">
-                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}>
-                                    <span className="legend-box-icon">🗣️</span>
-                                  </div>
-                                  <div className="legend-info">
-                                    <span className="legend-label">Articulation</span>
-                                    <span className="legend-description">Sound pronunciation therapy</span>
-                                  </div>
+                        {/* Legend */}
+                        <div className="overview-chart-legend">
+                          {[
+                            { key: 'articulation', label: 'Articulation', icon: '🗣️', desc: 'Sound pronunciation', sessions: overviewStats.articulation_sessions || 0, gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', sliceClass: 'articulation-slice', fillClass: 'articulation-fill' },
+                            { key: 'language', label: 'Language', icon: '💬', desc: 'Receptive & expressive', sessions: overviewStats.language_sessions || 0, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', sliceClass: 'language-slice', fillClass: 'language-fill' },
+                            { key: 'fluency', label: 'Fluency', icon: '⚡', desc: 'Speech flow & rhythm', sessions: overviewStats.fluency_sessions || 0, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', sliceClass: 'fluency-slice', fillClass: 'fluency-fill' },
+                          ].filter(t => t.sessions > 0).map(t => (
+                            <div key={t.key} className="overview-legend-item"
+                              onMouseEnter={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow-hover)'); s.style.transform = 'scale(1.05)'; } }}
+                              onMouseLeave={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow)'); s.style.transform = 'scale(1)'; } }}
+                            >
+                              <div className="overview-legend-left">
+                                <div className="overview-legend-color" style={{ background: t.gradient }}>
+                                  <span>{t.icon}</span>
                                 </div>
-                                <div className="legend-right">
-                                  <span className="legend-count">{overviewStats.articulation_sessions || 0}</span>
-                                  <div className="legend-percentage-bar">
-                                    <div 
-                                      className="legend-percentage-fill articulation-fill"
-                                      style={{
-                                        width: `${overviewStats.total_sessions > 0 
-                                          ? ((overviewStats.articulation_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                          : 0}%`
-                                      }}
-                                    ></div>
-                                  </div>
-                                  <span className="legend-percentage">
-                                    {overviewStats.total_sessions > 0 
-                                      ? ((overviewStats.articulation_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                      : 0}%
-                                  </span>
+                                <div className="overview-legend-info">
+                                  <span className="overview-legend-label">{t.label}</span>
+                                  <span className="overview-legend-desc">{t.desc}</span>
                                 </div>
                               </div>
-                            )}
-
-                            {/* Language - only show if has data */}
-                            {(overviewStats.language_sessions || 0) > 0 && (
-                              <div 
-                                className="legend-item"
-                                onMouseEnter={() => {
-                                  const segment = document.querySelector('.language-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow-hover)');
-                                    segment.style.transform = 'scale(1.05)';
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  const segment = document.querySelector('.language-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow)');
-                                    segment.style.transform = 'scale(1)';
-                                  }
-                                }}
-                              >
-                                <div className="legend-left">
-                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}>
-                                    <span className="legend-box-icon">💬</span>
-                                  </div>
-                                  <div className="legend-info">
-                                    <span className="legend-label">Language</span>
-                                    <span className="legend-description">Receptive & expressive skills</span>
-                                  </div>
+                              <div className="overview-legend-right">
+                                <span className="overview-legend-count">{t.sessions}</span>
+                                <div className="overview-legend-bar">
+                                  <div className={`overview-legend-bar-fill ${t.fillClass}`}
+                                    style={{ width: `${overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%` }}
+                                  ></div>
                                 </div>
-                                <div className="legend-right">
-                                  <span className="legend-count">{overviewStats.language_sessions || 0}</span>
-                                  <div className="legend-percentage-bar">
-                                    <div 
-                                      className="legend-percentage-fill language-fill"
-                                      style={{
-                                        width: `${overviewStats.total_sessions > 0 
-                                          ? ((overviewStats.language_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                          : 0}%`
-                                      }}
-                                    ></div>
-                                  </div>
-                                  <span className="legend-percentage">
-                                    {overviewStats.total_sessions > 0 
-                                      ? ((overviewStats.language_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                      : 0}%
-                                  </span>
-                                </div>
+                                <span className="overview-legend-pct">
+                                  {overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%
+                                </span>
                               </div>
-                            )}
-
-                            {/* Fluency - only show if has data */}
-                            {(overviewStats.fluency_sessions || 0) > 0 && (
-                              <div 
-                                className="legend-item"
-                                onMouseEnter={() => {
-                                  const segment = document.querySelector('.fluency-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow-hover)');
-                                    segment.style.transform = 'scale(1.05)';
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  const segment = document.querySelector('.fluency-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow)');
-                                    segment.style.transform = 'scale(1)';
-                                  }
-                                }}
-                              >
-                                <div className="legend-left">
-                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
-                                    <span className="legend-box-icon">⚡</span>
-                                  </div>
-                                  <div className="legend-info">
-                                    <span className="legend-label">Fluency</span>
-                                    <span className="legend-description">Speech flow & rhythm training</span>
-                                  </div>
-                                </div>
-                                <div className="legend-right">
-                                  <span className="legend-count">{overviewStats.fluency_sessions || 0}</span>
-                                  <div className="legend-percentage-bar">
-                                    <div 
-                                      className="legend-percentage-fill fluency-fill"
-                                      style={{
-                                        width: `${overviewStats.total_sessions > 0 
-                                          ? ((overviewStats.fluency_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                          : 0}%`
-                                      }}
-                                    ></div>
-                                  </div>
-                                  <span className="legend-percentage">
-                                    {overviewStats.total_sessions > 0 
-                                      ? ((overviewStats.fluency_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                      : 0}%
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          ))}
+                          {(overviewStats.articulation_sessions || 0) === 0 && (overviewStats.language_sessions || 0) === 0 && (overviewStats.fluency_sessions || 0) === 0 && (
+                            <div className="overview-legend-empty">
+                              <span>📭</span>
+                              <p>No session data available</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Recent Activities Section */}
-                  <div className="recent-activities-section">
-                    <div className="recent-activities-card">
-                      <div className="recent-activities-header">
-                        <h3 className="recent-activities-title">
-                          <span className="recent-activities-icon">🕑</span>
+                    {/* 2 - Average Scores */}
+                    <div className="overview-card overview-avg-scores-card" style={{ gridArea: 'scores' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">📈</span>
+                          Average Scores
+                        </h3>
+                      </div>
+                      <div className="overview-avg-scores-body">
+                        {[
+                          { key: 'articulation', label: 'Articulation', icon: '🗣️', color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', score: overviewStats.average_scores?.articulation || 0 },
+                          { key: 'language', label: 'Language', icon: '💬', color: '#8b5cf6', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', score: overviewStats.average_scores?.language || 0 },
+                          { key: 'fluency', label: 'Fluency', icon: '⚡', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', score: overviewStats.average_scores?.fluency || 0 },
+                        ].map(t => (
+                          <div key={t.key} className="avg-score-row">
+                            <div className="avg-score-label">
+                              <span className="avg-score-icon">{t.icon}</span>
+                              <span className="avg-score-name">{t.label}</span>
+                            </div>
+                            <div className="avg-score-bar-wrapper">
+                              <div className="avg-score-bar-track">
+                                <div
+                                  className="avg-score-bar-fill"
+                                  style={{ width: `${t.score}%`, background: t.gradient }}
+                                ></div>
+                              </div>
+                              <span className={`avg-score-value ${t.score >= 80 ? 'score-high' : t.score >= 50 ? 'score-mid' : 'score-low'}`}>
+                                {t.score}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {(!overviewStats.average_scores || (overviewStats.average_scores.articulation === 0 && overviewStats.average_scores.language === 0 && overviewStats.average_scores.fluency === 0)) && (
+                          <div className="avg-scores-empty">
+                            <span>📭</span>
+                            <p>No score data available</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 3 - Patient Engagement */}
+                    <div className="overview-card overview-engagement-card" style={{ gridArea: 'engage' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">💡</span>
+                          Patient Engagement
+                        </h3>
+                      </div>
+                      <div className="overview-engagement-body">
+                        {(() => {
+                          const active = overviewStats.active_patients || 0;
+                          const total = overviewStats.total_patients || 0;
+                          const rate = total > 0 ? Math.round((active / total) * 100) : 0;
+                          const circumference = 2 * Math.PI * 54;
+                          const offset = circumference - (rate / 100) * circumference;
+                          const rateColor = rate >= 70 ? '#10b981' : rate >= 40 ? '#f59e0b' : '#ef4444';
+                          return (
+                            <div className="engagement-ring-container">
+                              <div className="engagement-ring-wrapper">
+                                <svg className="engagement-ring-svg" viewBox="0 0 128 128">
+                                  <circle cx="64" cy="64" r="54" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+                                  <circle cx="64" cy="64" r="54" fill="none" stroke={rateColor} strokeWidth="10"
+                                    strokeDasharray={circumference} strokeDashoffset={offset}
+                                    strokeLinecap="round" transform="rotate(-90 64 64)"
+                                    style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+                                  />
+                                </svg>
+                                <div className="engagement-ring-center">
+                                  <span className="engagement-ring-pct" style={{ color: rateColor }}>{rate}%</span>
+                                </div>
+                              </div>
+                              <div className="engagement-ring-details">
+                                <div className="engagement-detail-row">
+                                  <span className="engagement-detail-dot" style={{ background: rateColor }}></span>
+                                  <span className="engagement-detail-label">Active</span>
+                                  <span className="engagement-detail-value">{active}</span>
+                                </div>
+                                <div className="engagement-detail-row">
+                                  <span className="engagement-detail-dot" style={{ background: '#e2e8f0' }}></span>
+                                  <span className="engagement-detail-label">Inactive</span>
+                                  <span className="engagement-detail-value">{total - active}</span>
+                                </div>
+                                <div className="engagement-detail-row engagement-detail-total">
+                                  <span className="engagement-detail-label">Total</span>
+                                  <span className="engagement-detail-value">{total}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* 4 - Recent Activities (spans 2 rows on right) */}
+                    <div className="overview-card overview-activities-card" style={{ gridArea: 'activity' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">🕑</span>
                           Recent Activities
                         </h3>
                       </div>
-                      <div className="recent-activities-body">
+                      <div className="overview-activities-body">
                         {overviewStats.recent_activities && overviewStats.recent_activities.length > 0 ? (
-                          <div className="recent-activities-list">
+                          <div className="overview-activities-list">
                             {overviewStats.recent_activities.map((activity, index) => (
-                              <div className="recent-activity-item" key={index}>
-                                <div className="recent-activity-type-icon">
+                              <div className="overview-activity-item" key={index}>
+                                <div className="overview-activity-icon">
                                   {activity.therapy_type === 'Articulation' && '🗣️'}
                                   {activity.therapy_type === 'Language' && '📖'}
                                   {activity.therapy_type === 'Fluency' && '💬'}
                                 </div>
-                                <div className="recent-activity-info">
-                                  <span className="recent-activity-patient">{activity.patient_name}</span>
-                                  <span className="recent-activity-detail">
+                                <div className="overview-activity-info">
+                                  <span className="overview-activity-patient">{activity.patient_name}</span>
+                                  <span className="overview-activity-detail">
                                     {activity.therapy_type}{activity.detail ? ` — ${activity.detail}` : ''}
                                   </span>
                                 </div>
-                                <div className="recent-activity-meta">
-                                  <span className={`recent-activity-score ${activity.score >= 80 ? 'score-high' : activity.score >= 50 ? 'score-mid' : 'score-low'}`}>
+                                <div className="overview-activity-meta">
+                                  <span className={`overview-activity-score ${activity.score >= 80 ? 'score-high' : activity.score >= 50 ? 'score-mid' : 'score-low'}`}>
                                     {activity.score != null ? `${activity.score}%` : '—'}
                                   </span>
-                                  <span className="recent-activity-time">
+                                  <span className="overview-activity-time">
                                     {activity.timestamp ? new Date(activity.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                                   </span>
                                 </div>
@@ -2074,7 +1938,7 @@ function TherapistDashboard({ onLogout }) {
                             ))}
                           </div>
                         ) : (
-                          <div className="recent-activities-empty">
+                          <div className="overview-activities-empty">
                             <span>📭</span>
                             <p>No recent activities yet</p>
                           </div>
@@ -2208,16 +2072,25 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'physical' && (
             <div className="physical-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Physical Therapy</h2>
+                  <p>Monitor and review patient gait analyses</p>
+                </div>
+              </div>
+
               {loadingPhysical ? (
                 <div className="loading-overlay">
                   <div className="loading-spinner"></div>
                   <p>Loading gait analyses...</p>
                 </div>
               ) : gaitAnalyses.length === 0 ? (
-                <div className="no-exercises">
-                  <div className="no-exercises-icon">🚶</div>
-                  <p className="no-exercises-text">No gait analyses found</p>
-                  <p className="no-exercises-hint">Gait analyses will appear here after patients perform them</p>
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🚶</span>
+                    <h3>No Gait Analyses Found</h3>
+                    <p>Gait analyses will appear here after patients perform them.</p>
+                  </div>
                 </div>
               ) : (
                 <div className="gait-analyses-container">
@@ -2259,7 +2132,7 @@ function TherapistDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  <div className="table-wrapper">
+                  <div className="datatable-container">
                     <table className="logs-table gait-table">
                       <thead>
                         <tr>
@@ -2424,81 +2297,81 @@ function TherapistDashboard({ onLogout }) {
                         })()}
                       </tbody>
                     </table>
+
+                    {/* Pagination Footer */}
+                    {(() => {
+                      const filteredAnalyses = gaitAnalyses.filter(analysis => 
+                        !searchTerm || 
+                        analysis.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        analysis.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+                      );
+                      const totalPages = Math.ceil(filteredAnalyses.length / gaitEntriesPerPage);
+                      if (totalPages <= 1) return null;
+                      
+                      const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
+                      const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage + 1;
+                      const actualLastEntry = Math.min(indexOfLastEntry, filteredAnalyses.length);
+                      
+                      return (
+                        <div className="pagination-footer">
+                          <div className="pagination-info">
+                            Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredAnalyses.length} entries
+                          </div>
+                          <div className="pagination-buttons">
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(1)}
+                              disabled={currentGaitPage === 1}
+                            >
+                              «
+                            </button>
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentGaitPage === 1}
+                            >
+                              ‹
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentGaitPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentGaitPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentGaitPage - 2 + i;
+                              }
+                              return (
+                                <button
+                                  key={pageNum}
+                                  className={`pagination-btn ${currentGaitPage === pageNum ? 'active' : ''}`}
+                                  onClick={() => setCurrentGaitPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentGaitPage === totalPages}
+                            >
+                              ›
+                            </button>
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(totalPages)}
+                              disabled={currentGaitPage === totalPages}
+                            >
+                              »
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
-                  
-                  {/* Pagination Footer */}
-                  {(() => {
-                    const filteredAnalyses = gaitAnalyses.filter(analysis => 
-                      !searchTerm || 
-                      analysis.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      analysis.user_email.toLowerCase().includes(searchTerm.toLowerCase())
-                    );
-                    const totalPages = Math.ceil(filteredAnalyses.length / gaitEntriesPerPage);
-                    if (totalPages <= 1) return null;
-                    
-                    const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
-                    const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage + 1;
-                    const actualLastEntry = Math.min(indexOfLastEntry, filteredAnalyses.length);
-                    
-                    return (
-                      <div className="pagination-footer">
-                        <div className="pagination-info">
-                          Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredAnalyses.length} entries
-                        </div>
-                        <div className="pagination-buttons">
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(1)}
-                            disabled={currentGaitPage === 1}
-                          >
-                            «
-                          </button>
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(prev => Math.max(1, prev - 1))}
-                            disabled={currentGaitPage === 1}
-                          >
-                            ‹
-                          </button>
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            let pageNum;
-                            if (totalPages <= 5) {
-                              pageNum = i + 1;
-                            } else if (currentGaitPage <= 3) {
-                              pageNum = i + 1;
-                            } else if (currentGaitPage >= totalPages - 2) {
-                              pageNum = totalPages - 4 + i;
-                            } else {
-                              pageNum = currentGaitPage - 2 + i;
-                            }
-                            return (
-                              <button
-                                key={pageNum}
-                                className={`pagination-btn ${currentGaitPage === pageNum ? 'active' : ''}`}
-                                onClick={() => setCurrentGaitPage(pageNum)}
-                              >
-                                {pageNum}
-                              </button>
-                            );
-                          })}
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(prev => Math.min(totalPages, prev + 1))}
-                            disabled={currentGaitPage === totalPages}
-                          >
-                            ›
-                          </button>
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(totalPages)}
-                            disabled={currentGaitPage === totalPages}
-                          >
-                            »
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               )}
             </div>
@@ -2641,11 +2514,18 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'success-stories' && (
             <div className="success-stories-section">
-              <div className="controls-section">
-                <div className="control-group">
-                  <button className="btn-primary" onClick={handleAddStory}>
-                    ➕ Add Success Story
-                  </button>
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Success Stories</h2>
+                  <p>Share and manage inspiring patient recovery journeys</p>
+                </div>
+                <button className="btn-primary" onClick={handleAddStory}>
+                  <span>⭐</span> Add Success Story
+                </button>
+              </div>
+
+              <div className="stories-toolbar">
+                <div className="toolbar-left">
                   <div className="search-container">
                     <input
                       type="text"
@@ -2666,6 +2546,7 @@ function TherapistDashboard({ onLogout }) {
                         }}
                         className="entries-select"
                       >
+                        <option value={5}>5</option>
                         <option value={10}>10</option>
                         <option value={25}>25</option>
                         <option value={50}>50</option>
@@ -2674,6 +2555,8 @@ function TherapistDashboard({ onLogout }) {
                       entries
                     </label>
                   </div>
+                </div>
+                <div className="toolbar-right">
                   <div className="stats-summary">
                     <span className="stat-item">
                       <strong>{successStories.length}</strong> Total Stories
@@ -2688,127 +2571,176 @@ function TherapistDashboard({ onLogout }) {
                   <p>Loading success stories...</p>
                 </div>
               ) : successStories.length === 0 ? (
-                <div className="no-exercises">
-                  <div className="no-exercises-icon">⭐</div>
-                  <p className="no-exercises-text">No success stories yet</p>
-                  <p className="no-exercises-hint">Click "Add Success Story" to share patient achievements</p>
-                </div>
-              ) : (
-                <div className="table-wrapper">
-                  <table className="logs-table stories-table">
-                    <thead>
-                      <tr>
-                        <th>Patient Name</th>
-                        <th>Story Preview</th>
-                        <th>Images</th>
-                        <th>Date Added</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const filteredStories = successStories.filter(story =>
-                          !storySearchTerm ||
-                          story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
-                        );
-                        const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
-                        const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
-                        const currentEntries = filteredStories.slice(indexOfFirstEntry, indexOfLastEntry);
-                        return currentEntries.map(story => (
-                          <tr key={story.id}>
-                            <td>
-                              <div className="patient-cell">
-                                <div className="patient-avatar-small">
-                                  {story.patientName.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                </div>
-                                <span className="patient-name-text">{story.patientName}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="story-preview">
-                                {story.story.length > 100 
-                                  ? `${story.story.substring(0, 100)}...` 
-                                  : story.story}
-                              </div>
-                            </td>
-                            <td>
-                              <div className="story-images-preview">
-                                {story.images && story.images.length > 0 ? (
-                                  <div className="image-thumbnails">
-                                    {story.images.slice(0, 3).map((imagePath, idx) => (
-                                      <img 
-                                        key={idx}
-                                        src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`}
-                                        alt={`${story.patientName} - Image ${idx + 1}`}
-                                        className="story-thumbnail"
-                                        title={`Image ${idx + 1} of ${story.images.length}`}
-                                      />
-                                    ))}
-                                    {story.images.length > 3 && (
-                                      <div className="more-images-badge">
-                                        +{story.images.length - 3}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="no-images-text">No images</span>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <span className="date-cell">{formatDate(story.createdAt)}</span>
-                            </td>
-                            <td>
-                              <div className="exercise-actions">
-                                <button 
-                                  className="btn-edit" 
-                                  onClick={() => handleEditStory(story)}
-                                >
-                                  Edit
-                                </button>
-                                <button 
-                                  className="btn-delete" 
-                                  onClick={() => handleDeleteStory(story.id)}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ));
-                      })()}
-                    </tbody>
-                  </table>
-
-                  {/* Pagination */}
-                  <div className="pagination">
-                    <button 
-                      onClick={() => setCurrentStoryPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentStoryPage === 1}
-                      className="pagination-btn"
-                    >
-                      Previous
-                    </button>
-                    <span className="pagination-info">
-                      Page {currentStoryPage} of {Math.ceil(successStories.filter(story =>
-                        !storySearchTerm ||
-                        story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
-                      ).length / storyEntriesPerPage) || 1}
-                    </span>
-                    <button 
-                      onClick={() => setCurrentStoryPage(prev => Math.min(Math.ceil(successStories.filter(story =>
-                        !storySearchTerm ||
-                        story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
-                      ).length / storyEntriesPerPage), prev + 1))}
-                      disabled={currentStoryPage === Math.ceil(successStories.filter(story =>
-                        !storySearchTerm ||
-                        story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
-                      ).length / storyEntriesPerPage)}
-                      className="pagination-btn"
-                    >
-                      Next
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">⭐</span>
+                    <h3>No Success Stories Yet</h3>
+                    <p>Click "Add Success Story" to share patient achievements.</p>
+                    <button className="btn-primary" onClick={handleAddStory}>
+                      <span>⭐</span> Add Success Story
                     </button>
                   </div>
+                </div>
+              ) : (
+                <div className="datatable-container">
+                    <table className="logs-table stories-table">
+                      <thead>
+                        <tr>
+                          <th>Patient Name</th>
+                          <th>Story Preview</th>
+                          <th>Images</th>
+                          <th>Date Added</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const filteredStories = successStories.filter(story =>
+                            !storySearchTerm ||
+                            story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                          );
+                          const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
+                          const currentEntries = filteredStories.slice(indexOfFirstEntry, indexOfLastEntry);
+                          return currentEntries.map(story => (
+                            <tr key={story.id}>
+                              <td>
+                                <div className="patient-cell">
+                                  <div className="patient-avatar-small">
+                                    {story.patientName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                  </div>
+                                  <span className="patient-name-text">{story.patientName}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="story-preview">
+                                  {story.story.length > 100 
+                                    ? `${story.story.substring(0, 100)}...` 
+                                    : story.story}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="story-images-preview">
+                                  {story.images && story.images.length > 0 ? (
+                                    <div className="image-thumbnails">
+                                      {story.images.slice(0, 3).map((imagePath, idx) => (
+                                        <img 
+                                          key={idx}
+                                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`}
+                                          alt={`${story.patientName} - Image ${idx + 1}`}
+                                          className="story-thumbnail"
+                                          title={`Image ${idx + 1} of ${story.images.length}`}
+                                        />
+                                      ))}
+                                      {story.images.length > 3 && (
+                                        <div className="more-images-badge">
+                                          +{story.images.length - 3}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="no-images-text">No images</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <span className="date-cell">{formatDate(story.createdAt)}</span>
+                              </td>
+                              <td>
+                                <div className="exercise-actions">
+                                  <button 
+                                    className="btn-edit" 
+                                    onClick={() => handleEditStory(story)}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button 
+                                    className="btn-delete" 
+                                    onClick={() => handleDeleteStory(story.id)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+
+                  {/* Pagination */}
+                  {(() => {
+                    const filteredStories = successStories.filter(story =>
+                      !storySearchTerm ||
+                      story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filteredStories.length / storyEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
+                    const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
+                    return (
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {indexOfFirstEntry + 1} to {Math.min(indexOfLastEntry, filteredStories.length)} of {filteredStories.length} entries
+                        </span>
+                        <div className="pagination-buttons">
+                          <button
+                            onClick={() => setCurrentStoryPage(1)}
+                            disabled={currentStoryPage === 1}
+                            className="pagination-btn"
+                            title="First Page"
+                          >
+                            «
+                          </button>
+                          <button
+                            onClick={() => setCurrentStoryPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentStoryPage === 1}
+                            className="pagination-btn"
+                            title="Previous Page"
+                          >
+                            ‹
+                          </button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentStoryPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentStoryPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentStoryPage - 2 + i;
+                            }
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCurrentStoryPage(pageNum)}
+                                className={`pagination-btn ${currentStoryPage === pageNum ? 'active' : ''}`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                          <button
+                            onClick={() => setCurrentStoryPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentStoryPage === totalPages}
+                            className="pagination-btn"
+                            title="Next Page"
+                          >
+                            ›
+                          </button>
+                          <button
+                            onClick={() => setCurrentStoryPage(totalPages)}
+                            disabled={currentStoryPage === totalPages}
+                            className="pagination-btn"
+                            title="Last Page"
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -3093,7 +3025,11 @@ function TherapistDashboard({ onLogout }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {appointments.map((appointment) => (
+                      {(() => {
+                        const indexOfLastEntry = currentAppointmentPage * appointmentEntriesPerPage;
+                        const indexOfFirstEntry = indexOfLastEntry - appointmentEntriesPerPage;
+                        const currentEntries = appointments.slice(indexOfFirstEntry, indexOfLastEntry);
+                        return currentEntries.map((appointment) => (
                         <tr key={appointment._id} className={`appointment-row status-${appointment.status}`}>
                           <td className="patient-cell">
                             <div className="patient-info-inline">
@@ -3162,18 +3098,90 @@ function TherapistDashboard({ onLogout }) {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      ));
+                      })()}
                     </tbody>
                   </table>
+
+                  {/* Pagination Footer */}
+                  {(() => {
+                    const totalPages = Math.ceil(appointments.length / appointmentEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    
+                    const indexOfLastEntry = currentAppointmentPage * appointmentEntriesPerPage;
+                    const indexOfFirstEntry = indexOfLastEntry - appointmentEntriesPerPage + 1;
+                    const actualLastEntry = Math.min(indexOfLastEntry, appointments.length);
+                    
+                    return (
+                      <div className="pagination-footer">
+                        <div className="pagination-info">
+                          Showing {indexOfFirstEntry} to {actualLastEntry} of {appointments.length} entries
+                        </div>
+                        <div className="pagination-buttons">
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(1)}
+                            disabled={currentAppointmentPage === 1}
+                          >
+                            «
+                          </button>
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentAppointmentPage === 1}
+                          >
+                            ‹
+                          </button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentAppointmentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentAppointmentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentAppointmentPage - 2 + i;
+                            }
+                            return (
+                              <button
+                                key={pageNum}
+                                className={`pagination-btn ${currentAppointmentPage === pageNum ? 'active' : ''}`}
+                                onClick={() => setCurrentAppointmentPage(pageNum)}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentAppointmentPage === totalPages}
+                          >
+                            ›
+                          </button>
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(totalPages)}
+                            disabled={currentAppointmentPage === totalPages}
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
-                <div className="no-data-message">
-                  <span className="no-data-icon">📅</span>
-                  <h3>No Appointments Found</h3>
-                  <p>No appointments match your current filters. Try adjusting the filters or create a new appointment.</p>
-                  <button className="btn-primary" onClick={handleAddAppointment}>
-                    <span>📅</span> Schedule New Appointment
-                  </button>
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">📅</span>
+                    <h3>No Appointments Found</h3>
+                    <p>No appointments match your current filters. Try adjusting the filters or create a new appointment.</p>
+                    <button className="btn-primary" onClick={handleAddAppointment}>
+                      <span>📅</span> Schedule New Appointment
+                    </button>
+                  </div>
                 </div>
               )}
 

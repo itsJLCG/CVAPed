@@ -86,6 +86,13 @@ export default function App() {
     setShowOTP(true);
   };
 
+  const handleRequiresVerification = (email) => {
+    console.log('User requires email verification:', email);
+    setUserEmail(email);
+    setShowLogin(false);
+    setShowOTP(true);
+  };
+
   const handleVerifyOTP = (userData) => {
     console.log('OTP Verified, user data:', userData);
     // Store user data and token (implement AsyncStorage later)
@@ -217,6 +224,7 @@ export default function App() {
           onRegister={handleRegister}
           onLoginSuccess={handleLoginSuccess}
           onGoogleSignIn={handleGoogleSignIn}
+          onRequiresVerification={handleRequiresVerification}
         />
         <StatusBar style="auto" />
       </SafeAreaWrapper>

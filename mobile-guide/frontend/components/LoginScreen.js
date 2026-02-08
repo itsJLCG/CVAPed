@@ -20,7 +20,7 @@ import '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
-const LoginScreen = ({ onRegister, onLoginSuccess, onGoogleSignIn }) => {
+const LoginScreen = ({ onRegister, onLoginSuccess, onGoogleSignIn, onRequiresVerification }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,7 +44,25 @@ const LoginScreen = ({ onRegister, onLoginSuccess, onGoogleSignIn }) => {
         }
       }
     } catch (error) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      // Check if user needs to verify their email
+      if (error.requiresVerification) {
+        Alert.alert(
+          'Email Verification Required',
+          'Your email is not verified. You will be redirected to the verification screen.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                if (onRequiresVerification) {
+                  onRequiresVerification(error.email);
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      }
     } finally {
       setLoading(false);
     }

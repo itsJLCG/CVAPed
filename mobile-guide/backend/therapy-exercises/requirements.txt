@@ -9,3 +9,5 @@ pandas==2.1.4
 numpy==1.26.2
 networkx==3.2.1
 experta==1.9.4
+frozendict==1.2
+

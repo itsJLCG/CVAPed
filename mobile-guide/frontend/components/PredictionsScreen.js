@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -381,11 +383,13 @@ const PredictionsScreen = ({ onBack }) => {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <View style={{ width: 24, height: 24 }} />
+          </View>
           <Text style={styles.headerTitle}>AI Predictions</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerRight}>
+            <View style={{ width: 24, height: 24 }} />
+          </View>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B6B" />
@@ -398,13 +402,15 @@ const PredictionsScreen = ({ onBack }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <View style={{ width: 24, height: 24 }} />
+        </View>
         <Text style={styles.headerTitle}>AI Predictions</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={24} color="#FF6B6B" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+            <Ionicons name="refresh" size={24} color="#FF6B6B" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -433,27 +439,39 @@ const PredictionsScreen = ({ onBack }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#F5F5F5',
+    marginTop: Platform.OS === 'android' ? -StatusBar.currentHeight : 0,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFF',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 15 : 15,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
-  backButton: {
-    padding: 8,
+  headerLeft: {
+    width: 34,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: 'bold',
     color: '#333',
+    textAlign: 'center',
+  },
+  headerRight: {
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   refreshButton: {
+    padding: 0,
+  },
+  backButton: {
     padding: 8,
   },
   loadingContainer: {

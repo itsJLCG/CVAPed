@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,10 +8,14 @@ import {
   ScrollView,
   Image,
   Modal,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import PhysicalTherapyScreen from './therapy/PhysicalTherapyScreen';
 import SpeechTherapyScreen from './therapy/SpeechTherapyScreen';
+import InitialDiagnosticModal from './InitialDiagnosticModal';
+import { authAPI } from '../services/api';
 import BottomNav from './BottomNav';
 
 const { width, height } = Dimensions.get('window');
@@ -22,12 +26,67 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
   const [showPhysicalTherapy, setShowPhysicalTherapy] = useState(false);
   const [showSpeechTherapy, setShowSpeechTherapy] = useState(false);
 
+  // Diagnostic modal state
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [diagnosticStatus, setDiagnosticStatus] = useState(null);
+  const [showBanner, setShowBanner] = useState(false);
+
+  // Check if user has already answered the diagnostic question
+  useEffect(() => {
+    const checkDiagnosticStatus = async () => {
+      try {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (storedUserData) {
+          const user = JSON.parse(storedUserData);
+          if (user.hasInitialDiagnostic == null) {
+            // Never answered — show modal
+            setShowDiagnosticModal(true);
+          } else if (user.hasInitialDiagnostic === true) {
+            // Already diagnosed
+            setDiagnosticStatus(true);
+          } else {
+            // Answered "No" — show guidance banner
+            setDiagnosticStatus(false);
+            setShowBanner(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking diagnostic status:', error);
+      }
+    };
+    checkDiagnosticStatus();
+  }, []);
+
+  const handleDiagnosticConfirm = async (hasVisited) => {
+    setDiagnosticLoading(true);
+    try {
+      await authAPI.updateDiagnosticStatus(hasVisited);
+      setShowDiagnosticModal(false);
+      setDiagnosticStatus(hasVisited);
+      if (hasVisited) {
+        Alert.alert('Thank You', 'Your diagnostic status has been recorded.');
+      } else {
+        Alert.alert(
+          'Recommendation',
+          'We recommend scheduling an initial diagnostic assessment at our facility.'
+        );
+        setShowBanner(true);
+      }
+    } catch (error) {
+      console.error('Error updating diagnostic status:', error);
+      Alert.alert('Error', 'Failed to save your response. Please try again.');
+    } finally {
+      setDiagnosticLoading(false);
+    }
+  };
+
   const therapyTypes = [
     {
       id: 1,
       name: 'Physical Therapy',
       icon: require('../assets/CVACare_Physical_Therapy.png'),
-      description: 'Specialized treatment to restore movement, reduce pain, and improve physical function. Our expert therapists help you recover from injuries, manage chronic conditions, and enhance your overall mobility.',
+      description: 'Treatment to restore movement, reduce pain, and improve function for stroke patients.',
       features: [
         'Movement Restoration',
         'Pain Management',
@@ -39,9 +98,9 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
     },
     {
       id: 2,
-      name: 'Speech Therapy',
+      name: 'Speech/Language Therapy',
       icon: require('../assets/CVACare_Speech_Therapy.png'),
-      description: 'Comprehensive speech therapy programs designed to improve communication skills for children. Choose from three specialized therapy types tailored to specific needs.',
+      description: 'Speech and language therapy programs to improve communication skills for children.',
       subheading: 'Available Therapy Types:',
       therapyTypes: [
         {
@@ -50,14 +109,14 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
         },
         {
           name: 'Language Therapy:',
-          description: 'Receptive and expressive language development',
+          description: 'F – Fluency, N – Naming, C – Comprehension, R – Repetition',
         },
         {
           name: 'Fluency Therapy:',
-          description: 'Stuttering reduction and speech rate control',
+          description: 'Speech flow and rhythm improvement',
         },
       ],
-      buttonText: 'Explore Speech Therapy Options',
+      buttonText: 'Explore Speech/Language Therapy Options',
       buttonColor: '#6B9AC4',
     },
   ];
@@ -77,7 +136,7 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
     // Navigate to the appropriate therapy screen
     if (therapyType === 'Physical Therapy') {
       setShowPhysicalTherapy(true);
-    } else if (therapyType === 'Speech Therapy') {
+    } else if (therapyType === 'Speech/Language Therapy') {
       setShowSpeechTherapy(true);
     }
   };
@@ -133,6 +192,41 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
           <Text style={styles.subtitle}>Select the therapy service you need</Text>
         </View>
 
+        {/* Guidance Banner for users without initial diagnostic */}
+        {diagnosticStatus === false && showBanner && (
+          <View style={styles.diagnosticBanner}>
+            <View style={styles.bannerContent}>
+              <View style={styles.bannerTextRow}>
+                <Ionicons name="information-circle" size={22} color="#1E40AF" />
+                <View style={styles.bannerTextContainer}>
+                  <Text style={styles.bannerTextBold}>No initial assessment on file.</Text>
+                  <Text style={styles.bannerText}>
+                    For the best therapy results, we recommend visiting our facility for a professional diagnostic assessment. You can still explore therapy exercises in the meantime.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowBanner(false)}
+                  style={styles.bannerCloseBtn}
+                >
+                  <Ionicons name="close" size={20} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.bannerActionBtn}
+                onPress={() => {
+                  if (onNavigate) {
+                    onNavigate('schedule');
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.bannerActionText}>Book Your Initial Assessment</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <View style={styles.therapyGrid}>
           {therapyTypes.map((therapy) => (
             <View key={therapy.id} style={styles.therapyItemContainer}>
@@ -184,7 +278,7 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
-                <Text style={styles.benefitText}>Speech Therapy for Pedia</Text>
+                <Text style={styles.benefitText}>Speech/Language Therapy for Pedia</Text>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
@@ -279,6 +373,14 @@ const TherapyScreen = ({ onBack, onNavigate }) => {
 
       {/* Bottom Navbar */}
       <BottomNav activeTab={activeTab} onTabPress={handleTabPress} />
+
+      {/* Initial Diagnostic Check Modal */}
+      <InitialDiagnosticModal
+        isOpen={showDiagnosticModal}
+        onClose={() => setShowDiagnosticModal(false)}
+        onConfirm={handleDiagnosticConfirm}
+        loading={diagnosticLoading}
+      />
     </View>
   );
 };
@@ -348,6 +450,59 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  // Diagnostic Banner
+  diagnosticBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    overflow: 'hidden',
+  },
+  bannerContent: {
+    padding: 14,
+  },
+  bannerTextRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  bannerTextContainer: {
+    flex: 1,
+  },
+  bannerTextBold: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E3A5F',
+    marginBottom: 4,
+  },
+  bannerText: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 19,
+  },
+  bannerCloseBtn: {
+    padding: 4,
+  },
+  bannerActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  bannerActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
   // Therapy Grid
   therapyGrid: {
     flexDirection: 'row',
@@ -368,6 +523,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 15,
+    minHeight: 240,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -407,12 +563,13 @@ const styles = StyleSheet.create({
     height: 130,
   },
   therapyName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#2C3E50',
     textAlign: 'center',
     paddingHorizontal: 5,
     marginBottom: 8,
+    lineHeight: 18,
   },
   tapHintContainer: {
     flexDirection: 'row',

@@ -10,11 +10,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import ReceptiveLanguageScreen from './ReceptiveLanguageScreen';
 import ExpressiveLanguageScreen from './ExpressiveLanguageScreen';
+import FluencyTherapyScreen from './FluencyTherapyScreen';
 
 const { width } = Dimensions.get('window');
 
 const LanguageTherapyScreen = ({ onBack }) => {
-  const [currentScreen, setCurrentScreen] = useState('selection'); // 'selection', 'receptive', 'expressive'
+  const [currentScreen, setCurrentScreen] = useState('selection'); // 'selection', 'receptive', 'expressive', 'fluency'
   const [triggerReload, setTriggerReload] = useState(0);
 
   const handleBackToSelection = () => {
@@ -31,6 +32,11 @@ const LanguageTherapyScreen = ({ onBack }) => {
     setTriggerReload(prev => prev + 1); // Trigger reload when returning
   };
 
+  const handleNavigateToFluency = () => {
+    setCurrentScreen('fluency');
+    setTriggerReload(prev => prev + 1); // Trigger reload when returning
+  };
+
   if (currentScreen === 'receptive') {
     return <ReceptiveLanguageScreen onBack={handleBackToSelection} reloadTrigger={triggerReload} />;
   }
@@ -38,6 +44,11 @@ const LanguageTherapyScreen = ({ onBack }) => {
   if (currentScreen === 'expressive') {
     return <ExpressiveLanguageScreen onBack={handleBackToSelection} reloadTrigger={triggerReload} />;
   }
+
+  if (currentScreen === 'fluency') {
+    return <FluencyTherapyScreen onBack={handleBackToSelection} />;
+  }
+
   const therapyAreas = [
     {
       id: 1,
@@ -65,7 +76,21 @@ const LanguageTherapyScreen = ({ onBack }) => {
         'Verbal Expression',
       ],
     },
+    {
+      id: 3,
+      icon: '🗣️',
+      title: 'Fluency Therapy',
+      subtitle: 'Speech Flow & Rhythm',
+      color: '#F4A460',
+      skills: [
+        'Speech Flow Practice',
+        'Rhythm & Pacing',
+        'Fluency Techniques',
+        'Speech Rate Control',
+      ],
+    },
   ];
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -123,7 +148,15 @@ const LanguageTherapyScreen = ({ onBack }) => {
                 <TouchableOpacity 
                   style={[styles.exerciseButton, { backgroundColor: area.color }]}
                   activeOpacity={0.8}
-                  onPress={() => area.id === 1 ? handleNavigateToReceptive() : handleNavigateToExpressive()}
+                  onPress={() => {
+                    if (area.id === 1) {
+                      handleNavigateToReceptive();
+                    } else if (area.id === 2) {
+                      handleNavigateToExpressive();
+                    } else if (area.id === 3) {
+                      handleNavigateToFluency();
+                    }
+                  }}
                 >
                   <Text style={styles.exerciseButtonText}>START THERAPY</Text>
                   <Ionicons name="arrow-forward" size={18} color="#FFF" style={{ marginLeft: 8 }} />
@@ -140,97 +173,78 @@ const LanguageTherapyScreen = ({ onBack }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F9FA',
   },
-  
-  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    paddingVertical: 15,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
   backButton: {
-    padding: 5,
+    padding: 8,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#2C3E50',
   },
   placeholder: {
-    width: 34,
+    width: 40,
   },
-
-  // Content Styles
   content: {
     flex: 1,
   },
   contentContainer: {
     paddingBottom: 30,
   },
-
-  // Header Section
   headerSection: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    backgroundColor: '#F5F5F5',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    borderLeftWidth: 3,
-    borderLeftColor: '#4A90E2',
+    borderBottomColor: '#E8E8E8',
   },
   mainTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#2C3E50',
-    marginBottom: 5,
+    marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: 15,
     color: '#7F8C8D',
     textAlign: 'center',
   },
-
-  // Areas Container
   areasContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 10,
-    paddingTop: 10,
-    justifyContent: 'space-around',
+    padding: 15,
+    gap: 15,
   },
-
-  // Area Card
   areaCard: {
-    width: '48%',
-    minWidth: 160,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginBottom: 15,
-    paddingVertical: 20,
-    paddingHorizontal: 15,
+    borderRadius: 16,
+    padding: 20,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#F0F0F0',
+    flexDirection: 'column',
+    width: '100%',
   },
-
-  // Icon Badge
   iconBadgeContainer: {
-    alignItems: 'center',
     marginBottom: 15,
   },
   iconBadge: {
@@ -239,70 +253,66 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   iconText: {
-    fontSize: 28,
+    fontSize: 30,
   },
-
-  // Card Content
   cardContent: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'space-between',
   },
   areaTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#2C3E50',
-    marginBottom: 6,
-    textAlign: 'center',
+    marginBottom: 5,
   },
   areaSubtitle: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 18,
-    textAlign: 'center',
+    marginBottom: 15,
   },
-
-  // Skills List
   skillsList: {
-    width: '100%',
-    marginBottom: 18,
-    alignItems: 'flex-start',
+    marginBottom: 20,
   },
   skillItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-    paddingLeft: 5,
   },
   checkmark: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#27AE60',
-    marginRight: 8,
+    marginRight: 10,
     fontWeight: 'bold',
   },
   skillText: {
-    flex: 1,
-    fontSize: 11,
+    fontSize: 14,
     color: '#555',
-    lineHeight: 16,
+    flex: 1,
   },
-
-  // Exercise Button
   exerciseButton: {
-    width: '100%',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   exerciseButtonText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 'bold',
-    letterSpacing: 0.5,
   },
 });
 

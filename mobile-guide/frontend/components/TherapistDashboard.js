@@ -16,11 +16,565 @@ import {
   Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../services/api';
+import api, { successStoryAPI, therapistAPI, appointmentAPI, diagnosticComparisonAPI } from '../services/api';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 const { width, height } = Dimensions.get('window');
+
+// ==================== DIAGNOSTIC TAB STYLES ====================
+const diagStyles = StyleSheet.create({
+  container: {
+    padding: 16,
+  },
+  sectionHeader: {
+    marginBottom: 20,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  searchDropdown: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    marginTop: 6,
+    maxHeight: 160,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  searchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchItemAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fee2e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchItemAvatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#C9302C',
+  },
+  searchItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  searchItemEmail: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 1,
+  },
+  selectedPatientChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  selectedPatientText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#166534',
+    flex: 1,
+  },
+  addDiagButton: {
+    backgroundColor: '#C9302C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginBottom: 16,
+    shadowColor: '#C9302C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addDiagButtonText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyStateTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#64748b',
+    marginTop: 16,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    marginTop: 6,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  assessmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  assessmentAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fee2e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  assessmentAvatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#C9302C',
+  },
+  assessmentName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  assessmentMeta: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  assessmentDate: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  severityBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+  severityText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  assessorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  assessorText: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+  insightTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0369a1',
+  },
+  insightStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  insightStatBox: {
+    flex: 1,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  insightStatValue: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  insightStatLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  insightCountsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  insightCountBox: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  insightCountValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  insightCountLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  insightAreasContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e0f2fe',
+    gap: 6,
+  },
+  insightAreaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  insightAreaIcon: {
+    fontSize: 14,
+  },
+  insightAreaLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  insightAreaValue: {
+    fontSize: 12,
+    color: '#64748b',
+    flex: 1,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingBottom: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: '#e2e8f0',
+    marginBottom: 4,
+  },
+  tableHeaderCell: {
+    flex: 2,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tableHeaderCellCenter: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  tableCell: {
+    flex: 2,
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  tableCellCenter: {
+    flex: 1,
+    fontSize: 13,
+    color: '#334155',
+    textAlign: 'center',
+  },
+  notesBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  notesText: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  recommendLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 8,
+  },
+  recommendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  recommendBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#C9302C',
+  },
+  recommendText: {
+    fontSize: 13,
+    color: '#64748b',
+    flex: 1,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    gap: 12,
+  },
+  historyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#C9302C',
+  },
+  historyTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  historyMeta: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  historyViewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 6,
+  },
+  historyViewText: {
+    fontSize: 12,
+    color: '#0369a1',
+    fontWeight: '600',
+  },
+  historyDeleteBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '92%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  modalSectionDivider: {
+    marginTop: 8,
+    marginBottom: 12,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  modalSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  scoreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 8,
+  },
+  scoreGridItem: {
+    width: '30%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  scoreGridLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 6,
+  },
+  scoreGridInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: '#FFFFFF',
+    color: '#1e293b',
+  },
+  scoreInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingVertical: 6,
+  },
+  scoreInputLabel: {
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  scoreInput: {
+    width: 80,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: '#f8fafc',
+    color: '#1e293b',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  modalSaveBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#C9302C',
+  },
+  modalSaveText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+});
 
 const TherapistDashboard = ({ onLogout, onNavigate }) => {
   const [user, setUser] = useState(null);
@@ -99,6 +653,70 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
     is_active: true
   });
 
+  // Success Story states
+  const [successStories, setSuccessStories] = useState([]);
+  const [showSuccessStoryModal, setShowSuccessStoryModal] = useState(false);
+  const [editingStory, setEditingStory] = useState(null);
+  const [newStory, setNewStory] = useState({
+    patientName: '',
+    story: '',
+    images: []
+  });
+
+  // Reports states
+  const [reportsData, setReportsData] = useState(null);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  // Scheduling states
+  const [therapistAppointments, setTherapistAppointments] = useState([]);
+  const [unassignedAppointments, setUnassignedAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [schedulingSubTab, setSchedulingSubTab] = useState('my'); // 'my', 'unassigned'
+  const [showCreateAppointmentModal, setShowCreateAppointmentModal] = useState(false);
+  const [showAppointmentDetailModal, setShowAppointmentDetailModal] = useState(false);
+  const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState(null);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [searchingPatients, setSearchingPatients] = useState(false);
+  const [newAppointmentData, setNewAppointmentData] = useState({
+    patient_id: '',
+    patient_name: '',
+    therapy_type: 'articulation',
+    appointment_date: new Date(),
+    appointment_time: new Date(),
+    duration: 60,
+    notes: '',
+  });
+  const [showApptDatePicker, setShowApptDatePicker] = useState(false);
+  const [showApptTimePicker, setShowApptTimePicker] = useState(false);
+
+  // Diagnostic Comparison states
+  const [diagComparisonData, setDiagComparisonData] = useState(null);
+  const [diagPatientDiagnostics, setDiagPatientDiagnostics] = useState([]);
+  const [diagComparisonHistory, setDiagComparisonHistory] = useState([]);
+  const [loadingDiagComparison, setLoadingDiagComparison] = useState(false);
+  const [diagSearchQuery, setDiagSearchQuery] = useState('');
+  const [diagSearchResults, setDiagSearchResults] = useState([]);
+  const [showDiagPatientDropdown, setShowDiagPatientDropdown] = useState(false);
+  const [searchingDiagPatients, setSearchingDiagPatients] = useState(false);
+  const [selectedDiagPatient, setSelectedDiagPatient] = useState(null);
+  const [showDiagModal, setShowDiagModal] = useState(false);
+  const [savingDiagnostic, setSavingDiagnostic] = useState(false);
+  const [showDeleteDiagConfirm, setShowDeleteDiagConfirm] = useState(null);
+  const [showDiagDatePicker, setShowDiagDatePicker] = useState(false);
+  const [newDiagnostic, setNewDiagnostic] = useState({
+    assessment_date: new Date().toISOString().split('T')[0],
+    assessment_type: 'initial',
+    articulation_scores: { r: '', s: '', l: '', th: '', k: '' },
+    fluency_score: '',
+    receptive_score: '',
+    expressive_score: '',
+    gait_scores: { stability_score: '', gait_symmetry: '', step_regularity: '', overall_gait: '' },
+    notes: '',
+    severity_level: '',
+    recommended_focus: []
+  });
+
   useEffect(() => {
     loadUserData();
   }, []);
@@ -114,6 +732,15 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
       loadReceptiveExercises();
     } else if (activeTab === 'articulation') {
       loadArticulationExercises();
+    } else if (activeTab === 'success-stories') {
+      loadSuccessStories();
+    } else if (activeTab === 'reports') {
+      loadReports();
+    } else if (activeTab === 'scheduling') {
+      loadTherapistAppointments();
+      loadUnassignedAppointments();
+    } else if (activeTab === 'diagnostic') {
+      // Keep selectedDiagPatient if already set; otherwise no auto-load
     }
   }, [activeTab, activeSubTab]);
 
@@ -138,6 +765,8 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
       await loadReceptiveExercises();
     } else if (activeTab === 'articulation') {
       await loadArticulationExercises();
+    } else if (activeTab === 'success-stories') {
+      await loadSuccessStories();
     }
     setRefreshing(false);
   };
@@ -1066,6 +1695,154 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
     setShowArticulationModal(true);
   };
 
+  // ==================== SUCCESS STORY FUNCTIONS ====================
+  const loadSuccessStories = async () => {
+    try {
+      setLoading(true);
+      const response = await successStoryAPI.getAll();
+      if (response.success) {
+        setSuccessStories(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading success stories:', error);
+      Alert.alert('Error', 'Failed to load success stories');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddSuccessStory = () => {
+    setEditingStory(null);
+    setNewStory({
+      patientName: '',
+      story: '',
+      images: []
+    });
+    setShowSuccessStoryModal(true);
+  };
+
+  const handleEditSuccessStory = (story) => {
+    setEditingStory(story);
+    setNewStory({
+      patientName: story.patientName,
+      story: story.story,
+      images: story.images || []
+    });
+    setShowSuccessStoryModal(true);
+  };
+
+  const handlePickImages = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        allowsEditing: false,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => ({
+          uri: asset.uri,
+          name: asset.fileName || `image_${Date.now()}.jpg`,
+          type: asset.type || 'image/jpeg'
+        }));
+        setNewStory(prev => ({
+          ...prev,
+          images: [...prev.images, ...newImages]
+        }));
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+      Alert.alert('Error', 'Failed to pick images');
+    }
+  };
+
+  const handleRemoveImage = (index) => {
+    setNewStory(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSaveSuccessStory = async () => {
+    try {
+      if (!newStory.patientName.trim()) {
+        Alert.alert('Validation Error', 'Patient name is required');
+        return;
+      }
+      if (!newStory.story.trim()) {
+        Alert.alert('Validation Error', 'Success story content is required');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('patientName', newStory.patientName.trim());
+      formData.append('story', newStory.story.trim());
+
+      // Append images with proper format for React Native
+      newStory.images.forEach((image, index) => {
+        if (image.uri) {
+          // Get file extension from URI or name
+          const uriParts = image.uri.split('.');
+          const fileType = uriParts[uriParts.length - 1];
+          
+          formData.append('images', {
+            uri: image.uri,
+            name: image.name || `image_${Date.now()}_${index}.${fileType}`,
+            type: `image/${fileType === 'jpg' ? 'jpeg' : fileType}`
+          });
+        }
+      });
+
+      let response;
+      if (editingStory) {
+        response = await successStoryAPI.update(editingStory.id, formData);
+      } else {
+        console.log('Sending success story with', newStory.images.length, 'images');
+        response = await successStoryAPI.create(formData);
+      }
+
+      if (response.success) {
+        Alert.alert(
+          'Success',
+          editingStory ? 'Success story updated!' : 'Success story created!'
+        );
+        setShowSuccessStoryModal(false);
+        loadSuccessStories();
+      }
+    } catch (error) {
+      console.error('Error saving success story:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || error || 'Failed to save success story');
+    }
+  };
+
+  const handleDeleteSuccessStory = async (storyId) => {
+    Alert.alert(
+      'Delete Success Story',
+      'Are you sure you want to delete this success story?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await successStoryAPI.delete(storyId);
+              if (response.success) {
+                Alert.alert('Success', 'Success story deleted!');
+                loadSuccessStories();
+              }
+            } catch (error) {
+              console.error('Error deleting success story:', error);
+              Alert.alert('Error', 'Failed to delete success story');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // ==================== RENDER FUNCTIONS ====================
   const loadPatientProgress = async () => {
     try {
@@ -1090,6 +1867,370 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadReports = async () => {
+    try {
+      setLoadingReports(true);
+      const response = await api.therapistAPI.getReports();
+      if (response.success) {
+        setReportsData(response.data || null);
+      }
+    } catch (error) {
+      console.error('Error loading reports:', error);
+      setReportsData(null);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  // ==================== SCHEDULING FUNCTIONS ====================
+  const loadTherapistAppointments = async () => {
+    setLoadingAppointments(true);
+    try {
+      const response = await appointmentAPI.therapist.getAppointments();
+      if (response.success) {
+        setTherapistAppointments(response.appointments || []);
+      }
+    } catch (error) {
+      console.error('Error loading therapist appointments:', error);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  const loadUnassignedAppointments = async () => {
+    try {
+      const response = await appointmentAPI.therapist.getUnassignedAppointments();
+      if (response.success) {
+        setUnassignedAppointments(response.appointments || []);
+      }
+    } catch (error) {
+      console.error('Error loading unassigned appointments:', error);
+    }
+  };
+
+  const handleAssignAppointment = (appointmentId) => {
+    Alert.alert(
+      'Assign Appointment',
+      'Are you sure you want to assign yourself to this appointment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Assign',
+          onPress: async () => {
+            try {
+              const response = await appointmentAPI.therapist.assignToAppointment(appointmentId);
+              if (response.success) {
+                Alert.alert('Success', 'You have been assigned to this appointment');
+                loadTherapistAppointments();
+                loadUnassignedAppointments();
+              }
+            } catch (error) {
+              console.error('Error assigning appointment:', error);
+              Alert.alert('Error', error.message || 'Failed to assign appointment');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSearchPatients = async (query) => {
+    setPatientSearchQuery(query);
+    if (query.length < 2) {
+      setPatientSearchResults([]);
+      return;
+    }
+    setSearchingPatients(true);
+    try {
+      const response = await appointmentAPI.therapist.searchPatients(query);
+      if (response.success) {
+        setPatientSearchResults(response.patients || []);
+      }
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    } finally {
+      setSearchingPatients(false);
+    }
+  };
+
+  const handleSelectPatient = (patient) => {
+    setNewAppointmentData({
+      ...newAppointmentData,
+      patient_id: patient._id,
+      patient_name: patient.fullName || `${patient.firstName} ${patient.lastName}`,
+    });
+    setPatientSearchQuery(patient.fullName || `${patient.firstName} ${patient.lastName}`);
+    setPatientSearchResults([]);
+  };
+
+  const handleCreateTherapistAppointment = async () => {
+    if (!newAppointmentData.patient_id) {
+      Alert.alert('Error', 'Please select a patient');
+      return;
+    }
+
+    try {
+      const date = newAppointmentData.appointment_date;
+      const time = newAppointmentData.appointment_time;
+      const appointmentDateTime = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        time.getHours(),
+        time.getMinutes()
+      );
+
+      const response = await appointmentAPI.therapist.createAppointment({
+        patient_id: newAppointmentData.patient_id,
+        therapy_type: newAppointmentData.therapy_type,
+        appointment_date: appointmentDateTime.toISOString(),
+        duration: newAppointmentData.duration,
+        notes: newAppointmentData.notes,
+      });
+
+      if (response.success) {
+        Alert.alert('Success', 'Appointment created successfully');
+        setShowCreateAppointmentModal(false);
+        setNewAppointmentData({
+          patient_id: '',
+          patient_name: '',
+          therapy_type: 'articulation',
+          appointment_date: new Date(),
+          appointment_time: new Date(),
+          duration: 60,
+          notes: '',
+        });
+        setPatientSearchQuery('');
+        loadTherapistAppointments();
+      }
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      Alert.alert('Error', error.message || 'Failed to create appointment');
+    }
+  };
+
+  const handleUpdateAppointmentStatus = async (appointmentId, newStatus) => {
+    try {
+      const response = await appointmentAPI.therapist.updateAppointment(appointmentId, {
+        status: newStatus,
+      });
+      if (response.success) {
+        Alert.alert('Success', `Appointment marked as ${newStatus}`);
+        loadTherapistAppointments();
+        setShowAppointmentDetailModal(false);
+      }
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      Alert.alert('Error', 'Failed to update appointment status');
+    }
+  };
+
+  const handleCancelTherapistAppointment = (appointmentId) => {
+    Alert.alert(
+      'Cancel Appointment',
+      'Are you sure you want to cancel this appointment?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await appointmentAPI.therapist.cancelAppointment(appointmentId);
+              if (response.success) {
+                Alert.alert('Success', 'Appointment cancelled');
+                loadTherapistAppointments();
+                setShowAppointmentDetailModal(false);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to cancel appointment');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getApptStatusColor = (status) => {
+    const colors = {
+      pending: '#f59e0b',
+      scheduled: '#3b82f6',
+      confirmed: '#10b981',
+      completed: '#059669',
+      cancelled: '#6b7280',
+      'no-show': '#ef4444',
+    };
+    return colors[status] || '#6b7280';
+  };
+
+  const getApptTherapyIcon = (type) => {
+    const icons = {
+      articulation: '🗣️',
+      language: '💬',
+      fluency: '🎯',
+      physical: '🏃',
+    };
+    return icons[type] || '📋';
+  };
+
+  // ==================== DIAGNOSTIC COMPARISON FUNCTIONS ====================
+  const searchDiagPatients = async (query) => {
+    if (!query || query.length < 2) {
+      setDiagSearchResults([]);
+      setShowDiagPatientDropdown(false);
+      return;
+    }
+    setSearchingDiagPatients(true);
+    try {
+      const response = await appointmentAPI.therapist.searchPatients(query);
+      if (response.success) {
+        setDiagSearchResults(response.patients || []);
+        setShowDiagPatientDropdown(true);
+      }
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    } finally {
+      setSearchingDiagPatients(false);
+    }
+  };
+
+  const selectDiagPatient = async (patient) => {
+    setSelectedDiagPatient(patient);
+    setDiagSearchQuery(`${patient.firstName} ${patient.lastName}`);
+    setShowDiagPatientDropdown(false);
+    await loadDiagComparison(patient._id || patient.id);
+  };
+
+  const loadDiagComparison = async (userId, diagnosticId = null) => {
+    setLoadingDiagComparison(true);
+    try {
+      const [comparisonRes, diagnosticsRes, historyRes] = await Promise.all([
+        diagnosticComparisonAPI.getComparison(userId, diagnosticId),
+        diagnosticComparisonAPI.getDiagnostics(userId),
+        diagnosticComparisonAPI.getComparisonHistory(userId)
+      ]);
+      setDiagComparisonData(comparisonRes);
+      setDiagPatientDiagnostics(diagnosticsRes.diagnostics || []);
+      setDiagComparisonHistory(historyRes.history || []);
+    } catch (error) {
+      console.error('Error loading diagnostic comparison:', error);
+      setDiagComparisonData(null);
+      setDiagPatientDiagnostics([]);
+      setDiagComparisonHistory([]);
+    } finally {
+      setLoadingDiagComparison(false);
+    }
+  };
+
+  const handleSaveDiagnostic = async () => {
+    if (!selectedDiagPatient) {
+      Alert.alert('Error', 'Please select a patient first');
+      return;
+    }
+    setSavingDiagnostic(true);
+    try {
+      const payload = {
+        user_id: selectedDiagPatient._id || selectedDiagPatient.id,
+        assessment_date: newDiagnostic.assessment_date,
+        assessment_type: newDiagnostic.assessment_type,
+        articulation_scores: {},
+        fluency_score: newDiagnostic.fluency_score !== '' ? Number(newDiagnostic.fluency_score) : null,
+        receptive_score: newDiagnostic.receptive_score !== '' ? Number(newDiagnostic.receptive_score) : null,
+        expressive_score: newDiagnostic.expressive_score !== '' ? Number(newDiagnostic.expressive_score) : null,
+        gait_scores: {},
+        notes: newDiagnostic.notes,
+        severity_level: newDiagnostic.severity_level,
+        recommended_focus: newDiagnostic.recommended_focus
+      };
+
+      ['r', 's', 'l', 'th', 'k'].forEach(sound => {
+        if (newDiagnostic.articulation_scores[sound] !== '') {
+          payload.articulation_scores[sound] = Number(newDiagnostic.articulation_scores[sound]);
+        }
+      });
+
+      ['stability_score', 'gait_symmetry', 'step_regularity', 'overall_gait'].forEach(key => {
+        if (newDiagnostic.gait_scores[key] !== '') {
+          payload.gait_scores[key] = Number(newDiagnostic.gait_scores[key]);
+        }
+      });
+
+      const response = await diagnosticComparisonAPI.createDiagnostic(payload);
+      if (response.success) {
+        Alert.alert('Success', 'Facility diagnostic saved successfully!');
+        setShowDiagModal(false);
+        setNewDiagnostic({
+          assessment_date: new Date().toISOString().split('T')[0],
+          assessment_type: 'initial',
+          articulation_scores: { r: '', s: '', l: '', th: '', k: '' },
+          fluency_score: '',
+          receptive_score: '',
+          expressive_score: '',
+          gait_scores: { stability_score: '', gait_symmetry: '', step_regularity: '', overall_gait: '' },
+          notes: '',
+          severity_level: '',
+          recommended_focus: []
+        });
+        await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id);
+      }
+    } catch (error) {
+      console.error('Error saving diagnostic:', error);
+      Alert.alert('Error', error.message || 'Failed to save diagnostic');
+    } finally {
+      setSavingDiagnostic(false);
+    }
+  };
+
+  const handleDeleteDiagnostic = async (diagnosticId) => {
+    Alert.alert(
+      'Delete Diagnostic',
+      'Are you sure you want to delete this diagnostic? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await diagnosticComparisonAPI.deleteDiagnostic(diagnosticId);
+              if (response.success) {
+                Alert.alert('Success', 'Diagnostic deleted');
+                await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete diagnostic');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getDiagDeltaDisplay = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'N/A', color: '#999', icon: '—' };
+    if (delta > 0) return { text: `+${delta}%`, color: '#10b981', icon: '▲' };
+    if (delta < 0) return { text: `${delta}%`, color: '#ef4444', icon: '▼' };
+    return { text: '0%', color: '#6b7280', icon: '—' };
+  };
+
+  const getDiagScoreBand = (score) => {
+    if (score === null || score === undefined) return { label: 'N/A', color: '#999' };
+    if (score >= 86) return { label: 'Mastered', color: '#10b981' };
+    if (score >= 71) return { label: 'Functional', color: '#3b82f6' };
+    if (score >= 51) return { label: 'Mild', color: '#f59e0b' };
+    if (score >= 31) return { label: 'Moderate', color: '#f97316' };
+    return { label: 'Severe', color: '#ef4444' };
+  };
+
+  const getDiagAlertBadge = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'No Data', color: '#999', icon: '📋' };
+    if (delta >= 20) return { text: 'Significant Progress', color: '#10b981', icon: '🎉' };
+    if (delta >= 5) return { text: 'Improving', color: '#3b82f6', icon: '📈' };
+    if (delta >= -3) return { text: 'Stable', color: '#6b7280', icon: '➡️' };
+    if (delta >= -10) return { text: 'Slight Decline', color: '#f59e0b', icon: '⚠️' };
+    return { text: 'Regression', color: '#ef4444', icon: '🚨' };
   };
 
   const renderOverview = () => (
@@ -1648,6 +2789,1249 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
     );
   };
 
+  const renderSuccessStoriesTab = () => {
+    const API_URL = 'http://10.0.2.2:5000'; // For Android emulator
+    
+    const truncateText = (text, maxLength = 80) => {
+      if (!text) return '';
+      return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    };
+
+    const formatDate = (dateString) => {
+      if (!dateString) return 'N/A';
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    };
+
+    return (
+      <View style={styles.tabContent}>
+        {/* Fixed Header - matches Appointments pattern */}
+        <View style={styles.tabHeader}>
+          <Text style={styles.tabTitle}>
+            Success Stories ({successStories.length})
+          </Text>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity style={styles.addButton} onPress={handleAddSuccessStory}>
+              <Ionicons name="add-circle" size={14} color="#FFF" />
+              <Text style={styles.seedButtonText}>Add Story</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Success Stories List */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#C9302C" />
+            <Text style={styles.loadingText}>Loading stories...</Text>
+          </View>
+        ) : successStories.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="star-outline" size={60} color="#CCC" />
+            <Text style={styles.emptyText}>No success stories yet</Text>
+            <Text style={styles.emptySubtext}>
+              Create inspiring success stories to showcase patient achievements
+            </Text>
+            <TouchableOpacity style={styles.emptyButton} onPress={handleAddSuccessStory}>
+              <Text style={styles.emptyButtonText}>Add First Story</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.exercisesList}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#C9302C']} />
+            }
+          >
+          {successStories.map((story) => (
+            <View key={story.id} style={styles.storyCard}>
+              {/* Story Header */}
+              <View style={styles.storyHeader}>
+                <View style={styles.storyHeaderLeft}>
+                  <Ionicons name="person-circle" size={40} color="#C9302C" />
+                  <View style={styles.storyHeaderInfo}>
+                    <Text style={styles.storyPatientName}>{story.patientName}</Text>
+                    <Text style={styles.storyDate}>{formatDate(story.createdAt)}</Text>
+                  </View>
+                </View>
+                <View style={styles.storyActions}>
+                  <TouchableOpacity onPress={() => handleEditSuccessStory(story)} style={styles.iconButton}>
+                    <Ionicons name="create-outline" size={20} color="#6B9AC4" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteSuccessStory(story.id)} style={styles.iconButton}>
+                    <Ionicons name="trash-outline" size={20} color="#C9302C" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Images */}
+              {story.images && story.images.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storyImages}>
+                  {story.images.map((img, idx) => (
+                    <Image
+                      key={idx}
+                      source={{ uri: img }}
+                      style={styles.storyImage}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </ScrollView>
+              )}
+
+              {/* Story Content */}
+              <View style={styles.storyContent}>
+                <Text style={styles.storyText}>{truncateText(story.story, 150)}</Text>
+                {story.story.length > 150 && (
+                  <Text style={styles.readMoreText}>Read more...</Text>
+                )}
+              </View>
+
+              {/* Story Footer */}
+              <View style={styles.storyFooter}>
+                <View style={styles.storyMeta}>
+                  <Ionicons name="images-outline" size={14} color="#999" />
+                  <Text style={styles.storyMetaText}>
+                    {story.images?.length || 0} {story.images?.length === 1 ? 'image' : 'images'}
+                  </Text>
+                </View>
+                {story.createdByName && (
+                  <View style={styles.storyMeta}>
+                    <Ionicons name="person-outline" size={14} color="#999" />
+                    <Text style={styles.storyMetaText}>By {story.createdByName}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          ))}
+          <View style={styles.bottomSpacing} />
+          </ScrollView>
+        )}
+      </View>
+    );
+  };
+
+  const renderReportsTab = () => {
+    return (
+      <ScrollView style={styles.scrollContainer} refreshControl={
+        <RefreshControl refreshing={loadingReports} onRefresh={loadReports} />
+      }>
+        <View style={styles.reportsContainer}>
+          <Text style={styles.sectionTitle}>Analytics & Reports</Text>
+          <Text style={styles.sectionSubtitle}>Patient demographics and statistics</Text>
+
+          {loadingReports ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#C9302C" />
+              <Text style={styles.loadingText}>Loading reports...</Text>
+            </View>
+          ) : reportsData ? (
+            <View style={styles.reportsContent}>
+              {/* Age Distribution Card */}
+              <View style={styles.reportCard}>
+                <View style={styles.reportCardHeader}>
+                  <View style={styles.reportTitleContainer}>
+                    <Ionicons name="people-outline" size={24} color="#C9302C" />
+                    <Text style={styles.reportCardTitle}>Age Distribution</Text>
+                  </View>
+                  <Text style={styles.reportCardSubtitle}>Patient distribution across age brackets</Text>
+                </View>
+                
+                <View style={styles.reportCardBody}>
+                  {reportsData.ageBrackets && reportsData.ageBrackets.length > 0 ? (
+                    <>
+                      <View style={styles.ageBracketsContainer}>
+                        {reportsData.ageBrackets.map((bracket, index) => (
+                          <View 
+                            key={index} 
+                            style={[
+                              styles.ageBracketItem, 
+                              bracket.isHighest && styles.ageBracketHighest
+                            ]}
+                          >
+                            <Text style={styles.bracketLabel}>{bracket.range}</Text>
+                            <Text style={styles.bracketCount}>{bracket.count}</Text>
+                            <Text style={styles.bracketPercentage}>{bracket.percentage}%</Text>
+                            {bracket.isHighest && (
+                              <View style={styles.highestBadge}>
+                                <Text style={styles.highestBadgeText}>Highest</Text>
+                              </View>
+                            )}
+                            <View style={styles.bracketBar}>
+                              <View 
+                                style={[
+                                  styles.bracketBarFill, 
+                                  { width: `${bracket.percentage}%` }
+                                ]}
+                              />
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                      
+                      {reportsData.highestAgeBracket && (
+                        <View style={styles.summaryContainer}>
+                          <View style={styles.summaryItem}>
+                            <Ionicons name="trophy-outline" size={20} color="#C9302C" />
+                            <View style={styles.summaryContent}>
+                              <Text style={styles.summaryLabel}>Highest Age Bracket:</Text>
+                              <Text style={styles.summaryValue}>{reportsData.highestAgeBracket.range}</Text>
+                              <Text style={styles.summaryCount}>{reportsData.highestAgeBracket.count} patients</Text>
+                            </View>
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.noDataContainer}>
+                      <Ionicons name="bar-chart-outline" size={40} color="#D0D0D0" />
+                      <Text style={styles.noDataText}>No age data available</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Gender Distribution Card */}
+              <View style={styles.reportCard}>
+                <View style={styles.reportCardHeader}>
+                  <View style={styles.reportTitleContainer}>
+                    <Ionicons name="person-outline" size={24} color="#C9302C" />
+                    <Text style={styles.reportCardTitle}>Gender Distribution</Text>
+                  </View>
+                  <Text style={styles.reportCardSubtitle}>Patient distribution by gender</Text>
+                </View>
+                
+                <View style={styles.reportCardBody}>
+                  {reportsData.genderDistribution && reportsData.genderDistribution.length > 0 ? (
+                    <>
+                      <View style={styles.genderContainer}>
+                        {reportsData.genderDistribution.map((gender, index) => (
+                          <View key={index} style={styles.genderItem}>
+                            <View style={styles.genderIcon}>
+                              <Text style={styles.genderEmoji}>
+                                {gender.gender === 'male' ? '👨' : 
+                                 gender.gender === 'female' ? '👩' : 
+                                 gender.gender === 'other' ? '🧑' : '❓'}
+                              </Text>
+                            </View>
+                            <View style={styles.genderInfo}>
+                              <Text style={styles.genderLabel}>
+                                {gender.gender.charAt(0).toUpperCase() + gender.gender.slice(1)}
+                              </Text>
+                              <Text style={styles.genderCount}>{gender.count} patients</Text>
+                              <Text style={styles.genderPercentage}>{gender.percentage}%</Text>
+                              <View style={styles.genderBar}>
+                                <View 
+                                  style={[
+                                    styles.genderBarFill,
+                                    { 
+                                      width: `${gender.percentage}%`,
+                                      backgroundColor: gender.gender === 'male' ? '#4285F4' : 
+                                                     gender.gender === 'female' ? '#FF6B9D' : '#34A853'
+                                    }
+                                  ]}
+                                />
+                              </View>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                      
+                      <View style={styles.summaryStats}>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statLabel}>Total Patients</Text>
+                          <Text style={styles.statValue}>{reportsData.totalPatients || 0}</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                          <Text style={styles.statLabel}>Gender Categories</Text>
+                          <Text style={styles.statValue}>{reportsData.genderDistribution.length}</Text>
+                        </View>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={styles.noDataContainer}>
+                      <Ionicons name="person-outline" size={40} color="#D0D0D0" />
+                      <Text style={styles.noDataText}>No gender data available</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.noDataLarge}>
+              <Ionicons name="bar-chart-outline" size={60} color="#D0D0D0" />
+              <Text style={styles.noDataTitle}>No reports data available</Text>
+              <Text style={styles.noDataHint}>Reports will appear here once patient data is available</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.bottomSpacing} />
+      </ScrollView>
+    );
+  };
+
+  const renderSchedulingTab = () => {
+    const appointmentsToShow = schedulingSubTab === 'my' ? therapistAppointments : unassignedAppointments;
+
+    return (
+      <View style={styles.tabContent}>
+        {/* Sub-tab navigation */}
+        <View style={styles.subTabContainer}>
+          <TouchableOpacity 
+            style={[styles.subTab, schedulingSubTab === 'my' && styles.subTabActive]}
+            onPress={() => setSchedulingSubTab('my')}
+          >
+            <Text style={[styles.subTabText, schedulingSubTab === 'my' && styles.subTabTextActive]}>
+              My Appointments ({therapistAppointments.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.subTab, schedulingSubTab === 'unassigned' && styles.subTabActive]}
+            onPress={() => setSchedulingSubTab('unassigned')}
+          >
+            <Text style={[styles.subTabText, schedulingSubTab === 'unassigned' && styles.subTabTextActive]}>
+              Unassigned ({unassignedAppointments.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tabHeader}>
+          <Text style={styles.tabTitle}>
+            {schedulingSubTab === 'my' ? 'My Appointments' : 'Unassigned Requests'}
+          </Text>
+          {schedulingSubTab === 'my' && (
+            <View style={styles.headerButtons}>
+              <TouchableOpacity 
+                style={styles.addButton} 
+                onPress={() => setShowCreateAppointmentModal(true)}
+              >
+                <Ionicons name="add-circle" size={14} color="#FFF" />
+                <Text style={styles.seedButtonText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {loadingAppointments ? (
+          <ActivityIndicator size="large" color="#C9302C" style={{ marginTop: 50 }} />
+        ) : appointmentsToShow.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="calendar-outline" size={60} color="#CCC" />
+            <Text style={styles.emptyText}>
+              {schedulingSubTab === 'my' ? 'No appointments assigned' : 'No unassigned requests'}
+            </Text>
+            <Text style={styles.emptySubtext}>
+              {schedulingSubTab === 'my' 
+                ? 'Create a new appointment or check unassigned requests' 
+                : 'All appointment requests have been assigned'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.exercisesList}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={async () => {
+                  setRefreshing(true);
+                  await loadTherapistAppointments();
+                  await loadUnassignedAppointments();
+                  setRefreshing(false);
+                }}
+              />
+            }
+          >
+            {appointmentsToShow.map((appt) => (
+              <TouchableOpacity
+                key={appt._id}
+                style={[
+                  styles.exerciseCard,
+                  { borderLeftWidth: 4, borderLeftColor: getApptStatusColor(appt.status) }
+                ]}
+                onPress={() => {
+                  setSelectedAppointmentDetail(appt);
+                  setShowAppointmentDetailModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.exerciseHeader}>
+                  <View style={styles.exerciseInfo}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#2C3E50' }}>
+                      {getApptTherapyIcon(appt.therapy_type)}{' '}
+                      {appt.therapy_type.charAt(0).toUpperCase() + appt.therapy_type.slice(1)}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#666', marginTop: 2 }}>
+                      {appt.patient_name || 'Unknown Patient'}
+                    </Text>
+                  </View>
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: getApptStatusColor(appt.status) }
+                  ]}>
+                    <Text style={styles.statusText}>
+                      {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ marginTop: 8, gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="calendar-outline" size={14} color="#999" />
+                    <Text style={{ fontSize: 13, color: '#555' }}>
+                      {new Date(appt.appointment_date).toLocaleDateString('en-US', {
+                        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+                      })}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="time-outline" size={14} color="#999" />
+                    <Text style={{ fontSize: 13, color: '#555' }}>
+                      {new Date(appt.appointment_date).toLocaleTimeString('en-US', {
+                        hour: '2-digit', minute: '2-digit'
+                      })}
+                      {' · '}{appt.duration || 60}{' min'}
+                    </Text>
+                  </View>
+                </View>
+
+                {schedulingSubTab === 'unassigned' && (
+                  <TouchableOpacity
+                    style={{
+                      marginTop: 10,
+                      backgroundColor: '#C9302C',
+                      paddingVertical: 8,
+                      borderRadius: 6,
+                      alignItems: 'center',
+                    }}
+                    onPress={() => handleAssignAppointment(appt._id)}
+                  >
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>
+                      Assign to Me
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Create Appointment Modal */}
+        <Modal
+          visible={showCreateAppointmentModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowCreateAppointmentModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+              <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#1e293b' }}>Create Appointment</Text>
+                  <TouchableOpacity onPress={() => setShowCreateAppointmentModal(false)}>
+                    <Ionicons name="close" size={24} color="#1e293b" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ padding: 20, maxHeight: 500 }}>
+                  {/* Patient Search */}
+                  <Text style={styles.label}>Patient *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={patientSearchQuery}
+                    onChangeText={handleSearchPatients}
+                    placeholder="Search patient by name or email..."
+                  />
+                  {searchingPatients && <ActivityIndicator size="small" color="#C9302C" />}
+                  {patientSearchResults.length > 0 && (
+                    <View style={{ backgroundColor: '#f8fafc', borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                      {patientSearchResults.map((patient) => (
+                        <TouchableOpacity
+                          key={patient._id}
+                          style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}
+                          onPress={() => handleSelectPatient(patient)}
+                        >
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: '#1e293b' }}>
+                            {patient.fullName || `${patient.firstName} ${patient.lastName}`}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#64748b' }}>{patient.email}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  {newAppointmentData.patient_name ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, padding: 8, backgroundColor: '#ecfdf5', borderRadius: 8 }}>
+                      <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+                      <Text style={{ color: '#065f46', fontWeight: '600' }}>
+                        {newAppointmentData.patient_name}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Therapy Type */}
+                  <Text style={styles.label}>Therapy Type *</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={newAppointmentData.therapy_type}
+                      onValueChange={(value) => setNewAppointmentData({ ...newAppointmentData, therapy_type: value })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="🗣️ Articulation" value="articulation" color="#000" />
+                      <Picker.Item label="💬 Language" value="language" color="#000" />
+                      <Picker.Item label="🎯 Fluency" value="fluency" color="#000" />
+                      <Picker.Item label="🏃 Physical" value="physical" color="#000" />
+                    </Picker>
+                  </View>
+
+                  {/* Date */}
+                  <Text style={styles.label}>Date *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { justifyContent: 'center' }]}
+                    onPress={() => setShowApptDatePicker(true)}
+                  >
+                    <Text style={{ color: '#000' }}>
+                      {newAppointmentData.appointment_date.toLocaleDateString('en-US', {
+                        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                  {showApptDatePicker && (
+                    <DateTimePicker
+                      value={newAppointmentData.appointment_date}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      minimumDate={new Date()}
+                      onChange={(event, selectedDate) => {
+                        setShowApptDatePicker(Platform.OS === 'ios');
+                        if (selectedDate) {
+                          setNewAppointmentData({ ...newAppointmentData, appointment_date: selectedDate });
+                        }
+                      }}
+                    />
+                  )}
+
+                  {/* Time */}
+                  <Text style={styles.label}>Time *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { justifyContent: 'center' }]}
+                    onPress={() => setShowApptTimePicker(true)}
+                  >
+                    <Text style={{ color: '#000' }}>
+                      {newAppointmentData.appointment_time.toLocaleTimeString('en-US', {
+                        hour: '2-digit', minute: '2-digit'
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                  {showApptTimePicker && (
+                    <DateTimePicker
+                      value={newAppointmentData.appointment_time}
+                      mode="time"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(event, selectedTime) => {
+                        setShowApptTimePicker(Platform.OS === 'ios');
+                        if (selectedTime) {
+                          setNewAppointmentData({ ...newAppointmentData, appointment_time: selectedTime });
+                        }
+                      }}
+                    />
+                  )}
+
+                  {/* Duration */}
+                  <Text style={styles.label}>Duration (minutes)</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={newAppointmentData.duration}
+                      onValueChange={(value) => setNewAppointmentData({ ...newAppointmentData, duration: value })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="30 minutes" value={30} color="#000" />
+                      <Picker.Item label="45 minutes" value={45} color="#000" />
+                      <Picker.Item label="60 minutes" value={60} color="#000" />
+                      <Picker.Item label="90 minutes" value={90} color="#000" />
+                    </Picker>
+                  </View>
+
+                  {/* Notes */}
+                  <Text style={styles.label}>Notes (Optional)</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={newAppointmentData.notes}
+                    onChangeText={(text) => setNewAppointmentData({ ...newAppointmentData, notes: text })}
+                    placeholder="Add notes..."
+                    multiline
+                    numberOfLines={3}
+                  />
+                </ScrollView>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0', gap: 12 }}>
+                  <TouchableOpacity
+                    style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, backgroundColor: '#f1f5f9' }}
+                    onPress={() => setShowCreateAppointmentModal(false)}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#475569' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, backgroundColor: '#C9302C' }}
+                    onPress={handleCreateTherapistAppointment}
+                  >
+                    <Ionicons name="calendar" size={18} color="#fff" />
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>Create</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
+
+        {/* Appointment Detail Modal */}
+        <Modal
+          visible={showAppointmentDetailModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowAppointmentDetailModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '85%' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: '#1e293b' }}>Appointment Details</Text>
+                <TouchableOpacity onPress={() => setShowAppointmentDetailModal(false)}>
+                  <Ionicons name="close" size={24} color="#1e293b" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedAppointmentDetail && (
+                <ScrollView style={{ padding: 20 }}>
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Therapy Type</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#1e293b' }}>
+                      {getApptTherapyIcon(selectedAppointmentDetail.therapy_type)}{' '}
+                      {selectedAppointmentDetail.therapy_type.charAt(0).toUpperCase() + selectedAppointmentDetail.therapy_type.slice(1)}
+                    </Text>
+                  </View>
+                  
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Status</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: getApptStatusColor(selectedAppointmentDetail.status), alignSelf: 'flex-start' }]}>
+                      <Text style={styles.statusText}>
+                        {selectedAppointmentDetail.status.charAt(0).toUpperCase() + selectedAppointmentDetail.status.slice(1)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Patient</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#1e293b' }}>
+                      {selectedAppointmentDetail.patient_name || 'Unknown'}
+                    </Text>
+                    {selectedAppointmentDetail.patient_email ? (
+                      <Text style={{ fontSize: 13, color: '#64748b' }}>{selectedAppointmentDetail.patient_email}</Text>
+                    ) : null}
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Date & Time</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#1e293b' }}>
+                      {new Date(selectedAppointmentDetail.appointment_date).toLocaleDateString('en-US', {
+                        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+                      })}
+                    </Text>
+                    <Text style={{ fontSize: 14, color: '#475569' }}>
+                      {new Date(selectedAppointmentDetail.appointment_date).toLocaleTimeString('en-US', {
+                        hour: '2-digit', minute: '2-digit'
+                      })}
+                      {' · '}{selectedAppointmentDetail.duration || 60}{' minutes'}
+                    </Text>
+                  </View>
+
+                  {selectedAppointmentDetail.notes ? (
+                    <View style={{ marginBottom: 16 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Notes</Text>
+                      <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20, backgroundColor: '#f8fafc', padding: 12, borderRadius: 8 }}>
+                        {selectedAppointmentDetail.notes}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Action Buttons */}
+                  {selectedAppointmentDetail.status !== 'completed' && selectedAppointmentDetail.status !== 'cancelled' && (
+                    <View style={{ gap: 10, marginTop: 8, marginBottom: 20 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Actions</Text>
+                      
+                      {selectedAppointmentDetail.status !== 'confirmed' && (
+                        <TouchableOpacity
+                          style={{ backgroundColor: '#10b981', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                          onPress={() => handleUpdateAppointmentStatus(selectedAppointmentDetail._id, 'confirmed')}
+                        >
+                          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>✓ Confirm Appointment</Text>
+                        </TouchableOpacity>
+                      )}
+                      
+                      <TouchableOpacity
+                        style={{ backgroundColor: '#059669', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => handleUpdateAppointmentStatus(selectedAppointmentDetail._id, 'completed')}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>✓ Mark as Completed</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={{ backgroundColor: '#ef4444', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => handleUpdateAppointmentStatus(selectedAppointmentDetail._id, 'no-show')}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>✗ Mark as No-Show</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={{ backgroundColor: '#6b7280', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => handleCancelTherapistAppointment(selectedAppointmentDetail._id)}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Cancel Appointment</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </ScrollView>
+              )}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                <TouchableOpacity
+                  style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, backgroundColor: '#f1f5f9' }}
+                  onPress={() => setShowAppointmentDetailModal(false)}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#475569' }}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  };
+
+  // ==================== DIAGNOSTIC COMPARISON TAB ====================
+  const renderDiagnosticTab = () => {
+    const compData = diagComparisonData;
+
+    const renderScoreRow = (label, facilityVal, homeVal, delta, isLast = false) => {
+      const deltaDisplay = getDiagDeltaDisplay(delta);
+      return (
+        <View key={label} style={[diagStyles.tableRow, isLast && { borderBottomWidth: 0 }]}>
+          <Text style={diagStyles.tableCell}>{label}</Text>
+          <Text style={diagStyles.tableCellCenter}>{facilityVal != null ? `${facilityVal}%` : '—'}</Text>
+          <Text style={diagStyles.tableCellCenter}>{homeVal != null ? `${homeVal}%` : '—'}</Text>
+          <Text style={[diagStyles.tableCellCenter, { color: deltaDisplay.color, fontWeight: '700' }]}>
+            {deltaDisplay.icon} {deltaDisplay.text}
+          </Text>
+        </View>
+      );
+    };
+
+    return (
+      <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+        <View style={diagStyles.container}>
+          {/* Section Header - matches Reports tab pattern */}
+          <View style={diagStyles.sectionHeader}>
+            <View style={diagStyles.sectionTitleRow}>
+              <Ionicons name="git-compare-outline" size={24} color="#C9302C" />
+              <Text style={diagStyles.sectionTitle}>Compare / Validate</Text>
+            </View>
+            <Text style={diagStyles.sectionSubtitle}>
+              Compare facility diagnostic scores with at-home therapy progress
+            </Text>
+          </View>
+
+          {/* Patient Search Card */}
+          <View style={diagStyles.card}>
+            <Text style={styles.label}>Select Patient</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Search patient by name..."
+              placeholderTextColor="#94a3b8"
+              value={diagSearchQuery}
+              onChangeText={(text) => {
+                setDiagSearchQuery(text);
+                searchDiagPatients(text);
+              }}
+            />
+            {searchingDiagPatients && <ActivityIndicator size="small" color="#C9302C" style={{ marginTop: 8 }} />}
+            {showDiagPatientDropdown && diagSearchResults.length > 0 && (
+              <View style={diagStyles.searchDropdown}>
+                <ScrollView nestedScrollEnabled>
+                  {diagSearchResults.map((p, i) => (
+                    <TouchableOpacity
+                      key={p._id || i}
+                      style={[diagStyles.searchItem, i < diagSearchResults.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }]}
+                      onPress={() => selectDiagPatient(p)}
+                    >
+                      <View style={diagStyles.searchItemAvatar}>
+                        <Text style={diagStyles.searchItemAvatarText}>
+                          {(p.firstName || '?')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={diagStyles.searchItemName}>{p.firstName} {p.lastName}</Text>
+                        <Text style={diagStyles.searchItemEmail}>{p.email}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Selected Patient Chip */}
+            {selectedDiagPatient && (
+              <View style={diagStyles.selectedPatientChip}>
+                <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+                <Text style={diagStyles.selectedPatientText}>
+                  {selectedDiagPatient.firstName} {selectedDiagPatient.lastName}
+                </Text>
+                <TouchableOpacity onPress={() => { setDiagSearchQuery(''); }}>
+                  <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Add Diagnostic Button */}
+          {selectedDiagPatient && (
+            <TouchableOpacity style={diagStyles.addDiagButton} onPress={() => setShowDiagModal(true)}>
+              <Ionicons name="add-circle" size={18} color="#FFF" />
+              <Text style={diagStyles.addDiagButtonText}>Add Facility Diagnostic</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Loading */}
+          {loadingDiagComparison && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#C9302C" />
+              <Text style={styles.loadingText}>Loading comparison data...</Text>
+            </View>
+          )}
+
+          {/* No Patient Selected Empty State */}
+          {!selectedDiagPatient && !loadingDiagComparison && (
+            <View style={diagStyles.emptyState}>
+              <Ionicons name="search-outline" size={60} color="#d1d5db" />
+              <Text style={diagStyles.emptyStateTitle}>Select a Patient</Text>
+              <Text style={diagStyles.emptyStateText}>
+                Search for a patient above to view or create their diagnostic comparison.
+              </Text>
+            </View>
+          )}
+
+          {/* Comparison Results */}
+          {selectedDiagPatient && !loadingDiagComparison && compData && (
+            <>
+              {compData.has_facility_data ? (
+                <>
+                  {/* Assessment Info Card */}
+                  <View style={diagStyles.card}>
+                    <View style={diagStyles.assessmentHeader}>
+                      <View style={diagStyles.assessmentAvatar}>
+                        <Text style={diagStyles.assessmentAvatarText}>
+                          {(compData.patient_name || '?')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={diagStyles.assessmentName}>{compData.patient_name}</Text>
+                        <Text style={diagStyles.assessmentMeta}>
+                          {compData.assessment_type?.charAt(0).toUpperCase() + compData.assessment_type?.slice(1)} Assessment
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                          <Ionicons name="calendar-outline" size={12} color="#94a3b8" />
+                          <Text style={diagStyles.assessmentDate}>
+                            {new Date(compData.assessment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </Text>
+                        </View>
+                      </View>
+                      {compData.severity_level ? (
+                        <View style={[diagStyles.severityBadge, {
+                          backgroundColor: compData.severity_level === 'severe' ? '#fee2e2' : compData.severity_level === 'moderate' ? '#fef3c7' : '#dcfce7'
+                        }]}>
+                          <Text style={[diagStyles.severityText, {
+                            color: compData.severity_level === 'severe' ? '#dc2626' : compData.severity_level === 'moderate' ? '#d97706' : '#16a34a'
+                          }]}>
+                            {compData.severity_level.toUpperCase()}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {compData.assessor_name && (
+                      <View style={diagStyles.assessorRow}>
+                        <Ionicons name="person-outline" size={13} color="#94a3b8" />
+                        <Text style={diagStyles.assessorText}>Assessed by {compData.assessor_name}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Summary Insights Card */}
+                  {compData.summary_insights && Object.keys(compData.summary_insights).length > 0 && (
+                    <View style={[diagStyles.card, { borderLeftWidth: 4, borderLeftColor: '#0ea5e9' }]}>
+                      <View style={diagStyles.insightHeader}>
+                        <Ionicons name="analytics-outline" size={20} color="#0369a1" />
+                        <Text style={diagStyles.insightTitle}>Summary Insights</Text>
+                      </View>
+
+                      <View style={diagStyles.insightStatsRow}>
+                        <View style={diagStyles.insightStatBox}>
+                          <Text style={[diagStyles.insightStatValue, { color: compData.summary_insights.overall_avg_delta >= 0 ? '#10b981' : '#ef4444' }]}>
+                            {compData.summary_insights.overall_avg_delta >= 0 ? '+' : ''}{compData.summary_insights.overall_avg_delta}%
+                          </Text>
+                          <Text style={diagStyles.insightStatLabel}>Avg Delta</Text>
+                        </View>
+                        <View style={diagStyles.insightStatBox}>
+                          <Text style={[diagStyles.insightStatValue, { color: '#334155' }]}>{compData.summary_insights.total_metrics}</Text>
+                          <Text style={diagStyles.insightStatLabel}>Metrics</Text>
+                        </View>
+                      </View>
+
+                      <View style={diagStyles.insightCountsRow}>
+                        <View style={[diagStyles.insightCountBox, { backgroundColor: '#dcfce7' }]}>
+                          <Text style={[diagStyles.insightCountValue, { color: '#16a34a' }]}>{compData.summary_insights.improving_count}</Text>
+                          <Text style={[diagStyles.insightCountLabel, { color: '#16a34a' }]}>Improving</Text>
+                        </View>
+                        <View style={[diagStyles.insightCountBox, { backgroundColor: '#f3f4f6' }]}>
+                          <Text style={[diagStyles.insightCountValue, { color: '#6b7280' }]}>{compData.summary_insights.stable_count}</Text>
+                          <Text style={[diagStyles.insightCountLabel, { color: '#6b7280' }]}>Stable</Text>
+                        </View>
+                        <View style={[diagStyles.insightCountBox, { backgroundColor: '#fee2e2' }]}>
+                          <Text style={[diagStyles.insightCountValue, { color: '#ef4444' }]}>{compData.summary_insights.declining_count}</Text>
+                          <Text style={[diagStyles.insightCountLabel, { color: '#ef4444' }]}>Declining</Text>
+                        </View>
+                      </View>
+
+                      {compData.summary_insights.strongest_area && (
+                        <View style={diagStyles.insightAreasContainer}>
+                          <View style={diagStyles.insightAreaRow}>
+                            <Text style={diagStyles.insightAreaIcon}>💪</Text>
+                            <Text style={diagStyles.insightAreaLabel}>Strongest:</Text>
+                            <Text style={diagStyles.insightAreaValue}>
+                              {compData.summary_insights.strongest_area.metric} ({compData.summary_insights.strongest_area.delta >= 0 ? '+' : ''}{compData.summary_insights.strongest_area.delta}%)
+                            </Text>
+                          </View>
+                          <View style={diagStyles.insightAreaRow}>
+                            <Text style={diagStyles.insightAreaIcon}>⚠️</Text>
+                            <Text style={diagStyles.insightAreaLabel}>Weakest:</Text>
+                            <Text style={diagStyles.insightAreaValue}>
+                              {compData.summary_insights.weakest_area.metric} ({compData.summary_insights.weakest_area.delta >= 0 ? '+' : ''}{compData.summary_insights.weakest_area.delta}%)
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Score Comparison Table Card */}
+                  <View style={diagStyles.card}>
+                    <View style={diagStyles.cardTitleRow}>
+                      <Ionicons name="stats-chart-outline" size={18} color="#C9302C" />
+                      <Text style={diagStyles.cardTitle}>Score Comparison</Text>
+                    </View>
+
+                    {/* Table Header */}
+                    <View style={diagStyles.tableHeader}>
+                      <Text style={diagStyles.tableHeaderCell}>Area</Text>
+                      <Text style={diagStyles.tableHeaderCellCenter}>Facility</Text>
+                      <Text style={diagStyles.tableHeaderCellCenter}>Home</Text>
+                      <Text style={diagStyles.tableHeaderCellCenter}>Delta</Text>
+                    </View>
+
+                    {/* Articulation scores */}
+                    {Object.keys(compData.facility_scores?.articulation || {}).length > 0 && (
+                      <>
+                        {Object.keys({ ...(compData.facility_scores?.articulation || {}), ...(compData.home_scores?.articulation || {}) }).map(sound => {
+                          return renderScoreRow(
+                            `/${sound.toUpperCase()}/ Sound`,
+                            compData.facility_scores?.articulation?.[sound],
+                            compData.home_scores?.articulation?.[sound],
+                            compData.deltas?.articulation?.[sound]
+                          );
+                        })}
+                      </>
+                    )}
+
+                    {/* Fluency */}
+                    {(compData.facility_scores?.fluency != null || compData.home_scores?.fluency != null) &&
+                      renderScoreRow('Fluency', compData.facility_scores?.fluency, compData.home_scores?.fluency, compData.deltas?.fluency)
+                    }
+
+                    {/* Receptive */}
+                    {(compData.facility_scores?.receptive != null || compData.home_scores?.receptive != null) &&
+                      renderScoreRow('Receptive', compData.facility_scores?.receptive, compData.home_scores?.receptive, compData.deltas?.receptive)
+                    }
+
+                    {/* Expressive */}
+                    {(compData.facility_scores?.expressive != null || compData.home_scores?.expressive != null) &&
+                      renderScoreRow('Expressive', compData.facility_scores?.expressive, compData.home_scores?.expressive, compData.deltas?.expressive)
+                    }
+
+                    {/* Gait */}
+                    {(Object.keys(compData.facility_scores?.gait || {}).length > 0 || Object.keys(compData.home_scores?.gait || {}).length > 0) &&
+                      renderScoreRow('Gait (Overall)', compData.facility_scores?.gait?.overall_gait, compData.home_scores?.gait?.overall_gait, compData.deltas?.gait, true)
+                    }
+                  </View>
+
+                  {/* Notes & Recommendations Card */}
+                  {(compData.notes || (compData.recommended_focus && compData.recommended_focus.length > 0)) && (
+                    <View style={diagStyles.card}>
+                      <View style={diagStyles.cardTitleRow}>
+                        <Ionicons name="document-text-outline" size={18} color="#C9302C" />
+                        <Text style={diagStyles.cardTitle}>Notes & Recommendations</Text>
+                      </View>
+                      {compData.notes ? (
+                        <View style={diagStyles.notesBox}>
+                          <Text style={diagStyles.notesText}>{compData.notes}</Text>
+                        </View>
+                      ) : null}
+                      {compData.recommended_focus && compData.recommended_focus.length > 0 && (
+                        <View style={{ marginTop: compData.notes ? 12 : 0 }}>
+                          <Text style={diagStyles.recommendLabel}>Recommended Focus Areas</Text>
+                          {compData.recommended_focus.map((item, i) => (
+                            <View key={i} style={diagStyles.recommendItem}>
+                              <View style={diagStyles.recommendBullet} />
+                              <Text style={diagStyles.recommendText}>{item}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Historical Diagnostics Card */}
+                  {diagPatientDiagnostics.length > 0 && (
+                    <View style={diagStyles.card}>
+                      <View style={diagStyles.cardTitleRow}>
+                        <Ionicons name="time-outline" size={18} color="#C9302C" />
+                        <Text style={diagStyles.cardTitle}>Diagnostic History ({diagPatientDiagnostics.length})</Text>
+                      </View>
+                      {diagPatientDiagnostics.map((diag, idx) => (
+                        <View key={diag._id} style={[diagStyles.historyItem, idx === diagPatientDiagnostics.length - 1 && { borderBottomWidth: 0 }]}>
+                          <View style={diagStyles.historyDot} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={diagStyles.historyTitle}>
+                              {diag.assessment_type?.charAt(0).toUpperCase() + diag.assessment_type?.slice(1)} Assessment
+                            </Text>
+                            <Text style={diagStyles.historyMeta}>
+                              {new Date(diag.assessment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} • by {diag.assessor_name}
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <TouchableOpacity
+                              style={diagStyles.historyViewBtn}
+                              onPress={() => loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id, diag._id)}
+                            >
+                              <Ionicons name="eye-outline" size={14} color="#0369a1" />
+                              <Text style={diagStyles.historyViewText}>View</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={diagStyles.historyDeleteBtn}
+                              onPress={() => handleDeleteDiagnostic(diag._id)}
+                            >
+                              <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={diagStyles.emptyState}>
+                  <Ionicons name="clipboard-outline" size={60} color="#d1d5db" />
+                  <Text style={diagStyles.emptyStateTitle}>No Diagnostic Found</Text>
+                  <Text style={diagStyles.emptyStateText}>
+                    No facility diagnostic found for this patient. Tap the button above to add one.
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Create Diagnostic Modal */}
+        <Modal
+          visible={showDiagModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowDiagModal(false)}
+        >
+          <View style={diagStyles.modalOverlay}>
+            <View style={diagStyles.modalContainer}>
+              <View style={diagStyles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="clipboard-outline" size={22} color="#C9302C" />
+                  <Text style={diagStyles.modalTitle}>New Facility Diagnostic</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowDiagModal(false)} style={{ padding: 4 }}>
+                  <Ionicons name="close" size={24} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+                <ScrollView style={diagStyles.modalBody} showsVerticalScrollIndicator={false}>
+                  {/* Assessment Type */}
+                  <Text style={styles.label}>Assessment Type</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={newDiagnostic.assessment_type}
+                      onValueChange={(val) => setNewDiagnostic({ ...newDiagnostic, assessment_type: val })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Initial" value="initial" />
+                      <Picker.Item label="Follow-up" value="follow-up" />
+                      <Picker.Item label="Discharge" value="discharge" />
+                    </Picker>
+                  </View>
+
+                  {/* Assessment Date */}
+                  <Text style={styles.label}>Assessment Date</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { justifyContent: 'center' }]}
+                    onPress={() => setShowDiagDatePicker(true)}
+                  >
+                    <Text style={{ fontSize: 14, color: '#2C3E50' }}>{newDiagnostic.assessment_date}</Text>
+                  </TouchableOpacity>
+                  {showDiagDatePicker && (
+                    <DateTimePicker
+                      value={new Date(newDiagnostic.assessment_date)}
+                      mode="date"
+                      onChange={(event, selectedDate) => {
+                        setShowDiagDatePicker(false);
+                        if (selectedDate) {
+                          setNewDiagnostic({ ...newDiagnostic, assessment_date: selectedDate.toISOString().split('T')[0] });
+                        }
+                      }}
+                    />
+                  )}
+
+                  {/* Severity Level */}
+                  <Text style={styles.label}>Severity Level</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={newDiagnostic.severity_level}
+                      onValueChange={(val) => setNewDiagnostic({ ...newDiagnostic, severity_level: val })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Select severity..." value="" />
+                      <Picker.Item label="Mild" value="mild" />
+                      <Picker.Item label="Moderate" value="moderate" />
+                      <Picker.Item label="Severe" value="severe" />
+                    </Picker>
+                  </View>
+
+                  {/* Articulation Scores */}
+                  <View style={diagStyles.modalSectionDivider}>
+                    <Text style={diagStyles.modalSectionTitle}>Articulation Scores (0-100)</Text>
+                  </View>
+                  <View style={diagStyles.scoreGrid}>
+                    {['r', 's', 'l', 'th', 'k'].map(sound => (
+                      <View key={sound} style={diagStyles.scoreGridItem}>
+                        <Text style={diagStyles.scoreGridLabel}>/{sound.toUpperCase()}/</Text>
+                        <TextInput
+                          style={diagStyles.scoreGridInput}
+                          keyboardType="numeric"
+                          placeholder="—"
+                          placeholderTextColor="#cbd5e1"
+                          value={String(newDiagnostic.articulation_scores[sound] || '')}
+                          onChangeText={(val) => setNewDiagnostic({ ...newDiagnostic, articulation_scores: { ...newDiagnostic.articulation_scores, [sound]: val } })}
+                        />
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Other Scores */}
+                  <View style={diagStyles.modalSectionDivider}>
+                    <Text style={diagStyles.modalSectionTitle}>Other Scores (0-100)</Text>
+                  </View>
+                  {[
+                    { key: 'fluency_score', label: 'Fluency', icon: 'musical-notes' },
+                    { key: 'receptive_score', label: 'Receptive', icon: 'ear' },
+                    { key: 'expressive_score', label: 'Expressive', icon: 'chatbubble' },
+                  ].map(item => (
+                    <View key={item.key} style={diagStyles.scoreInputRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                        <Ionicons name={item.icon} size={16} color="#64748b" />
+                        <Text style={diagStyles.scoreInputLabel}>{item.label}</Text>
+                      </View>
+                      <TextInput
+                        style={diagStyles.scoreInput}
+                        keyboardType="numeric"
+                        placeholder="—"
+                        placeholderTextColor="#cbd5e1"
+                        value={String(newDiagnostic[item.key] || '')}
+                        onChangeText={(val) => setNewDiagnostic({ ...newDiagnostic, [item.key]: val })}
+                      />
+                    </View>
+                  ))}
+
+                  {/* Gait Scores */}
+                  <View style={diagStyles.modalSectionDivider}>
+                    <Text style={diagStyles.modalSectionTitle}>Gait Scores (0-100)</Text>
+                  </View>
+                  {[
+                    { key: 'stability_score', label: 'Stability' },
+                    { key: 'gait_symmetry', label: 'Symmetry' },
+                    { key: 'step_regularity', label: 'Step Regularity' },
+                    { key: 'overall_gait', label: 'Overall Gait' },
+                  ].map(item => (
+                    <View key={item.key} style={diagStyles.scoreInputRow}>
+                      <Text style={[diagStyles.scoreInputLabel, { flex: 1 }]}>{item.label}</Text>
+                      <TextInput
+                        style={diagStyles.scoreInput}
+                        keyboardType="numeric"
+                        placeholder="—"
+                        placeholderTextColor="#cbd5e1"
+                        value={String(newDiagnostic.gait_scores[item.key] || '')}
+                        onChangeText={(val) => setNewDiagnostic({ ...newDiagnostic, gait_scores: { ...newDiagnostic.gait_scores, [item.key]: val } })}
+                      />
+                    </View>
+                  ))}
+
+                  {/* Notes */}
+                  <Text style={styles.label}>Notes</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    multiline
+                    placeholder="Assessment notes..."
+                    placeholderTextColor="#94a3b8"
+                    value={newDiagnostic.notes}
+                    onChangeText={(val) => setNewDiagnostic({ ...newDiagnostic, notes: val })}
+                  />
+
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              </KeyboardAvoidingView>
+
+              {/* Modal Footer */}
+              <View style={diagStyles.modalFooter}>
+                <TouchableOpacity
+                  style={diagStyles.modalCancelBtn}
+                  onPress={() => setShowDiagModal(false)}
+                >
+                  <Text style={diagStyles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[diagStyles.modalSaveBtn, savingDiagnostic && { opacity: 0.6 }]}
+                  onPress={handleSaveDiagnostic}
+                  disabled={savingDiagnostic}
+                >
+                  {savingDiagnostic ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                      <Text style={diagStyles.modalSaveText}>Save Diagnostic</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <View style={styles.bottomSpacing} />
+      </ScrollView>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -1739,6 +4123,62 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
             Patient Progress
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'success-stories' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('success-stories')}
+        >
+          <Ionicons 
+            name="star" 
+            size={16} 
+            color={activeTab === 'success-stories' ? '#FFF' : '#666'} 
+          />
+          <Text style={[styles.tabButtonText, activeTab === 'success-stories' && styles.tabButtonTextActive]}>
+            Success Stories
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'reports' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('reports')}
+        >
+          <Ionicons 
+            name="bar-chart" 
+            size={16} 
+            color={activeTab === 'reports' ? '#FFF' : '#666'} 
+          />
+          <Text style={[styles.tabButtonText, activeTab === 'reports' && styles.tabButtonTextActive]}>
+            Reports
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'scheduling' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('scheduling')}
+        >
+          <Ionicons 
+            name="calendar" 
+            size={16} 
+            color={activeTab === 'scheduling' ? '#FFF' : '#666'} 
+          />
+          <Text style={[styles.tabButtonText, activeTab === 'scheduling' && styles.tabButtonTextActive]}>
+            Scheduling
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'diagnostic' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('diagnostic')}
+        >
+          <Ionicons 
+            name="git-compare" 
+            size={16} 
+            color={activeTab === 'diagnostic' ? '#FFF' : '#666'} 
+          />
+          <Text style={[styles.tabButtonText, activeTab === 'diagnostic' && styles.tabButtonTextActive]}>
+            Compare
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Content */}
@@ -1748,6 +4188,10 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
         {activeTab === 'language' && renderLanguageTab()}
         {activeTab === 'articulation' && renderArticulationTab()}
         {activeTab === 'progress' && renderProgressTab()}
+        {activeTab === 'success-stories' && renderSuccessStoriesTab()}
+        {activeTab === 'reports' && renderReportsTab()}
+        {activeTab === 'scheduling' && renderSchedulingTab()}
+        {activeTab === 'diagnostic' && renderDiagnosticTab()}
       </View>
 
       {/* Fluency Modal */}
@@ -2638,6 +5082,113 @@ const TherapistDashboard = ({ onLogout, onNavigate }) => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Success Story Modal */}
+      <Modal
+        visible={showSuccessStoryModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          setShowSuccessStoryModal(false);
+          setEditingStory(null);
+        }}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalContainer}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editingStory ? 'Edit Success Story' : 'Add Success Story'}
+              </Text>
+              <TouchableOpacity onPress={() => {
+                setShowSuccessStoryModal(false);
+                setEditingStory(null);
+              }}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.label}>Patient Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={newStory.patientName}
+                onChangeText={(text) => setNewStory({...newStory, patientName: text})}
+                placeholder="Enter patient name"
+              />
+
+              <Text style={styles.label}>Success Story *</Text>
+              <TextInput
+                style={[styles.input, styles.textAreaLarge]}
+                value={newStory.story}
+                onChangeText={(text) => setNewStory({...newStory, story: text})}
+                placeholder="Share the patient's inspiring recovery journey..."
+                multiline
+                numberOfLines={6}
+              />
+
+              <View style={styles.imagesSection}>
+                <View style={styles.imagesSectionHeader}>
+                  <Text style={styles.label}>Images</Text>
+                  <TouchableOpacity style={styles.pickImagesButton} onPress={handlePickImages}>
+                    <Ionicons name="images" size={18} color="#FFF" />
+                    <Text style={styles.pickImagesButtonText}>Pick Images</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {newStory.images && newStory.images.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagePreviewScroll}>
+                    {newStory.images.map((img, index) => (
+                      <View key={index} style={styles.imagePreviewContainer}>
+                        <Image
+                          source={{ uri: img.uri || img }}
+                          style={styles.imagePreview}
+                          resizeMode="cover"
+                        />
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={() => handleRemoveImage(index)}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#C9302C" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+
+                {(!newStory.images || newStory.images.length === 0) && (
+                  <View style={styles.emptyImagesContainer}>
+                    <Ionicons name="image-outline" size={40} color="#CCC" />
+                    <Text style={styles.emptyImagesText}>No images selected</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]} 
+                onPress={() => {
+                  setShowSuccessStoryModal(false);
+                  setEditingStory(null);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.saveButton]} 
+                onPress={handleSaveSuccessStory}
+              >
+                <Text style={styles.saveButtonText}>
+                  {editingStory ? 'Update' : 'Create'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
@@ -3381,6 +5932,439 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+  },
+  // Success Story Styles
+  storyCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  storyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  storyHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  storyHeaderInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  storyPatientName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+  },
+  storyDate: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  storyActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  iconButton: {
+    padding: 4,
+  },
+  storyImages: {
+    marginBottom: 12,
+  },
+  storyImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  storyContent: {
+    marginBottom: 12,
+  },
+  storyText: {
+    fontSize: 14,
+    color: '#2C3E50',
+    lineHeight: 20,
+  },
+  readMoreText: {
+    fontSize: 12,
+    color: '#6B9AC4',
+    marginTop: 4,
+  },
+  storyFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  storyMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  storyMetaText: {
+    fontSize: 12,
+    color: '#999',
+  },
+  imagesSection: {
+    marginBottom: 16,
+  },
+  imagesSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pickImagesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6B9AC4',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  pickImagesButtonText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  imagePreviewScroll: {
+    marginTop: 8,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginRight: 8,
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+  },
+  emptyImagesContainer: {
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
+  },
+  emptyImagesText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#999',
+  },
+  textAreaLarge: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+
+  // Reports styles
+  reportsContainer: {
+    padding: 20,
+  },
+  reportsContent: {
+    marginTop: 16,
+  },
+  reportCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reportCardHeader: {
+    marginBottom: 16,
+  },
+  reportTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  reportCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  reportCardSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  reportCardBody: {
+    flex: 1,
+  },
+  ageBracketsContainer: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  ageBracketItem: {
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#E0E0E0',
+  },
+  ageBracketHighest: {
+    backgroundColor: '#FFF5F5',
+    borderLeftColor: '#C9302C',
+  },
+  bracketLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  bracketCount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#C9302C',
+    marginBottom: 2,
+  },
+  bracketPercentage: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  highestBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#C9302C',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  highestBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  bracketBar: {
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  bracketBarFill: {
+    height: '100%',
+    backgroundColor: '#C9302C',
+    borderRadius: 2,
+  },
+  summaryContainer: {
+    backgroundColor: '#F0F4F8',
+    padding: 16,
+    borderRadius: 8,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 2,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  summaryCount: {
+    fontSize: 14,
+    color: '#C9302C',
+    fontWeight: '600',
+  },
+  genderContainer: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  genderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderRadius: 8,
+    gap: 16,
+  },
+  genderIcon: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+  },
+  genderEmoji: {
+    fontSize: 20,
+  },
+  genderInfo: {
+    flex: 1,
+  },
+  genderLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  genderCount: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 2,
+  },
+  genderPercentage: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#C9302C',
+    marginBottom: 8,
+  },
+  genderBar: {
+    height: 6,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  genderBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  statItem: {
+    flex: 1,
+    backgroundColor: '#F0F4F8',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#C9302C',
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#999',
+    marginTop: 8,
+  },
+  noDataLarge: {
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 40,
+  },
+  noDataTitle: {
+    fontSize: 18,
+    color: '#999',
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  noDataHint: {
+    fontSize: 14,
+    color: '#BBB',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+  },
+  // ===== Missing styles for Success Stories tab =====
+  scrollContainer: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  addButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyButton: {
+    backgroundColor: '#C9302C',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptyButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bottomSpacing: {
+    height: 30,
   },
 });
 

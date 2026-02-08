@@ -30,7 +30,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-av"
+      "expo-av",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share success stories.",
+          "cameraPermission": "The app accesses your camera to let you take photos for success stories."
+        }
+      ]
     ],
     "extra": {
       "eas": {

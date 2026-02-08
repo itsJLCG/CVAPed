@@ -11,11 +11,14 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { successStoryAPI } from '../services/api';
 import TherapyScreen from './TherapyScreen';
 import ProfileScreen from './ProfileScreen';
 import HealthScreen from './HealthScreen';
 import PredictionsScreen from './PredictionsScreen';
 import PrescriptiveScreen from './PrescriptiveScreen';
+import AppointmentsScreen from './AppointmentsScreen';
+import SuccessStoryDetailScreen from './SuccessStoryDetailScreen';
 import BottomNav from './BottomNav';
 
 const { width, height } = Dimensions.get('window');
@@ -23,9 +26,12 @@ const { width, height } = Dimensions.get('window');
 const HomePage = ({ userData, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home');
-  const [currentScreen, setCurrentScreen] = useState('home'); // 'home', 'therapy', 'profile', 'health'
+  const [currentScreen, setCurrentScreen] = useState('home'); // 'home', 'therapy', 'profile', 'health', 'story-detail'
   const scrollViewRef = useRef(null);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [successStories, setSuccessStories] = useState([]);
+  const [loadingStories, setLoadingStories] = useState(true);
+  const [selectedStory, setSelectedStory] = useState(null);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -34,11 +40,12 @@ const HomePage = ({ userData, onLogout }) => {
   const card1Anim = useRef(new Animated.Value(0)).current;
   const card2Anim = useRef(new Animated.Value(0)).current;
   const card3Anim = useRef(new Animated.Value(0)).current;
-  const card4Anim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Trigger animations on mount
   useEffect(() => {
+    loadSuccessStories();
+    
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -77,12 +84,6 @@ const HomePage = ({ userData, onLogout }) => {
         friction: 7,
         useNativeDriver: true,
       }),
-      Animated.spring(card4Anim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
     ]).start();
 
     // Pulse animation for call-to-action
@@ -102,57 +103,21 @@ const HomePage = ({ userData, onLogout }) => {
     ).start();
   }, []);
 
-  // Auto-scroll carousel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveSlide((prevSlide) => {
-        const nextSlide = (prevSlide + 1) % carouselItems.length;
-        scrollViewRef.current?.scrollTo({
-          x: nextSlide * width,
-          animated: true,
-        });
-        return nextSlide;
-      });
-    }, 4000); // Change slide every 4 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Carousel data explaining the system
-  const carouselItems = [
-    { 
-      id: 1, 
-      title: 'Welcome to CVAPed', 
-      subtitle: 'Cerebrovascular Accident & Pediatric Care',
-      description: 'Comprehensive stroke and pediatric rehabilitation platform',
-      color: '#C9302C',
-      icon: 'heart-circle'
-    },
-    { 
-      id: 2, 
-      title: 'Physical Therapy', 
-      subtitle: 'Stroke Rehabilitation',
-      description: 'Gait analysis and mobility exercises for CVA patients',
-      color: '#9B59B6',
-      icon: 'walk'
-    },
-    { 
-      id: 3, 
-      title: 'Speech Therapy', 
-      subtitle: 'Pediatric Rehabilitation',
-      description: 'Articulation, fluency, and language exercises for children',
-      color: '#6B9AC4',
-      icon: 'chatbubbles'
-    },
-    { 
-      id: 4, 
-      title: 'Track Progress', 
-      subtitle: 'Monitor Your Journey',
-      description: 'View detailed health logs and therapy analytics',
-      color: '#4CAF50',
-      icon: 'analytics'
-    },
-  ];
+  // Load success stories
+  const loadSuccessStories = async () => {
+    try {
+      setLoadingStories(true);
+      const response = await successStoryAPI.getAll();
+      if (response.success) {
+        setSuccessStories(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading success stories:', error);
+      setSuccessStories([]);
+    } finally {
+      setLoadingStories(false);
+    }
+  };
 
   const handleSearch = () => {
     console.log('Search query:', searchQuery);
@@ -191,6 +156,11 @@ const HomePage = ({ userData, onLogout }) => {
     setActiveTab('home');
   };
 
+  const handleScheduleBack = () => {
+    setCurrentScreen('home');
+    setActiveTab('home');
+  };
+
   const handleNavigateFromTherapy = (destination) => {
     console.log('Navigating from therapy to:', destination);
     setActiveTab(destination);
@@ -212,6 +182,16 @@ const HomePage = ({ userData, onLogout }) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = Math.floor(event.nativeEvent.contentOffset.x / slideSize);
     setActiveSlide(index);
+  };
+
+  const handleStoryPress = (story) => {
+    setSelectedStory(story);
+    setCurrentScreen('story-detail');
+  };
+
+  const handleStoryDetailBack = () => {
+    setSelectedStory(null);
+    setCurrentScreen('home');
   };
 
   // Show Profile screen if profile tab is active
@@ -259,9 +239,24 @@ const HomePage = ({ userData, onLogout }) => {
     );
   }
 
+  // Show Schedule/Appointments screen if schedule tab is active
+  if (currentScreen === 'schedule') {
+    return (
+      <View style={styles.container}>
+        <AppointmentsScreen onBack={handleScheduleBack} />
+        <BottomNav activeTab={activeTab} onTabPress={handleTabPress} />
+      </View>
+    );
+  }
+
   // Show Therapy screen if therapy tab is active
   if (currentScreen === 'therapy') {
     return <TherapyScreen onBack={handleTherapyBack} onNavigate={handleNavigateFromTherapy} />;
+  }
+
+  // Show Success Story Detail screen
+  if (currentScreen === 'story-detail') {
+    return <SuccessStoryDetailScreen story={selectedStory} onBack={handleStoryDetailBack} />;
   }
 
   return (
@@ -302,58 +297,68 @@ const HomePage = ({ userData, onLogout }) => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Carousel with Animation */}
-        <Animated.View 
-          style={[
-            styles.carouselContainer,
-            {
-              opacity: carouselAnim,
-              transform: [{
-                scale: carouselAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.9, 1],
-                }),
-              }],
-            }
-          ]}
-        >
-          <ScrollView
-            ref={scrollViewRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.carousel}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-          >
-            {carouselItems.map((item, index) => (
-              <View
-                key={item.id}
-                style={[styles.carouselItem, { backgroundColor: item.color }]}
-              >
-                <View style={styles.carouselIconContainer}>
-                  <Ionicons name={item.icon} size={70} color="#FFFFFF" />
-                </View>
-                <Text style={styles.carouselText}>{item.title}</Text>
-                <Text style={styles.carouselSubtitle}>{item.subtitle}</Text>
-                <Text style={styles.carouselDescription}>{item.description}</Text>
+        {/* Success Stories Section */}
+        {successStories.length > 0 && (
+          <>
+            {/* Success Story Title */}
+            <View style={styles.storyHeader}>
+              <Text style={styles.successStoryTitle}>Success Stories</Text>
+            </View>
+
+            {/* Carousel */}
+            <View style={styles.carouselWrapper}>
+              <View style={styles.carouselContainer}>
+                <ScrollView
+                  ref={scrollViewRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={handleScroll}
+                  scrollEventThrottle={16}
+                >
+                  {successStories.map((story) => (
+                    <TouchableOpacity
+                      key={`story-${story._id || story.id}`}
+                      style={styles.carouselSlide}
+                      onPress={() => handleStoryPress(story)}
+                      activeOpacity={1}
+                    >
+                    {story.images && story.images.length > 0 ? (
+                      <>
+                        <Image
+                          source={{ uri: story.images[0] }}
+                          style={styles.carouselImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.patientNameContainer}>
+                          <Text style={styles.patientNameOverlay}>{story.patientName}</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.noImagePlaceholder}>
+                        <Ionicons name="image-outline" size={50} color="#999" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              
+              {/* Carousel Indicators */}
+              <View style={styles.indicatorContainer}>
+                {successStories.map((_, index) => (
+                  <View 
+                    key={index} 
+                  style={[
+                    styles.indicator, 
+                    index === activeSlide && styles.activeIndicator
+                  ]} 
+                />
+              ))}
+            </View>
               </View>
-            ))}
-          </ScrollView>
-          
-          {/* Carousel Indicators */}
-          <View style={styles.indicatorContainer}>
-            {carouselItems.map((_, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.indicator, 
-                  index === activeSlide && styles.activeIndicator
-                ]} 
-              />
-            ))}
-          </View>
-        </Animated.View>
+            </View>
+          </>
+        )}
 
         {/* Featured Therapy Modules */}
         <View style={styles.section}>
@@ -378,7 +383,7 @@ const HomePage = ({ userData, onLogout }) => {
                     <Ionicons name="mic" size={36} color="#FFFFFF" />
                   </View>
                   <Text style={styles.quickActionText}>Articulation</Text>
-                  <Text style={styles.quickActionSubtext}>Speech therapy for kids</Text>
+                  <Text style={styles.quickActionSubtext}>Speech/language therapy for kids</Text>
                   <View style={styles.cardFooter}>
                     <Ionicons name="time-outline" size={14} color="#FFFFFF" />
                     <Text style={styles.cardFooterText}>15-20 min</Text>
@@ -410,32 +415,9 @@ const HomePage = ({ userData, onLogout }) => {
               </TouchableOpacity>
             </Animated.View>
             
-            <Animated.View style={{ opacity: card3Anim, transform: [{ scale: card3Anim }] }}>
+            <Animated.View style={{ opacity: card3Anim, transform: [{ scale: card3Anim }], width: '100%' }}>
               <TouchableOpacity 
-                style={[styles.quickActionCard]}
-                onPress={handleTherapyCardPress}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.cardGradient, { backgroundColor: '#F4A460' }]}>
-                  <View style={styles.cardBadge}>
-                    <Text style={styles.cardBadgeText}>PEDIATRIC</Text>
-                  </View>
-                  <View style={styles.cardIconContainer}>
-                    <Ionicons name="volume-high" size={36} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.quickActionText}>Fluency</Text>
-                  <Text style={styles.quickActionSubtext}>Pediatric speech flow</Text>
-                  <View style={styles.cardFooter}>
-                    <Ionicons name="time-outline" size={14} color="#FFFFFF" />
-                    <Text style={styles.cardFooterText}>12-18 min</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-            
-            <Animated.View style={{ opacity: card4Anim, transform: [{ scale: card4Anim }] }}>
-              <TouchableOpacity 
-                style={[styles.quickActionCard]}
+                style={[styles.quickActionCard, styles.quickActionCardWide]}
                 onPress={handleTherapyCardPress}
                 activeOpacity={0.8}
               >
@@ -629,72 +611,88 @@ const styles = StyleSheet.create({
   // Content
   content: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
 
   // Hero Carousel
+  carouselWrapper: {
+    marginBottom: 20,
+  },
+  storyHeader: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: '#F8F8F8',
+  },
+  successStoryTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+  },
   carouselContainer: {
-    marginBottom: 15,
+    height: 250,
   },
-  carousel: {
-    height: 240,
-  },
-  carouselItem: {
+  carouselSlide: {
     width: width,
-    height: 240,
+    height: 250,
+  },
+  carouselImage: {
+    width: '100%',
+    height: '100%',
+  },
+  noImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F0F0F0',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 25,
   },
-  carouselIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+  successBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    alignSelf: 'flex-start',
+    backgroundColor: '#C9302C',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  carouselText: {
-    fontSize: 26,
+  successBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+    marginLeft: 4,
+  },
+  patientNameContainer: {
+    position: 'absolute',
+    bottom: 50,
+    left: 15,
+    right: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  patientNameOverlay: {
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 6,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  carouselSubtitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    opacity: 0.95,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  carouselDescription: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    opacity: 0.9,
-    textAlign: 'center',
-    paddingHorizontal: 15,
-    lineHeight: 19,
-    marginBottom: 12,
   },
   indicatorContainer: {
+    position: 'absolute',
+    bottom: 15,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
   },
   indicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#D0D0D0',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     marginHorizontal: 4,
   },
   activeIndicator: {
@@ -730,11 +728,12 @@ const styles = StyleSheet.create({
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 12,
   },
   quickActionCard: {
     width: (width - 45) / 2,
-    marginBottom: 12,
+    marginBottom: 0,
     borderRadius: 14,
     overflow: 'hidden',
     elevation: 4,
@@ -743,10 +742,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
   },
+  quickActionCardWide: {
+    width: '100%',
+  },
   cardGradient: {
     padding: 16,
     alignItems: 'center',
-    minHeight: 180,
+    height: 180,
     justifyContent: 'space-between',
   },
   cardBadge: {
@@ -955,6 +957,56 @@ const styles = StyleSheet.create({
   tipBold: {
     fontWeight: 'bold',
     color: '#F39C12',
+  },
+
+  // Success Story Carousel Styles
+  successBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    zIndex: 10,
+  },
+  successBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  successImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    opacity: 0.4,
+  },
+  successOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 24,
+    paddingBottom: 40,
+  },
+  successPatientName: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  successStoryText: {
+    fontSize: 14,
+    color: '#FFF',
+    lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 
   // Bottom Spacing

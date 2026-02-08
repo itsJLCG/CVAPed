@@ -157,6 +157,26 @@ export const authAPI = {
       throw error.response?.data || { message: error.message || 'Unknown error' };
     }
   },
+
+  // Update Diagnostic Status
+  updateDiagnosticStatus: async (hasInitialDiagnostic) => {
+    try {
+      const response = await api.put('/auth/diagnostic-status', { hasInitialDiagnostic });
+      if (response.data.data) {
+        // Update stored user data with new diagnostic status
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (storedUserData) {
+          const userData = JSON.parse(storedUserData);
+          userData.hasInitialDiagnostic = response.data.data.hasInitialDiagnostic;
+          userData.diagnosticStatusUpdatedAt = response.data.data.diagnosticStatusUpdatedAt;
+          await AsyncStorage.setItem('userData', JSON.stringify(userData));
+        }
+      }
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: error.message || 'Unknown error' };
+    }
+  },
 };
 
 // Admin API endpoints
@@ -580,6 +600,307 @@ export const exerciseApi = {
   }
 };
 
+// Success Story API endpoints
+export const successStoryAPI = {
+  // Get all success stories (public)
+  getAll: async () => {
+    try {
+      const response = await api.get('/success-stories');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Create success story (therapist only)
+  create: async (formData) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      console.log('🔑 Token:', token ? 'Present' : 'Missing');
+      console.log('📤 Sending to:', `${API_URL}/success-stories`);
+      console.log('📦 FormData has images:', formData._parts ? formData._parts.length : 'unknown');
+      
+      const response = await api.post('/success-stories', formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000, // 60 second timeout for image uploads
+      });
+      return response.data;
+    } catch (error) {
+      console.error('❌ API Error:', error.message);
+      console.error('Error response:', error.response?.data);
+      console.error('Error code:', error.code);
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Update success story (therapist only)
+  update: async (storyId, formData) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await api.put(`/success-stories/${storyId}`, formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000, // 60 second timeout for image uploads
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Delete success story (therapist only)
+  delete: async (storyId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await api.delete(`/success-stories/${storyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Remove image from success story (therapist only)
+  removeImage: async (storyId, imagePath) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await api.post(`/success-stories/${storyId}/remove-image`, 
+        { imagePath },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+};
+
+// Therapist API
+export const therapistAPI = {
+  // Get reports data
+  getReports: async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await api.get('/therapist/reports', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+};
+
+// Appointment Service - matches web's appointmentService structure
+export const appointmentAPI = {
+  // ==================== THERAPIST ENDPOINTS ====================
+  therapist: {
+    // Get all appointments for therapist
+    getAppointments: async (filters = {}) => {
+      try {
+        const params = new URLSearchParams();
+        if (filters.date) params.append('date', filters.date);
+        if (filters.status) params.append('status', filters.status);
+        if (filters.therapy_type) params.append('therapy_type', filters.therapy_type);
+
+        const response = await api.get(`/therapist/appointments?${params.toString()}`);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Get unassigned appointments
+    getUnassignedAppointments: async (therapyType = null) => {
+      try {
+        const params = therapyType ? `?therapy_type=${therapyType}` : '';
+        const response = await api.get(`/therapist/appointments/unassigned${params}`);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Assign therapist to appointment
+    assignToAppointment: async (appointmentId) => {
+      try {
+        const response = await api.put(`/therapist/appointments/${appointmentId}/assign`);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Create a new appointment
+    createAppointment: async (appointmentData) => {
+      try {
+        const response = await api.post('/therapist/appointments', appointmentData);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Update an appointment
+    updateAppointment: async (appointmentId, updateData) => {
+      try {
+        const response = await api.put(`/therapist/appointments/${appointmentId}`, updateData);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Cancel/delete an appointment
+    cancelAppointment: async (appointmentId) => {
+      try {
+        const response = await api.delete(`/therapist/appointments/${appointmentId}`);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Search patients by name
+    searchPatients: async (query, limit = 10) => {
+      try {
+        const response = await api.get(`/therapist/patients/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+  },
+
+  // ==================== PATIENT ENDPOINTS ====================
+  patient: {
+    // Get all appointments for patient
+    getAppointments: async (status = null) => {
+      try {
+        const params = status ? `?status=${status}` : '';
+        const response = await api.get(`/patient/appointments${params}`);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Book a new appointment
+    bookAppointment: async (appointmentData) => {
+      try {
+        const response = await api.post('/patient/appointments/book', appointmentData);
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+
+    // Cancel an appointment
+    cancelAppointment: async (appointmentId, reason = '') => {
+      try {
+        const response = await api.put(`/patient/appointments/${appointmentId}/cancel`, { reason });
+        return response.data;
+      } catch (error) {
+        throw error.response?.data || error.message;
+      }
+    },
+  },
+
+  // ==================== SHARED ENDPOINTS ====================
+  getAvailableTherapists: async (therapyType = null) => {
+    try {
+      const params = therapyType ? `?therapy_type=${therapyType}` : '';
+      const response = await api.get(`/therapists/available${params}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+};
+
+// Diagnostic Comparison Service
+// Mirrors web's diagnosticComparisonService (facility vs at-home comparison)
+export const diagnosticComparisonAPI = {
+  // Therapist: Create a facility diagnostic for a patient
+  createDiagnostic: async (diagnosticData) => {
+    try {
+      const response = await api.post('/therapist/diagnostics', diagnosticData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Therapist: Get all facility diagnostics for a patient
+  getDiagnostics: async (userId) => {
+    try {
+      const response = await api.get(`/therapist/diagnostics/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Therapist: Update a facility diagnostic
+  updateDiagnostic: async (diagnosticId, updateData) => {
+    try {
+      const response = await api.put(`/therapist/diagnostics/${diagnosticId}`, updateData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Therapist: Delete a facility diagnostic
+  deleteDiagnostic: async (diagnosticId) => {
+    try {
+      const response = await api.delete(`/therapist/diagnostics/${diagnosticId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Therapist: Get comparison data (facility vs home) for a patient
+  getComparison: async (userId, diagnosticId = null) => {
+    try {
+      const params = diagnosticId ? `?diagnostic_id=${diagnosticId}` : '';
+      const response = await api.get(`/therapist/diagnostics/${userId}/comparison${params}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Therapist: Get comparison history (all diagnostics with scores for trend chart)
+  getComparisonHistory: async (userId) => {
+    try {
+      const response = await api.get(`/therapist/diagnostics/${userId}/comparison-history`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Patient: Get own comparison (read-only)
+  getMyComparison: async () => {
+    try {
+      const response = await api.get('/diagnostic-comparison');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+};
+
 export default {
   ...api,
   baseURL: THERAPY_API_URL, // Export base URL for manual fetch calls
@@ -587,5 +908,9 @@ export default {
   adminAPI,
   authAPI,
   healthAPI,
-  exerciseApi
+  exerciseApi,
+  successStoryAPI,
+  therapistAPI,
+  appointmentAPI,
+  diagnosticComparisonAPI
 };

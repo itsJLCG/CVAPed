@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 
@@ -126,6 +126,30 @@ function TherapistDashboard({ onLogout }) {
   // Reports state
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  // Diagnostic Comparison state
+  const [diagComparisonData, setDiagComparisonData] = useState(null);
+  const [diagPatientDiagnostics, setDiagPatientDiagnostics] = useState([]);
+  const [loadingDiagComparison, setLoadingDiagComparison] = useState(false);
+  const [showDiagModal, setShowDiagModal] = useState(false);
+  const [diagSearchQuery, setDiagSearchQuery] = useState('');
+  const [diagSearchResults, setDiagSearchResults] = useState([]);
+  const [showDiagPatientDropdown, setShowDiagPatientDropdown] = useState(false);
+  const [searchingDiagPatients, setSearchingDiagPatients] = useState(false);
+  const [selectedDiagPatient, setSelectedDiagPatient] = useState(null);
+  const [savingDiagnostic, setSavingDiagnostic] = useState(false);
+  const [newDiagnostic, setNewDiagnostic] = useState({
+    assessment_date: new Date().toISOString().split('T')[0],
+    assessment_type: 'initial',
+    articulation_scores: { r: '', s: '', l: '', th: '', k: '' },
+    fluency_score: '',
+    receptive_score: '',
+    expressive_score: '',
+    gait_scores: { stability_score: '', gait_symmetry: '', step_regularity: '', overall_gait: '' },
+    notes: '',
+    severity_level: '',
+    recommended_focus: []
+  });
 
   // Appointments state
   const [appointments, setAppointments] = useState([]);
@@ -692,6 +716,10 @@ function TherapistDashboard({ onLogout }) {
       loadAppointments();
       loadUnassignedAppointments();
     }
+    // Diagnostic comparison tab resets when switching to it
+    if (activeTab === 'diagnostics') {
+      // Keep selectedDiagPatient if already set; otherwise no auto-load
+    }
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
@@ -811,6 +839,138 @@ function TherapistDashboard({ onLogout }) {
     } finally {
       setLoadingStories(false);
     }
+  };
+
+  // Diagnostic Comparison Functions
+  const searchDiagPatients = async (query) => {
+    if (!query || query.length < 2) {
+      setDiagSearchResults([]);
+      setShowDiagPatientDropdown(false);
+      return;
+    }
+    setSearchingDiagPatients(true);
+    try {
+      const response = await appointmentService.therapist.searchPatients(query);
+      if (response.success) {
+        setDiagSearchResults(response.patients || []);
+        setShowDiagPatientDropdown(true);
+      }
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    } finally {
+      setSearchingDiagPatients(false);
+    }
+  };
+
+  const selectDiagPatient = async (patient) => {
+    setSelectedDiagPatient(patient);
+    setDiagSearchQuery(`${patient.firstName} ${patient.lastName}`);
+    setShowDiagPatientDropdown(false);
+    // Load comparison data for this patient
+    await loadDiagComparison(patient._id || patient.id);
+  };
+
+  const loadDiagComparison = async (userId) => {
+    setLoadingDiagComparison(true);
+    try {
+      const [comparisonRes, diagnosticsRes] = await Promise.all([
+        diagnosticComparisonService.getComparison(userId),
+        diagnosticComparisonService.getDiagnostics(userId)
+      ]);
+      setDiagComparisonData(comparisonRes);
+      setDiagPatientDiagnostics(diagnosticsRes.diagnostics || []);
+    } catch (error) {
+      console.error('Error loading diagnostic comparison:', error);
+      setDiagComparisonData(null);
+      setDiagPatientDiagnostics([]);
+    } finally {
+      setLoadingDiagComparison(false);
+    }
+  };
+
+  const handleSaveDiagnostic = async () => {
+    if (!selectedDiagPatient) {
+      alert('Please select a patient first');
+      return;
+    }
+    setSavingDiagnostic(true);
+    try {
+      // Build the payload, converting empty strings to null
+      const payload = {
+        user_id: selectedDiagPatient._id || selectedDiagPatient.id,
+        assessment_date: newDiagnostic.assessment_date,
+        assessment_type: newDiagnostic.assessment_type,
+        articulation_scores: {},
+        fluency_score: newDiagnostic.fluency_score !== '' ? Number(newDiagnostic.fluency_score) : null,
+        receptive_score: newDiagnostic.receptive_score !== '' ? Number(newDiagnostic.receptive_score) : null,
+        expressive_score: newDiagnostic.expressive_score !== '' ? Number(newDiagnostic.expressive_score) : null,
+        gait_scores: {},
+        notes: newDiagnostic.notes,
+        severity_level: newDiagnostic.severity_level,
+        recommended_focus: newDiagnostic.recommended_focus
+      };
+
+      // Only include articulation scores that have values
+      ['r', 's', 'l', 'th', 'k'].forEach(sound => {
+        if (newDiagnostic.articulation_scores[sound] !== '') {
+          payload.articulation_scores[sound] = Number(newDiagnostic.articulation_scores[sound]);
+        }
+      });
+
+      // Only include gait scores that have values
+      ['stability_score', 'gait_symmetry', 'step_regularity', 'overall_gait'].forEach(key => {
+        if (newDiagnostic.gait_scores[key] !== '') {
+          payload.gait_scores[key] = Number(newDiagnostic.gait_scores[key]);
+        }
+      });
+
+      const response = await diagnosticComparisonService.createDiagnostic(payload);
+      if (response.success) {
+        alert('Facility diagnostic saved successfully!');
+        setShowDiagModal(false);
+        // Reset form
+        setNewDiagnostic({
+          assessment_date: new Date().toISOString().split('T')[0],
+          assessment_type: 'initial',
+          articulation_scores: { r: '', s: '', l: '', th: '', k: '' },
+          fluency_score: '',
+          receptive_score: '',
+          expressive_score: '',
+          gait_scores: { stability_score: '', gait_symmetry: '', step_regularity: '', overall_gait: '' },
+          notes: '',
+          severity_level: '',
+          recommended_focus: []
+        });
+        // Reload comparison
+        await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id);
+      }
+    } catch (error) {
+      console.error('Error saving diagnostic:', error);
+      alert(error.response?.data?.message || 'Failed to save diagnostic');
+    } finally {
+      setSavingDiagnostic(false);
+    }
+  };
+
+  const handleDeleteDiagnostic = async (diagnosticId) => {
+    if (!window.confirm('Are you sure you want to delete this diagnostic record?')) return;
+    try {
+      const response = await diagnosticComparisonService.deleteDiagnostic(diagnosticId);
+      if (response.success) {
+        alert('Diagnostic deleted successfully');
+        await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id);
+      }
+    } catch (error) {
+      console.error('Error deleting diagnostic:', error);
+      alert('Failed to delete diagnostic');
+    }
+  };
+
+  const getDeltaDisplay = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'N/A', className: 'delta-na', icon: '—' };
+    if (delta > 0) return { text: `+${delta}%`, className: 'delta-positive', icon: '▲' };
+    if (delta < 0) return { text: `${delta}%`, className: 'delta-negative', icon: '▼' };
+    return { text: '0%', className: 'delta-neutral', icon: '—' };
   };
 
   // Reports Functions
@@ -1301,6 +1461,11 @@ function TherapistDashboard({ onLogout }) {
             <span className="nav-icon">📊</span>
             {!sidebarCollapsed && <span className="nav-label">Reports</span>}
           </button>
+
+          <button className={`nav-item ${activeTab === 'diagnostics' ? 'active' : ''}`} onClick={() => { setActiveTab('diagnostics'); setTherapyData([]); }}>
+            <span className="nav-icon">🔬</span>
+            {!sidebarCollapsed && <span className="nav-label">Diagnostic Comparison</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -1319,7 +1484,7 @@ function TherapistDashboard({ onLogout }) {
       <main className="admin-main">
         <header className="admin-header">
           <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : 'Therapist'}</h1>
+            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : activeTab === 'diagnostics' ? 'Diagnostic Comparison' : 'Therapist'}</h1>
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
@@ -3333,6 +3498,313 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
+          {activeTab === 'diagnostics' && (
+            <div className="diagnostics-section">
+              {/* Patient Search */}
+              <div className="diag-search-bar">
+                <div className="diag-search-wrapper">
+                  <span className="diag-search-icon">🔍</span>
+                  <input
+                    type="text"
+                    className="diag-search-input"
+                    placeholder="Search patient by name..."
+                    value={diagSearchQuery}
+                    onChange={(e) => {
+                      setDiagSearchQuery(e.target.value);
+                      searchDiagPatients(e.target.value);
+                    }}
+                    onFocus={() => { if (diagSearchResults.length > 0) setShowDiagPatientDropdown(true); }}
+                  />
+                  {searchingDiagPatients && <span className="diag-search-spinner">⏳</span>}
+                  {showDiagPatientDropdown && diagSearchResults.length > 0 && (
+                    <div className="diag-patient-dropdown">
+                      {diagSearchResults.map((p) => (
+                        <button
+                          key={p._id || p.id}
+                          className="diag-patient-option"
+                          onClick={() => selectDiagPatient(p)}
+                        >
+                          <span className="diag-patient-name">{p.firstName} {p.lastName}</span>
+                          <span className="diag-patient-email">{p.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {selectedDiagPatient && (
+                  <button className="diag-add-btn" onClick={() => setShowDiagModal(true)}>
+                    + Add Facility Diagnostic
+                  </button>
+                )}
+              </div>
+
+              {/* No patient selected */}
+              {!selectedDiagPatient && (
+                <div className="no-data-large">
+                  <div className="no-data-icon">🔬</div>
+                  <p className="no-data-text">Select a patient to view diagnostic comparison</p>
+                  <p className="no-data-hint">Use the search bar above to find a patient, then view their facility vs. at-home results</p>
+                </div>
+              )}
+
+              {/* Loading */}
+              {selectedDiagPatient && loadingDiagComparison && (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading comparison data...</p>
+                </div>
+              )}
+
+              {/* Comparison Results */}
+              {selectedDiagPatient && !loadingDiagComparison && diagComparisonData && (
+                <>
+                  {/* Info Header */}
+                  <div className="diag-info-header">
+                    <div className="diag-patient-info">
+                      <h3>{diagComparisonData.patient_name || `${selectedDiagPatient.firstName} ${selectedDiagPatient.lastName}`}</h3>
+                      {diagComparisonData.has_facility_data && (
+                        <div className="diag-meta">
+                          <span className="diag-meta-item">
+                            📅 Assessment: {new Date(diagComparisonData.assessment_date).toLocaleDateString()}
+                          </span>
+                          <span className="diag-meta-item">
+                            📋 Type: {diagComparisonData.assessment_type?.charAt(0).toUpperCase() + diagComparisonData.assessment_type?.slice(1)}
+                          </span>
+                          {diagComparisonData.assessor_name && (
+                            <span className="diag-meta-item">
+                              👤 Assessed by: {diagComparisonData.assessor_name}
+                            </span>
+                          )}
+                          {diagComparisonData.severity_level && (
+                            <span className={`diag-severity diag-severity-${diagComparisonData.severity_level}`}>
+                              {diagComparisonData.severity_level.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {!diagComparisonData.has_facility_data ? (
+                    <div className="no-data-large">
+                      <div className="no-data-icon">📋</div>
+                      <p className="no-data-text">No facility diagnostic found for this patient</p>
+                      <p className="no-data-hint">Click "Add Facility Diagnostic" above to enter assessment results</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Comparison Table */}
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">📊</span>
+                            Facility vs. At-Home Comparison
+                          </h3>
+                          <p className="report-card-subtitle">Side-by-side view of diagnostic results and current home performance</p>
+                        </div>
+                        <div className="report-card-body">
+                          <table className="diag-comparison-table">
+                            <thead>
+                              <tr>
+                                <th>Metric</th>
+                                <th>Facility Score</th>
+                                <th>At-Home Score</th>
+                                <th>Δ Change</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {/* Articulation Sounds */}
+                              {['r', 's', 'l', 'th', 'k'].map(sound => {
+                                const facilityVal = diagComparisonData.facility_scores?.articulation?.[sound];
+                                const homeVal = diagComparisonData.home_scores?.articulation?.[sound];
+                                const delta = diagComparisonData.deltas?.articulation?.[sound];
+                                const d = getDeltaDisplay(delta);
+                                if (facilityVal == null && homeVal == null) return null;
+                                return (
+                                  <tr key={`art-${sound}`}>
+                                    <td className="metric-name">
+                                      <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
+                                      Articulation /{sound.toUpperCase()}/
+                                    </td>
+                                    <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
+                                    <td className="score-cell">{homeVal != null ? `${homeVal}%` : '—'}</td>
+                                    <td className={`delta-cell ${d.className}`}>
+                                      <span className="delta-icon">{d.icon}</span> {d.text}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+
+                              {/* Fluency */}
+                              {(diagComparisonData.facility_scores?.fluency != null || diagComparisonData.home_scores?.fluency != null) && (
+                                <tr>
+                                  <td className="metric-name">
+                                    <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
+                                    Fluency
+                                  </td>
+                                  <td className="score-cell">{diagComparisonData.facility_scores?.fluency != null ? `${diagComparisonData.facility_scores.fluency}%` : '—'}</td>
+                                  <td className="score-cell">{diagComparisonData.home_scores?.fluency != null ? `${diagComparisonData.home_scores.fluency}%` : '—'}</td>
+                                  <td className={`delta-cell ${getDeltaDisplay(diagComparisonData.deltas?.fluency).className}`}>
+                                    <span className="delta-icon">{getDeltaDisplay(diagComparisonData.deltas?.fluency).icon}</span> {getDeltaDisplay(diagComparisonData.deltas?.fluency).text}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* Receptive */}
+                              {(diagComparisonData.facility_scores?.receptive != null || diagComparisonData.home_scores?.receptive != null) && (
+                                <tr>
+                                  <td className="metric-name">
+                                    <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
+                                    Receptive Language
+                                  </td>
+                                  <td className="score-cell">{diagComparisonData.facility_scores?.receptive != null ? `${diagComparisonData.facility_scores.receptive}%` : '—'}</td>
+                                  <td className="score-cell">{diagComparisonData.home_scores?.receptive != null ? `${diagComparisonData.home_scores.receptive}%` : '—'}</td>
+                                  <td className={`delta-cell ${getDeltaDisplay(diagComparisonData.deltas?.receptive).className}`}>
+                                    <span className="delta-icon">{getDeltaDisplay(diagComparisonData.deltas?.receptive).icon}</span> {getDeltaDisplay(diagComparisonData.deltas?.receptive).text}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* Expressive */}
+                              {(diagComparisonData.facility_scores?.expressive != null || diagComparisonData.home_scores?.expressive != null) && (
+                                <tr>
+                                  <td className="metric-name">
+                                    <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
+                                    Expressive Language
+                                  </td>
+                                  <td className="score-cell">{diagComparisonData.facility_scores?.expressive != null ? `${diagComparisonData.facility_scores.expressive}%` : '—'}</td>
+                                  <td className="score-cell">{diagComparisonData.home_scores?.expressive != null ? `${diagComparisonData.home_scores.expressive}%` : '—'}</td>
+                                  <td className={`delta-cell ${getDeltaDisplay(diagComparisonData.deltas?.expressive).className}`}>
+                                    <span className="delta-icon">{getDeltaDisplay(diagComparisonData.deltas?.expressive).icon}</span> {getDeltaDisplay(diagComparisonData.deltas?.expressive).text}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* Gait */}
+                              {(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null) && (
+                                <tr>
+                                  <td className="metric-name">
+                                    <span className="metric-icon" style={{ backgroundColor: '#4CAF50' }}>🚶</span>
+                                    Gait (Overall)
+                                  </td>
+                                  <td className="score-cell">{diagComparisonData.facility_scores?.gait?.overall_gait != null ? `${diagComparisonData.facility_scores.gait.overall_gait}%` : '—'}</td>
+                                  <td className="score-cell">{diagComparisonData.home_scores?.gait?.overall_gait != null ? `${diagComparisonData.home_scores.gait.overall_gait}%` : '—'}</td>
+                                  <td className={`delta-cell ${getDeltaDisplay(diagComparisonData.deltas?.gait).className}`}>
+                                    <span className="delta-icon">{getDeltaDisplay(diagComparisonData.deltas?.gait).icon}</span> {getDeltaDisplay(diagComparisonData.deltas?.gait).text}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Visual Bar Chart */}
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">📈</span>
+                            Visual Comparison
+                          </h3>
+                          <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
+                        </div>
+                        <div className="report-card-body">
+                          <div className="diag-bar-chart">
+                            {[
+                              { label: 'Fluency', facility: diagComparisonData.facility_scores?.fluency, home: diagComparisonData.home_scores?.fluency },
+                              { label: 'Receptive', facility: diagComparisonData.facility_scores?.receptive, home: diagComparisonData.home_scores?.receptive },
+                              { label: 'Expressive', facility: diagComparisonData.facility_scores?.expressive, home: diagComparisonData.home_scores?.expressive },
+                              ...(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null
+                                ? [{ label: 'Gait', facility: diagComparisonData.facility_scores?.gait?.overall_gait, home: diagComparisonData.home_scores?.gait?.overall_gait }]
+                                : []),
+                              ...['r', 's', 'l', 'th', 'k']
+                                .filter(s => diagComparisonData.facility_scores?.articulation?.[s] != null || diagComparisonData.home_scores?.articulation?.[s] != null)
+                                .map(s => ({
+                                  label: `/${s.toUpperCase()}/`,
+                                  facility: diagComparisonData.facility_scores?.articulation?.[s],
+                                  home: diagComparisonData.home_scores?.articulation?.[s]
+                                }))
+                            ].filter(item => item.facility != null || item.home != null).map((item, idx) => (
+                              <div key={idx} className="diag-bar-row">
+                                <span className="diag-bar-label">{item.label}</span>
+                                <div className="diag-bar-tracks">
+                                  <div className="diag-bar-track">
+                                    <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
+                                      {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
+                                    </div>
+                                  </div>
+                                  <div className="diag-bar-track">
+                                    <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
+                                      {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="diag-bar-legend">
+                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
+                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Therapist Notes */}
+                      {diagComparisonData.notes && (
+                        <div className="report-card">
+                          <div className="report-card-header">
+                            <h3 className="report-card-title">
+                              <span className="report-icon">📝</span>
+                              Therapist Notes
+                            </h3>
+                          </div>
+                          <div className="report-card-body">
+                            <p className="diag-notes-text">{diagComparisonData.notes}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Diagnostic History */}
+                      {diagPatientDiagnostics.length > 0 && (
+                        <div className="report-card">
+                          <div className="report-card-header">
+                            <h3 className="report-card-title">
+                              <span className="report-icon">📋</span>
+                              Assessment History
+                            </h3>
+                            <p className="report-card-subtitle">{diagPatientDiagnostics.length} assessment(s) on file</p>
+                          </div>
+                          <div className="report-card-body">
+                            <div className="diag-history-list">
+                              {diagPatientDiagnostics.map((diag) => (
+                                <div key={diag._id} className="diag-history-item">
+                                  <div className="diag-history-info">
+                                    <span className="diag-history-date">{new Date(diag.assessment_date).toLocaleDateString()}</span>
+                                    <span className={`diag-history-type diag-type-${diag.assessment_type}`}>
+                                      {diag.assessment_type?.charAt(0).toUpperCase() + diag.assessment_type?.slice(1)}
+                                    </span>
+                                    <span className="diag-history-assessor">by {diag.assessor_name}</span>
+                                  </div>
+                                  <button
+                                    className="diag-history-delete"
+                                    onClick={() => handleDeleteDiagnostic(diag._id)}
+                                    title="Delete this diagnostic"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
         </div>
       </main>
 
@@ -4311,6 +4783,153 @@ function TherapistDashboard({ onLogout }) {
                 onClick={editingStory ? handleUpdateStory : handleSaveStory}
               >
                 {editingStory ? 'Update Story' : 'Add Story'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Facility Diagnostic Modal */}
+      {showDiagModal && (
+        <div className="modal-overlay" onClick={() => setShowDiagModal(false)}>
+          <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Facility Diagnostic</h2>
+              <button className="modal-close" onClick={() => setShowDiagModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p className="diag-modal-patient">Patient: <strong>{selectedDiagPatient?.firstName} {selectedDiagPatient?.lastName}</strong></p>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Assessment Date</label>
+                  <input
+                    type="date"
+                    value={newDiagnostic.assessment_date}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, assessment_date: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Assessment Type</label>
+                  <select
+                    value={newDiagnostic.assessment_type}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, assessment_type: e.target.value })}
+                  >
+                    <option value="initial">Initial</option>
+                    <option value="follow_up">Follow-Up</option>
+                    <option value="discharge">Discharge</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Severity Level</label>
+                  <select
+                    value={newDiagnostic.severity_level}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, severity_level: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    <option value="mild">Mild</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="severe">Severe</option>
+                  </select>
+                </div>
+              </div>
+
+              <h4 className="diag-section-label">Articulation Scores (0–100)</h4>
+              <div className="form-row">
+                {['r', 's', 'l', 'th', 'k'].map(sound => (
+                  <div className="form-group" key={sound}>
+                    <label>/{sound.toUpperCase()}/ Sound</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="—"
+                      value={newDiagnostic.articulation_scores[sound]}
+                      onChange={(e) => setNewDiagnostic({
+                        ...newDiagnostic,
+                        articulation_scores: { ...newDiagnostic.articulation_scores, [sound]: e.target.value }
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <h4 className="diag-section-label">Language & Fluency Scores (0–100)</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Fluency</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="—"
+                    value={newDiagnostic.fluency_score}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, fluency_score: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Receptive Language</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="—"
+                    value={newDiagnostic.receptive_score}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, receptive_score: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Expressive Language</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="—"
+                    value={newDiagnostic.expressive_score}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, expressive_score: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <h4 className="diag-section-label">Gait Scores (0–100)</h4>
+              <div className="form-row">
+                {[
+                  { key: 'stability_score', label: 'Stability' },
+                  { key: 'gait_symmetry', label: 'Symmetry' },
+                  { key: 'step_regularity', label: 'Regularity' },
+                  { key: 'overall_gait', label: 'Overall Gait' }
+                ].map(({ key, label }) => (
+                  <div className="form-group" key={key}>
+                    <label>{label}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="—"
+                      value={newDiagnostic.gait_scores[key]}
+                      onChange={(e) => setNewDiagnostic({
+                        ...newDiagnostic,
+                        gait_scores: { ...newDiagnostic.gait_scores, [key]: e.target.value }
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="form-group">
+                <label>Clinical Notes</label>
+                <textarea
+                  rows="3"
+                  placeholder="Observations, recommendations, etc."
+                  value={newDiagnostic.notes}
+                  onChange={(e) => setNewDiagnostic({ ...newDiagnostic, notes: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowDiagModal(false)}>Cancel</button>
+              <button className="primary-btn" onClick={handleSaveDiagnostic} disabled={savingDiagnostic}>
+                {savingDiagnostic ? 'Saving...' : 'Save Diagnostic'}
               </button>
             </div>
           </div>

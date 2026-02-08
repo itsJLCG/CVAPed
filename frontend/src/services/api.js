@@ -726,4 +726,44 @@ export const appointmentService = {
   },
 };
 
+// Diagnostic Comparison Service
+export const diagnosticComparisonService = {
+  // Therapist: Create a facility diagnostic for a patient
+  createDiagnostic: async (diagnosticData) => {
+    const response = await api.post('/therapist/diagnostics', diagnosticData);
+    return response.data;
+  },
+
+  // Therapist: Get all facility diagnostics for a patient
+  getDiagnostics: async (userId) => {
+    const response = await api.get(`/therapist/diagnostics/${userId}`);
+    return response.data;
+  },
+
+  // Therapist: Update a facility diagnostic
+  updateDiagnostic: async (diagnosticId, updateData) => {
+    const response = await api.put(`/therapist/diagnostics/${diagnosticId}`, updateData);
+    return response.data;
+  },
+
+  // Therapist: Delete a facility diagnostic
+  deleteDiagnostic: async (diagnosticId) => {
+    const response = await api.delete(`/therapist/diagnostics/${diagnosticId}`);
+    return response.data;
+  },
+
+  // Therapist: Get comparison data (facility vs home) for a patient
+  getComparison: async (userId, diagnosticId = null) => {
+    const params = diagnosticId ? `?diagnostic_id=${diagnosticId}` : '';
+    const response = await api.get(`/therapist/diagnostics/${userId}/comparison${params}`);
+    return response.data;
+  },
+
+  // Patient: Get own comparison (read-only)
+  getMyComparison: async () => {
+    const response = await api.get('/diagnostic-comparison');
+    return response.data;
+  },
+};
+
 export default api;

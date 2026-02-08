@@ -55,6 +55,7 @@ articulation_exercises_collection = db['articulation_exercises']
 language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
 appointments_collection = db['appointments']
+facility_diagnostics_collection = db['facility_diagnostics']
 
 # Register fluency CRUD blueprint
 app.register_blueprint(fluency_bp)
@@ -4254,6 +4255,464 @@ def serve_uploaded_file(filename):
     from flask import send_from_directory
     upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
     return send_from_directory(upload_dir, filename)
+
+# ======================
+# DIAGNOSTIC COMPARISON ENDPOINTS
+# ======================
+
+@app.route('/api/therapist/diagnostics', methods=['POST'])
+@token_required
+@therapist_required
+def create_facility_diagnostic(current_user):
+    """Create a new facility diagnostic assessment for a patient"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        if not data.get('user_id'):
+            return jsonify({'success': False, 'message': 'user_id is required'}), 400
+        if not data.get('assessment_date'):
+            return jsonify({'success': False, 'message': 'assessment_date is required'}), 400
+
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(data['user_id'])})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        diagnostic = {
+            'user_id': data['user_id'],
+            'assessed_by': str(current_user['_id']),
+            'assessment_date': datetime.datetime.fromisoformat(data['assessment_date'].replace('Z', '+00:00')) if isinstance(data['assessment_date'], str) else data['assessment_date'],
+            'assessment_type': data.get('assessment_type', 'initial'),
+            'articulation_scores': data.get('articulation_scores', {}),
+            'fluency_score': data.get('fluency_score'),
+            'receptive_score': data.get('receptive_score'),
+            'expressive_score': data.get('expressive_score'),
+            'gait_scores': data.get('gait_scores', {}),
+            'notes': data.get('notes', ''),
+            'severity_level': data.get('severity_level', ''),
+            'recommended_focus': data.get('recommended_focus', []),
+            'created_at': datetime.datetime.utcnow(),
+            'updated_at': datetime.datetime.utcnow()
+        }
+
+        result = facility_diagnostics_collection.insert_one(diagnostic)
+
+        # Also update the patient's hasInitialDiagnostic flag if this is an initial assessment
+        if diagnostic['assessment_type'] == 'initial':
+            users_collection.update_one(
+                {'_id': ObjectId(data['user_id'])},
+                {'$set': {
+                    'hasInitialDiagnostic': True,
+                    'diagnosticStatusUpdatedAt': datetime.datetime.utcnow(),
+                    'updatedAt': datetime.datetime.utcnow()
+                }}
+            )
+
+        print(f"✅ Facility diagnostic created for patient {data['user_id']} by therapist {current_user['_id']}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Facility diagnostic created successfully',
+            'diagnostic_id': str(result.inserted_id)
+        }), 201
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error creating facility diagnostic: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to create facility diagnostic', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<user_id>', methods=['GET'])
+@token_required
+@therapist_required
+def get_facility_diagnostics(current_user, user_id):
+    """Get all facility diagnostic assessments for a patient"""
+    try:
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        diagnostics = list(facility_diagnostics_collection.find({'user_id': user_id}).sort('assessment_date', -1))
+
+        result = []
+        for diag in diagnostics:
+            # Look up the therapist who assessed
+            try:
+                assessor = users_collection.find_one({'_id': ObjectId(diag.get('assessed_by', ''))})
+                assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
+            except Exception:
+                assessor_name = 'Unknown'
+
+            result.append({
+                '_id': str(diag['_id']),
+                'user_id': diag['user_id'],
+                'assessed_by': diag.get('assessed_by', ''),
+                'assessor_name': assessor_name,
+                'assessment_date': diag['assessment_date'].isoformat() if isinstance(diag['assessment_date'], datetime.datetime) else str(diag['assessment_date']),
+                'assessment_type': diag.get('assessment_type', 'initial'),
+                'articulation_scores': diag.get('articulation_scores', {}),
+                'fluency_score': diag.get('fluency_score'),
+                'receptive_score': diag.get('receptive_score'),
+                'expressive_score': diag.get('expressive_score'),
+                'gait_scores': diag.get('gait_scores', {}),
+                'notes': diag.get('notes', ''),
+                'severity_level': diag.get('severity_level', ''),
+                'recommended_focus': diag.get('recommended_focus', []),
+                'created_at': diag['created_at'].isoformat() if isinstance(diag.get('created_at'), datetime.datetime) else str(diag.get('created_at', ''))
+            })
+
+        return jsonify({
+            'success': True,
+            'diagnostics': result,
+            'patient_name': f"{patient['firstName']} {patient['lastName']}"
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching facility diagnostics: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch facility diagnostics', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['PUT'])
+@token_required
+@therapist_required
+def update_facility_diagnostic(current_user, diagnostic_id):
+    """Update a facility diagnostic assessment"""
+    try:
+        data = request.get_json()
+
+        # Verify the diagnostic exists
+        try:
+            existing = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id)})
+        except Exception:
+            existing = None
+        if not existing:
+            return jsonify({'success': False, 'message': 'Diagnostic not found'}), 404
+
+        update_fields = {'updated_at': datetime.datetime.utcnow()}
+
+        # Update only provided fields
+        allowed_fields = [
+            'assessment_date', 'assessment_type', 'articulation_scores',
+            'fluency_score', 'receptive_score', 'expressive_score',
+            'gait_scores', 'notes', 'severity_level', 'recommended_focus'
+        ]
+        for field in allowed_fields:
+            if field in data:
+                if field == 'assessment_date' and isinstance(data[field], str):
+                    update_fields[field] = datetime.datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                else:
+                    update_fields[field] = data[field]
+
+        facility_diagnostics_collection.update_one(
+            {'_id': ObjectId(diagnostic_id)},
+            {'$set': update_fields}
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Diagnostic updated successfully'
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error updating facility diagnostic: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to update diagnostic', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['DELETE'])
+@token_required
+@therapist_required
+def delete_facility_diagnostic(current_user, diagnostic_id):
+    """Delete a facility diagnostic assessment"""
+    try:
+        try:
+            result = facility_diagnostics_collection.delete_one({'_id': ObjectId(diagnostic_id)})
+        except Exception:
+            return jsonify({'success': False, 'message': 'Invalid diagnostic ID'}), 400
+
+        if result.deleted_count == 0:
+            return jsonify({'success': False, 'message': 'Diagnostic not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Diagnostic deleted successfully'
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Failed to delete diagnostic', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<user_id>/comparison', methods=['GET'])
+@token_required
+@therapist_required
+def get_diagnostic_comparison(current_user, user_id):
+    """Get computed comparison between facility diagnostic and current at-home performance"""
+    try:
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        # Get the latest facility diagnostic (or specific one if diagnostic_id query param provided)
+        diagnostic_id = request.args.get('diagnostic_id')
+        if diagnostic_id:
+            try:
+                facility_diag = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id)})
+            except Exception:
+                facility_diag = None
+        else:
+            facility_diag = facility_diagnostics_collection.find_one(
+                {'user_id': user_id},
+                sort=[('assessment_date', -1)]
+            )
+
+        if not facility_diag:
+            return jsonify({
+                'success': True,
+                'has_facility_data': False,
+                'message': 'No facility diagnostic found for this patient'
+            }), 200
+
+        # Build facility scores
+        facility_scores = {
+            'articulation': facility_diag.get('articulation_scores', {}),
+            'fluency': facility_diag.get('fluency_score'),
+            'receptive': facility_diag.get('receptive_score'),
+            'expressive': facility_diag.get('expressive_score'),
+            'gait': facility_diag.get('gait_scores', {})
+        }
+
+        # Aggregate current at-home scores from progress collections
+        home_scores = {}
+
+        # Articulation: get mastery per sound from articulation_progress
+        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        art_scores = {}
+        for prog in articulation_progress:
+            sound = prog.get('sound_id', '')
+            mastery = prog.get('overall_mastery', 0)
+            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        home_scores['articulation'] = art_scores
+
+        # Fluency: get from fluency_progress
+        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
+        if fluency_progress:
+            fluency_mastery = fluency_progress.get('overall_mastery', 0)
+            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        else:
+            home_scores['fluency'] = None
+
+        # Receptive: get from language_progress (mode=receptive)
+        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
+        if receptive_progress:
+            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['receptive'] = None
+
+        # Expressive: get from language_progress (mode=expressive)
+        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
+        if expressive_progress:
+            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['expressive'] = None
+
+        # Gait: get average from gaitprogresses
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        if gait_records:
+            gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+            for gait in gait_records:
+                metrics = gait.get('metrics', {})
+                gait_metrics_avg['stability_score'] += metrics.get('stability_score', 0)
+                gait_metrics_avg['gait_symmetry'] += metrics.get('gait_symmetry', 0)
+                gait_metrics_avg['step_regularity'] += metrics.get('step_regularity', 0)
+            count = len(gait_records)
+            home_scores['gait'] = {
+                'stability_score': round((gait_metrics_avg['stability_score'] / count) * 100, 1),
+                'gait_symmetry': round((gait_metrics_avg['gait_symmetry'] / count) * 100, 1),
+                'step_regularity': round((gait_metrics_avg['step_regularity'] / count) * 100, 1),
+                'overall_gait': round(((gait_metrics_avg['stability_score'] + gait_metrics_avg['gait_symmetry'] + gait_metrics_avg['step_regularity']) / (count * 3)) * 100, 1)
+            }
+        else:
+            home_scores['gait'] = {}
+
+        # Compute deltas
+        deltas = {}
+
+        # Articulation deltas per sound
+        art_deltas = {}
+        facility_art = facility_scores.get('articulation', {})
+        home_art = home_scores.get('articulation', {})
+        all_sounds = set(list(facility_art.keys()) + list(home_art.keys()))
+        for sound in all_sounds:
+            f_val = facility_art.get(sound)
+            h_val = home_art.get(sound)
+            if f_val is not None and h_val is not None:
+                art_deltas[sound] = round(h_val - f_val, 1)
+            else:
+                art_deltas[sound] = None
+        deltas['articulation'] = art_deltas
+
+        # Simple deltas for fluency, receptive, expressive
+        for key in ['fluency', 'receptive', 'expressive']:
+            f_val = facility_scores.get(key)
+            h_val = home_scores.get(key)
+            if f_val is not None and h_val is not None:
+                deltas[key] = round(h_val - f_val, 1)
+            else:
+                deltas[key] = None
+
+        # Gait delta (overall)
+        facility_gait = facility_scores.get('gait', {})
+        home_gait = home_scores.get('gait', {})
+        f_gait_overall = facility_gait.get('overall_gait')
+        h_gait_overall = home_gait.get('overall_gait')
+        if f_gait_overall is not None and h_gait_overall is not None:
+            deltas['gait'] = round(h_gait_overall - f_gait_overall, 1)
+        else:
+            deltas['gait'] = None
+
+        # Look up assessor name
+        try:
+            assessor = users_collection.find_one({'_id': ObjectId(facility_diag.get('assessed_by', ''))})
+            assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
+        except Exception:
+            assessor_name = 'Unknown'
+
+        return jsonify({
+            'success': True,
+            'has_facility_data': True,
+            'patient_name': f"{patient['firstName']} {patient['lastName']}",
+            'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
+            'assessment_type': facility_diag.get('assessment_type', 'initial'),
+            'assessor_name': assessor_name,
+            'severity_level': facility_diag.get('severity_level', ''),
+            'notes': facility_diag.get('notes', ''),
+            'facility_scores': facility_scores,
+            'home_scores': home_scores,
+            'deltas': deltas
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error computing diagnostic comparison: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison', 'error': str(e)}), 500
+
+
+@app.route('/api/diagnostic-comparison', methods=['GET'])
+@token_required
+def get_patient_diagnostic_comparison(current_user):
+    """Get the patient's own facility vs home comparison (read-only)"""
+    try:
+        user_id = str(current_user['_id'])
+
+        # Get the latest facility diagnostic for this patient
+        facility_diag = facility_diagnostics_collection.find_one(
+            {'user_id': user_id},
+            sort=[('assessment_date', -1)]
+        )
+
+        if not facility_diag:
+            return jsonify({
+                'success': True,
+                'has_facility_data': False,
+                'message': 'No facility diagnostic found'
+            }), 200
+
+        # Build facility scores
+        facility_scores = {
+            'articulation': facility_diag.get('articulation_scores', {}),
+            'fluency': facility_diag.get('fluency_score'),
+            'receptive': facility_diag.get('receptive_score'),
+            'expressive': facility_diag.get('expressive_score')
+        }
+
+        # Aggregate at-home scores (same logic as therapist comparison)
+        home_scores = {}
+
+        # Articulation
+        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        art_scores = {}
+        for prog in articulation_progress:
+            sound = prog.get('sound_id', '')
+            mastery = prog.get('overall_mastery', 0)
+            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        home_scores['articulation'] = art_scores
+
+        # Fluency
+        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
+        if fluency_progress:
+            fluency_mastery = fluency_progress.get('overall_mastery', 0)
+            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        else:
+            home_scores['fluency'] = None
+
+        # Receptive
+        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
+        if receptive_progress:
+            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['receptive'] = None
+
+        # Expressive
+        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
+        if expressive_progress:
+            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['expressive'] = None
+
+        # Compute deltas
+        deltas = {}
+        facility_art = facility_scores.get('articulation', {})
+        home_art = home_scores.get('articulation', {})
+        art_deltas = {}
+        for sound in set(list(facility_art.keys()) + list(home_art.keys())):
+            f_val = facility_art.get(sound)
+            h_val = home_art.get(sound)
+            if f_val is not None and h_val is not None:
+                art_deltas[sound] = round(h_val - f_val, 1)
+            else:
+                art_deltas[sound] = None
+        deltas['articulation'] = art_deltas
+
+        for key in ['fluency', 'receptive', 'expressive']:
+            f_val = facility_scores.get(key)
+            h_val = home_scores.get(key)
+            if f_val is not None and h_val is not None:
+                deltas[key] = round(h_val - f_val, 1)
+            else:
+                deltas[key] = None
+
+        return jsonify({
+            'success': True,
+            'has_facility_data': True,
+            'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
+            'assessment_type': facility_diag.get('assessment_type', 'initial'),
+            'facility_scores': facility_scores,
+            'home_scores': home_scores,
+            'deltas': deltas
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching patient diagnostic comparison: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic comparison', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

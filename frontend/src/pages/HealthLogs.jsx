@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
-import { healthService } from '../services/api';
+import { healthService, diagnosticComparisonService } from '../services/api';
 import './HealthLogs.css';
 
 function HealthLogs({ onLogout }) {
@@ -17,10 +17,12 @@ function HealthLogs({ onLogout }) {
   const [expressivePrediction, setExpressivePrediction] = useState(null);
   const [overallSpeechPrediction, setOverallSpeechPrediction] = useState(null);
   const [expandedGaitRows, setExpandedGaitRows] = useState({});
+  const [facilityComparison, setFacilityComparison] = useState(null);
 
   useEffect(() => {
     fetchHealthData();
     fetchPredictions();
+    fetchFacilityComparison();
   }, []);
 
   const fetchHealthData = async () => {
@@ -75,6 +77,25 @@ function HealthLogs({ onLogout }) {
     setRefreshing(true);
     await fetchHealthData();
     await fetchPredictions();
+    await fetchFacilityComparison();
+  };
+
+  const fetchFacilityComparison = async () => {
+    try {
+      const data = await diagnosticComparisonService.getMyComparison();
+      if (data.success && data.has_facility_data) {
+        setFacilityComparison(data);
+      }
+    } catch (error) {
+      console.log('Facility comparison not available');
+    }
+  };
+
+  const getFacilityDeltaDisplay = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'N/A', className: 'fc-delta-na' };
+    if (delta > 0) return { text: `▲ +${delta}%`, className: 'fc-delta-positive' };
+    if (delta < 0) return { text: `▼ ${delta}%`, className: 'fc-delta-negative' };
+    return { text: '— 0%', className: 'fc-delta-neutral' };
   };
 
   const loadFullHistory = async () => {
@@ -197,6 +218,90 @@ function HealthLogs({ onLogout }) {
               {refreshing ? 'Updating...' : 'Refresh'}
             </button>
           </div>
+
+          {/* Facility vs Home Comparison Card */}
+          {facilityComparison && facilityComparison.has_facility_data && (
+            <div className="fc-comparison-card">
+              <div className="fc-header">
+                <div className="fc-header-left">
+                  <span className="fc-header-icon">🏥</span>
+                  <div>
+                    <h2 className="fc-title">Facility vs. Home Progress</h2>
+                    <p className="fc-subtitle">
+                      Based on your {facilityComparison.assessment_type} diagnostic ({new Date(facilityComparison.assessment_date).toLocaleDateString()})
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="fc-metrics-grid">
+                {/* Articulation sounds */}
+                {Object.entries(facilityComparison.facility_scores?.articulation || {}).map(([sound, facilityVal]) => {
+                  const homeVal = facilityComparison.home_scores?.articulation?.[sound];
+                  const delta = facilityComparison.deltas?.articulation?.[sound];
+                  const d = getFacilityDeltaDisplay(delta);
+                  return (
+                    <div key={`art-${sound}`} className="fc-metric-item">
+                      <span className="fc-metric-label">/{sound.toUpperCase()}/ Sound</span>
+                      <div className="fc-metric-values">
+                        <span className="fc-facility-val">{facilityVal != null ? `${facilityVal}%` : '—'}</span>
+                        <span className="fc-arrow">→</span>
+                        <span className="fc-home-val">{homeVal != null ? `${homeVal}%` : '—'}</span>
+                      </div>
+                      <span className={`fc-delta ${d.className}`}>{d.text}</span>
+                    </div>
+                  );
+                })}
+
+                {/* Fluency */}
+                {facilityComparison.facility_scores?.fluency != null && (
+                  <div className="fc-metric-item">
+                    <span className="fc-metric-label">Fluency</span>
+                    <div className="fc-metric-values">
+                      <span className="fc-facility-val">{facilityComparison.facility_scores.fluency}%</span>
+                      <span className="fc-arrow">→</span>
+                      <span className="fc-home-val">{facilityComparison.home_scores?.fluency != null ? `${facilityComparison.home_scores.fluency}%` : '—'}</span>
+                    </div>
+                    <span className={`fc-delta ${getFacilityDeltaDisplay(facilityComparison.deltas?.fluency).className}`}>
+                      {getFacilityDeltaDisplay(facilityComparison.deltas?.fluency).text}
+                    </span>
+                  </div>
+                )}
+
+                {/* Receptive */}
+                {facilityComparison.facility_scores?.receptive != null && (
+                  <div className="fc-metric-item">
+                    <span className="fc-metric-label">Receptive</span>
+                    <div className="fc-metric-values">
+                      <span className="fc-facility-val">{facilityComparison.facility_scores.receptive}%</span>
+                      <span className="fc-arrow">→</span>
+                      <span className="fc-home-val">{facilityComparison.home_scores?.receptive != null ? `${facilityComparison.home_scores.receptive}%` : '—'}</span>
+                    </div>
+                    <span className={`fc-delta ${getFacilityDeltaDisplay(facilityComparison.deltas?.receptive).className}`}>
+                      {getFacilityDeltaDisplay(facilityComparison.deltas?.receptive).text}
+                    </span>
+                  </div>
+                )}
+
+                {/* Expressive */}
+                {facilityComparison.facility_scores?.expressive != null && (
+                  <div className="fc-metric-item">
+                    <span className="fc-metric-label">Expressive</span>
+                    <div className="fc-metric-values">
+                      <span className="fc-facility-val">{facilityComparison.facility_scores.expressive}%</span>
+                      <span className="fc-arrow">→</span>
+                      <span className="fc-home-val">{facilityComparison.home_scores?.expressive != null ? `${facilityComparison.home_scores.expressive}%` : '—'}</span>
+                    </div>
+                    <span className={`fc-delta ${getFacilityDeltaDisplay(facilityComparison.deltas?.expressive).className}`}>
+                      {getFacilityDeltaDisplay(facilityComparison.deltas?.expressive).text}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="fc-footer">
+                <span className="fc-footer-text">Keep up the great work! 🎉</span>
+              </div>
+            </div>
+          )}
 
           {/* Overview Summary Card */}
           <div className="overview-summary">

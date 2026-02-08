@@ -7463,3 +7463,492 @@
   }
 }
 
+/* ===================================
+   DIAGNOSTIC COMPARISON SECTION
+   =================================== */
+
+.diagnostics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Search Bar */
+.diag-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.diag-search-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.diag-search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 1.1rem;
+  z-index: 1;
+}
+
+.diag-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 40px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+
+.diag-search-input:focus {
+  border-color: var(--color-primary, #ce3630);
+  outline: none;
+}
+
+.diag-search-spinner {
+  position: absolute;
+  right: 12px;
+  font-size: 1rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.diag-patient-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.diag-patient-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.diag-patient-option:hover {
+  background: #f3f4f6;
+}
+
+.diag-patient-name {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.diag-patient-email {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.diag-add-btn {
+  padding: 10px 20px;
+  background: var(--color-primary, #ce3630);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.diag-add-btn:hover {
+  background: #b52e29;
+  transform: translateY(-1px);
+}
+
+/* Info Header */
+.diag-info-header {
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.diag-patient-info h3 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.diag-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+.diag-meta-item {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.diag-severity {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.diag-severity-mild {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.diag-severity-moderate {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.diag-severity-severe {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* Comparison Table */
+.diag-comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.diag-comparison-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 700;
+  color: #374151;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diag-comparison-table tbody tr {
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s;
+}
+
+.diag-comparison-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.metric-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: white;
+}
+
+.score-cell {
+  padding: 12px 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.delta-cell {
+  padding: 12px 16px;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.delta-icon {
+  margin-right: 4px;
+}
+
+.delta-positive {
+  color: #16a34a;
+}
+
+.delta-negative {
+  color: #dc2626;
+}
+
+.delta-neutral {
+  color: #6b7280;
+}
+
+.delta-na {
+  color: #9ca3af;
+}
+
+/* Bar Chart */
+.diag-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.diag-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.diag-bar-label {
+  width: 90px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.diag-bar-tracks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.diag-bar-track {
+  height: 22px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.diag-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  transition: width 0.6s ease;
+  min-width: fit-content;
+}
+
+.diag-bar-facility {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.diag-bar-home {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.diag-bar-value {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.diag-bar-legend {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.diag-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.diag-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.diag-legend-facility {
+  background: #3b82f6;
+}
+
+.diag-legend-home {
+  background: #22c55e;
+}
+
+/* Notes */
+.diag-notes-text {
+  color: #374151;
+  line-height: 1.6;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+}
+
+/* Diagnostic History */
+.diag-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diag-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.diag-history-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.diag-history-date {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.diag-history-type {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.diag-type-initial {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.diag-type-follow_up {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.diag-type-discharge {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.diag-history-assessor {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.diag-history-delete {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.diag-history-delete:hover {
+  opacity: 1;
+}
+
+/* Diagnostic Modal Extras */
+.diag-modal-patient {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.diag-section-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #374151;
+  margin: 1rem 0 0.5rem 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-row .form-group {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .diag-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .diag-bar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .diag-bar-label {
+    text-align: left;
+    width: auto;
+  }
+
+  .diag-meta {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .diag-comparison-table {
+    font-size: 0.85rem;
+  }
+
+  .metric-name {
+    padding: 8px 10px;
+  }
+
+  .score-cell,
+  .delta-cell {
+    padding: 8px 10px;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+}
+

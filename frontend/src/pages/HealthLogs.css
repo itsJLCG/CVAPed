@@ -773,3 +773,209 @@
     font-size: 1.2rem;
   }
 }
+
+/* ===== Facility vs At-Home Comparison Card ===== */
+.fc-comparison-card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 28px;
+  margin-bottom: 24px;
+  border: 1px solid #e8ecf1;
+  transition: box-shadow 0.3s ease;
+}
+
+.fc-comparison-card:hover {
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.12);
+}
+
+.fc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f2f5;
+}
+
+.fc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fc-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.fc-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 4px 0;
+}
+
+.fc-subtitle {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.fc-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.fc-metric-item {
+  background: #f8f9fc;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e8ecf1;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fc-metric-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.fc-metric-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.fc-metric-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.fc-facility-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #3b82f6;
+  min-width: 40px;
+  text-align: center;
+}
+
+.fc-arrow {
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+.fc-home-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #10b981;
+  min-width: 40px;
+  text-align: center;
+}
+
+.fc-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.fc-delta-positive {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.fc-delta-negative {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.fc-delta-neutral {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.fc-delta-na {
+  background: #f3f4f6;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.fc-footer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.fc-footer-text {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc-footer-text i {
+  font-size: 0.85rem;
+}
+
+/* Responsive - Facility Comparison */
+@media (max-width: 768px) {
+  .fc-comparison-card {
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+
+  .fc-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fc-header-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+
+  .fc-title {
+    font-size: 1.1rem;
+  }
+
+  .fc-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .fc-metric-item {
+    padding: 12px;
+  }
+
+  .fc-facility-val,
+  .fc-home-val {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .fc-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}

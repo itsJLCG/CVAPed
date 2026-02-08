@@ -1,6 +1,7 @@
 """
 Success Story CRUD Operations
 Handles creation, reading, updating, and deletion of success stories
+Images are uploaded to Cloudinary cloud storage.
 """
 
 from flask import Blueprint, request, jsonify
@@ -9,18 +10,23 @@ import jwt
 from datetime import datetime
 from bson import ObjectId
 import os
-from werkzeug.utils import secure_filename
+import cloudinary
+import cloudinary.uploader
 
 # Database will be initialized later
 success_stories_collection = None
 
 # Configuration
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads', 'success_stories')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_MIMETYPES = {'image/png', 'image/jpg', 'image/jpeg', 'image/gif', 'image/webp'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Ensure upload folder exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Configure Cloudinary with environment variables
+cloudinary.config(
+    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.getenv('CLOUDINARY_API_KEY'),
+    api_secret=os.getenv('CLOUDINARY_API_SECRET')
+)
 
 success_story_bp = Blueprint('success_stories', __name__)
 
@@ -35,6 +41,47 @@ def init_success_story_crud(database):
 # Helper function to check file extension
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# Helper function to upload image to Cloudinary
+def upload_to_cloudinary(file_storage):
+    """Upload a file to Cloudinary and return the secure URL"""
+    try:
+        result = cloudinary.uploader.upload(
+            file_storage,
+            folder='success_stories',
+            resource_type='image'
+        )
+        return result.get('secure_url')
+    except Exception as e:
+        print(f"❌ Cloudinary upload error: {str(e)}")
+        raise
+
+
+# Helper function to delete image from Cloudinary
+def delete_from_cloudinary(image_url):
+    """Delete an image from Cloudinary by its URL"""
+    try:
+        # Extract public_id from Cloudinary URL
+        # URL format: https://res.cloudinary.com/<cloud>/image/upload/v123/success_stories/filename.ext
+        parts = image_url.split('/upload/')
+        if len(parts) == 2:
+            # Remove the version prefix (v123456/) and file extension
+            path_after_upload = parts[1]
+            # Strip version prefix if present (e.g., "v1234567890/")
+            if path_after_upload.startswith('v') and '/' in path_after_upload:
+                path_after_upload = path_after_upload.split('/', 1)[1]
+            # Remove file extension to get public_id
+            public_id = path_after_upload.rsplit('.', 1)[0]
+            cloudinary.uploader.destroy(public_id)
+            print(f"✅ Deleted from Cloudinary: {public_id}")
+            return True
+        else:
+            print(f"⚠️ Could not parse Cloudinary public_id from URL: {image_url}")
+            return False
+    except Exception as e:
+        print(f"⚠️ Error deleting from Cloudinary: {str(e)}")
+        return False
 
 # JWT Token verification decorator
 def token_required(f):
@@ -113,14 +160,15 @@ def create_success_story(current_user):
         patient_name = request.form['patientName'].strip()
         story_content = request.form['story'].strip()
         
-        # Handle multiple file uploads
+        # Handle multiple file uploads to Cloudinary
         uploaded_images = []
+        failed_uploads = []
         if 'images' in request.files:
             files = request.files.getlist('images')
             
             for file in files:
                 if file and file.filename:
-                    # Validate file
+                    # Validate file type
                     if not allowed_file(file.filename):
                         return jsonify({
                             'success': False,
@@ -138,15 +186,15 @@ def create_success_story(current_user):
                             'message': f'File {file.filename} exceeds maximum size of 5MB'
                         }), 400
                     
-                    # Save file
-                    filename = secure_filename(file.filename)
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    unique_filename = f"{timestamp}_{filename}"
-                    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-                    file.save(file_path)
-                    
-                    # Store relative path
-                    uploaded_images.append(f"uploads/success_stories/{unique_filename}")
+                    # Upload to Cloudinary
+                    try:
+                        print(f"📤 Uploading {file.filename} to Cloudinary...")
+                        image_url = upload_to_cloudinary(file)
+                        print(f"✅ Uploaded successfully: {image_url}")
+                        uploaded_images.append(image_url)
+                    except Exception as upload_error:
+                        print(f"❌ Error uploading image {file.filename}: {str(upload_error)}")
+                        failed_uploads.append(file.filename)
         
         # Create success story document
         success_story = {
@@ -167,10 +215,19 @@ def create_success_story(current_user):
         success_story['createdAt'] = success_story['createdAt'].isoformat()
         success_story['updatedAt'] = success_story['updatedAt'].isoformat()
         
+        print(f"📊 Total images uploaded: {len(uploaded_images)}, Failed: {len(failed_uploads)}")
+
+        response_message = (
+            f'Success story created. {len(uploaded_images)} images uploaded, {len(failed_uploads)} failed.'
+            if failed_uploads
+            else 'Success story created successfully'
+        )
+
         return jsonify({
             'success': True,
-            'message': 'Success story created successfully',
-            'data': success_story
+            'message': response_message,
+            'data': success_story,
+            'warnings': f'Failed to upload: {", ".join(failed_uploads)}' if failed_uploads else None
         }), 201
     
     except Exception as e:
@@ -219,14 +276,14 @@ def update_success_story(current_user, story_id):
         patient_name = request.form['patientName'].strip()
         story_content = request.form['story'].strip()
         
-        # Handle new image uploads
+        # Handle new image uploads to Cloudinary
         uploaded_images = existing_story.get('images', [])
         if 'images' in request.files:
             files = request.files.getlist('images')
             
             for file in files:
                 if file and file.filename:
-                    # Validate file
+                    # Validate file type
                     if not allowed_file(file.filename):
                         return jsonify({
                             'success': False,
@@ -244,15 +301,12 @@ def update_success_story(current_user, story_id):
                             'message': f'File {file.filename} exceeds maximum size of 5MB'
                         }), 400
                     
-                    # Save file
-                    filename = secure_filename(file.filename)
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    unique_filename = f"{timestamp}_{filename}"
-                    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-                    file.save(file_path)
-                    
-                    # Add to images list
-                    uploaded_images.append(f"uploads/success_stories/{unique_filename}")
+                    # Upload to Cloudinary
+                    try:
+                        image_url = upload_to_cloudinary(file)
+                        uploaded_images.append(image_url)
+                    except Exception as upload_error:
+                        print(f"❌ Error uploading image to Cloudinary: {str(upload_error)}")
         
         # Update document
         update_data = {
@@ -312,14 +366,10 @@ def delete_success_story(current_user, story_id):
                 'message': 'Success story not found'
             }), 404
         
-        # Delete associated images
-        for image_path in story.get('images', []):
-            try:
-                full_path = os.path.join(os.path.dirname(__file__), image_path)
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-            except Exception as e:
-                print(f"Warning: Could not delete image {image_path}: {str(e)}")
+        # Delete associated images from Cloudinary
+        if story.get('images'):
+            for image_url in story['images']:
+                delete_from_cloudinary(image_url)
         
         # Delete story from database
         success_stories_collection.delete_one({'_id': obj_id})
@@ -370,13 +420,8 @@ def remove_image_from_story(current_user, story_id):
         
         # Remove image from array
         if image_path in story.get('images', []):
-            # Delete physical file
-            try:
-                full_path = os.path.join(os.path.dirname(__file__), image_path)
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-            except Exception as e:
-                print(f"Warning: Could not delete image {image_path}: {str(e)}")
+            # Delete image from Cloudinary
+            delete_from_cloudinary(image_path)
             
             # Update database
             success_stories_collection.update_one(

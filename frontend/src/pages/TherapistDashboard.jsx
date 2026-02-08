@@ -2738,7 +2738,7 @@ function TherapistDashboard({ onLogout }) {
                                     {story.images.slice(0, 3).map((imagePath, idx) => (
                                       <img 
                                         key={idx}
-                                        src={`http://localhost:5000/${imagePath}`}
+                                        src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`}
                                         alt={`${story.patientName} - Image ${idx + 1}`}
                                         className="story-thumbnail"
                                         title={`Image ${idx + 1} of ${story.images.length}`}
@@ -5164,7 +5164,7 @@ function TherapistDashboard({ onLogout }) {
                     {editingStory.images.map((imagePath, index) => (
                       <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
                         <img 
-                          src={`http://localhost:5000/${imagePath}`} 
+                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`} 
                           alt={`Existing ${index + 1}`} 
                           style={{ width: '100%', height: '120px', objectFit: 'cover' }}
                         />

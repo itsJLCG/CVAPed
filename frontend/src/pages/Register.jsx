@@ -4,6 +4,7 @@ import { authService } from '../services/api';
 import { signInWithGoogle, signInWithFacebook } from '../services/firebase';
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal';
 import './Auth.css';
 
 function Register({ onLogin }) {
@@ -13,6 +14,8 @@ function Register({ onLogin }) {
     email: '',
     password: '',
     confirmPassword: '',
+    age: '',
+    gender: '',
     therapyType: '',
     patientType: '',
     // Pediatric Speech Therapy fields
@@ -35,6 +38,8 @@ function Register({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [copyParentInfo, setCopyParentInfo] = useState(false);
   const [copyPatientInfo, setCopyPatientInfo] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -92,6 +97,15 @@ function Register({ onLogin }) {
     setLoading(true);
     setError('');
     setSuccess('');
+
+    // Validate Terms and Conditions
+    if (!agreedToTerms) {
+      const errorMsg = 'You must agree to the Terms and Conditions';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      setLoading(false);
+      return;
+    }
 
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
@@ -406,6 +420,40 @@ function Register({ onLogin }) {
                     />
                   </div>
 
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="age">Age</label>
+                      <input
+                        type="number"
+                        id="age"
+                        name="age"
+                        value={formData.age}
+                        onChange={handleChange}
+                        required
+                        placeholder="Enter your age"
+                        min="1"
+                        max="120"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="gender">Gender</label>
+                      <select
+                        id="gender"
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleChange}
+                        required
+                      >
+                        <option value="">Select gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                        <option value="prefer-not-to-say">Prefer not to say</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div className="form-group">
                     <label htmlFor="password">Password</label>
                     <input
@@ -454,7 +502,7 @@ function Register({ onLogin }) {
                           required
                         />
                         <span className="radio-label">
-                          <strong>Speech Therapy</strong>
+                          <strong>Speech/Language Therapy</strong>
                           <small>For communication disorders (pediatric)</small>
                         </span>
                       </label>
@@ -743,6 +791,28 @@ function Register({ onLogin }) {
                   </div>
                 )}
 
+                {/* Terms and Conditions Checkbox */}
+                <div className="form-group terms-checkbox-group">
+                  <label className="terms-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="terms-checkbox"
+                    />
+                    <span className="terms-text">
+                      I have read and agree to the{' '}
+                      <button
+                        type="button"
+                        className="terms-link"
+                        onClick={() => setShowTermsModal(true)}
+                      >
+                        Terms and Conditions
+                      </button>
+                    </span>
+                  </label>
+                </div>
+
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? 'Creating Account...' : 'Create Account'}
                 </button>
@@ -773,6 +843,12 @@ function Register({ onLogin }) {
           </div>
         </div>
       </footer>
+
+      {/* Terms and Conditions Modal */}
+      <TermsAndConditionsModal 
+        isOpen={showTermsModal} 
+        onClose={() => setShowTermsModal(false)} 
+      />
     </div>
   );
 }

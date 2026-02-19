@@ -1,4 +1,4 @@
-const BASE_IP = '10.109.35.145';
+const BASE_IP = '192.168.0.47'; // Your network IP for physical device
 
 // Port Configuration (matches backend .env)
 const PORTS = {

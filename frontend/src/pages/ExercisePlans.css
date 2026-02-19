@@ -1,129 +1,453 @@
+ /* Exercise Plans Page – Stroke Rehabilitation */
 .exercise-plans-page {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  background: linear-gradient(135deg, rgba(206, 54, 48, 0.03) 0%, rgba(71, 154, 195, 0.05) 100%);
 }
 
 .exercise-plans-main {
-  padding: 2rem;
-  max-width: 1200px;
+  flex: 1;
+  padding: 30px 20px 40px;
+  max-width: 1300px;
   margin: 0 auto;
-  padding-top: 100px;
+  width: 100%;
 }
 
-.coming-soon-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: calc(100vh - 200px);
-}
-
-.coming-soon-content {
-  background: white;
-  border-radius: 20px;
-  padding: 4rem 3rem;
+/* ── Page Header ────────────────────────────────────────────────── */
+.ep-header-section {
   text-align: center;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  max-width: 600px;
-  animation: fadeInUp 0.6s ease-out;
+  margin-bottom: 28px;
+  animation: epFadeIn 0.6s ease-out;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.coming-soon-icon {
-  width: 120px;
-  height: 120px;
-  margin: 0 auto 2rem;
-  background: linear-gradient(135deg, var(--brand-primary, #ce3630), #a82e2a);
+.ep-header-icon {
+  width: 90px;
+  height: 90px;
+  margin: 0 auto 16px;
+  background: linear-gradient(135deg, var(--color-primary, #ce3630), #a82e2a);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10px 30px rgba(206, 54, 48, 0.3);
+  box-shadow: 0 8px 24px rgba(206, 54, 48, 0.25);
 }
 
-.coming-soon-icon i {
-  font-size: 3.5rem;
+.ep-header-icon i {
+  font-size: 2.5rem;
   color: white;
 }
 
-.coming-soon-content h1 {
-  color: var(--brand-primary, #ce3630);
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
+.ep-title {
+  font-size: 2.2rem;
   font-weight: 700;
+  color: var(--color-text, #333);
+  margin-bottom: 8px;
 }
 
-.coming-soon-content h2 {
-  color: #6c757d;
-  font-size: 1.5rem;
-  margin-bottom: 1.5rem;
-  font-weight: 400;
-}
-
-.coming-soon-description {
-  color: #495057;
-  font-size: 1.1rem;
+.ep-subtitle {
+  font-size: 1.05rem;
+  color: var(--color-text-light, #666);
+  max-width: 650px;
+  margin: 0 auto;
   line-height: 1.6;
-  margin-bottom: 2.5rem;
-  padding: 0 1rem;
 }
 
-.features-preview {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 2.5rem;
-  text-align: left;
+/* ── Recommendation Banner ──────────────────────────────────────── */
+.ep-recommendation-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #fff8e1, #fff3c4);
+  border: 1px solid #ffe082;
+  border-radius: 12px;
+  color: #6d4c00;
+  font-size: 0.95rem;
 }
 
-.feature-item {
+.ep-recommendation-banner i {
+  color: #f9a825;
+  font-size: 1.1rem;
+}
+
+/* ── Filters Section ────────────────────────────────────────────── */
+.ep-filters {
+  margin-bottom: 28px;
+  animation: epFadeIn 0.7s ease-out;
+}
+
+/* Search Box */
+.ep-search-box {
+  position: relative;
+  max-width: 480px;
+  margin: 0 auto 20px;
+}
+
+.ep-search-box i.fa-search {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+  font-size: 0.95rem;
+}
+
+.ep-search-box input {
+  width: 100%;
+  padding: 12px 40px 12px 44px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  background: white;
+}
+
+.ep-search-box input:focus {
+  border-color: var(--color-primary, #ce3630);
+  box-shadow: 0 0 0 3px rgba(206, 54, 48, 0.1);
+}
+
+.ep-search-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 0.9rem;
+  padding: 4px;
+}
+
+.ep-search-clear:hover {
+  color: var(--color-primary, #ce3630);
+}
+
+/* Category Tabs */
+.ep-category-tabs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.ep-cat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  background: white;
+  color: var(--color-text-light, #666);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.ep-cat-tab:hover {
+  border-color: var(--color-primary, #ce3630);
+  color: var(--color-primary, #ce3630);
+  background: rgba(206, 54, 48, 0.04);
+}
+
+.ep-cat-tab.active {
+  background: var(--color-primary, #ce3630);
+  color: white;
+  border-color: var(--color-primary, #ce3630);
+}
+
+.ep-cat-tab i {
+  font-size: 0.85rem;
+}
+
+/* Difficulty Pills */
+.ep-difficulty-pills {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: #f8f9fa;
-  border-radius: 10px;
-  transition: all 0.3s ease;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
-.feature-item:hover {
-  background: #e9ecef;
-  transform: translateX(5px);
+.ep-pill-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text, #333);
+  margin-right: 4px;
 }
 
-.feature-item i {
-  color: var(--brand-success, #388e3c);
-  font-size: 1.25rem;
+.ep-diff-pill {
+  padding: 6px 16px;
+  border: 2px solid #d0d0d0;
+  border-radius: 20px;
+  background: white;
+  color: var(--color-text-light, #666);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.ep-diff-pill:hover {
+  border-color: #999;
+}
+
+.ep-diff-pill.active {
+  background: var(--color-primary, #ce3630);
+  color: white;
+  border-color: var(--color-primary, #ce3630);
+}
+
+/* ── Exercise Grid ──────────────────────────────────────────────── */
+.ep-exercise-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 24px;
+  animation: epFadeIn 0.8s ease-out;
+}
+
+/* ── Exercise Card ──────────────────────────────────────────────── */
+.ep-exercise-card {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
+  border-left: 5px solid #e0e0e0;
+  position: relative;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.ep-exercise-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.ep-exercise-card.recommended {
+  border-left-color: #f9a825;
+  box-shadow: 0 4px 18px rgba(249, 168, 37, 0.15);
+}
+
+.ep-exercise-card.recommended:hover {
+  box-shadow: 0 10px 30px rgba(249, 168, 37, 0.22);
+}
+
+/* Recommended Badge */
+.ep-recommended-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #fff8e1, #fff3c4);
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6d4c00;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ep-recommended-badge i {
+  color: #f9a825;
+  font-size: 0.7rem;
+}
+
+/* Card Header */
+.ep-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.ep-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
   flex-shrink: 0;
 }
 
-.feature-item span {
-  color: #495057;
-  font-size: 0.95rem;
+.ep-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ep-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text, #333);
+  line-height: 1.3;
+}
+
+.ep-difficulty-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: fit-content;
+}
+
+/* Target */
+.ep-card-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--color-secondary, #479ac3);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ep-card-target i {
+  font-size: 0.8rem;
+}
+
+/* Description */
+.ep-card-description {
+  font-size: 0.92rem;
+  color: var(--color-text-light, #666);
+  line-height: 1.65;
+  margin-bottom: 14px;
+  flex-grow: 1;
+}
+
+/* Meta (reps & duration) */
+.ep-card-meta {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.ep-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--color-text, #333);
   font-weight: 500;
 }
 
+.ep-meta-item i {
+  color: var(--color-primary, #ce3630);
+  font-size: 0.78rem;
+}
+
+/* Expand Button */
+.ep-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-light, #666);
+  transition: all 0.25s ease;
+  align-self: flex-start;
+}
+
+.ep-expand-btn:hover {
+  border-color: var(--color-primary, #ce3630);
+  color: var(--color-primary, #ce3630);
+  background: rgba(206, 54, 48, 0.04);
+}
+
+/* Instructions Panel */
+.ep-instructions {
+  margin-top: 14px;
+  padding: 18px;
+  background: #f8fafb;
+  border-radius: 12px;
+  border: 1px solid #e8ecef;
+  animation: epSlideDown 0.3s ease-out;
+}
+
+.ep-instructions h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text, #333);
+  margin-bottom: 10px;
+}
+
+.ep-instructions ol {
+  padding-left: 20px;
+}
+
+.ep-instructions li {
+  font-size: 0.9rem;
+  color: var(--color-text-light, #666);
+  line-height: 1.7;
+  margin-bottom: 4px;
+}
+
+/* ── Empty State ────────────────────────────────────────────────── */
+.ep-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--color-text-light, #666);
+}
+
+.ep-empty-state i {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.3;
+}
+
+.ep-empty-state p {
+  font-size: 1.05rem;
+  max-width: 400px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── Actions (Back Button) ──────────────────────────────────────── */
+.ep-actions {
+  text-align: center;
+  margin-top: 40px;
+}
+
 .back-btn {
-  background: linear-gradient(135deg, var(--brand-primary, #ce3630), #a82e2a);
+  background: linear-gradient(135deg, var(--color-primary, #ce3630), #a82e2a);
   color: white;
   border: none;
-  padding: 1rem 2.5rem;
+  padding: 14px 32px;
   border-radius: 12px;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 10px;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(206, 54, 48, 0.3);
 }
@@ -137,50 +461,262 @@
   transform: translateY(0);
 }
 
-.back-btn i {
-  font-size: 1rem;
+/* ── Footer ─────────────────────────────────────────────────────── */
+.ep-footer {
+  background: linear-gradient(135deg, var(--color-primary, #ce3630), var(--color-secondary, #479ac3));
+  color: white;
+  padding: 20px 0;
+  text-align: center;
 }
 
-/* Responsive Design */
+.ep-footer-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+.ep-footer-container p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes epFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes epSlideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+    transform: translateY(0);
+  }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .ep-exercise-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+}
+
 @media (max-width: 768px) {
   .exercise-plans-main {
-    padding: 1rem;
-    padding-top: 80px;
+    padding: 20px 12px 30px;
   }
 
-  .coming-soon-content {
-    padding: 3rem 2rem;
+  .ep-header-icon {
+    width: 72px;
+    height: 72px;
   }
 
-  .coming-soon-content h1 {
+  .ep-header-icon i {
     font-size: 2rem;
   }
 
-  .coming-soon-content h2 {
-    font-size: 1.25rem;
+  .ep-title {
+    font-size: 1.75rem;
   }
 
-  .coming-soon-icon {
-    width: 100px;
-    height: 100px;
+  .ep-subtitle {
+    font-size: 0.95rem;
   }
 
-  .coming-soon-icon i {
-    font-size: 3rem;
+  .ep-category-tabs {
+    gap: 6px;
   }
 
-  .features-preview {
-    grid-template-columns: 1fr;
+  .ep-cat-tab {
+    padding: 7px 12px;
+    font-size: 0.8rem;
   }
 
-  .coming-soon-description {
+  .ep-cat-tab span {
+    display: none;
+  }
+
+  .ep-cat-tab i {
     font-size: 1rem;
-    padding: 0;
+  }
+
+  .ep-exercise-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .ep-exercise-card {
+    padding: 22px;
+  }
+
+  .ep-recommendation-banner {
+    font-size: 0.85rem;
+    padding: 10px 16px;
   }
 
   .back-btn {
     width: 100%;
     justify-content: center;
-    padding: 0.875rem 2rem;
   }
 }
+
+@media (max-width: 480px) {
+  .ep-difficulty-pills {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ep-pill-label {
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .ep-diff-pill {
+    text-align: center;
+  }
+
+  .ep-card-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* ── Detected Issues Strip ───────────────────────────────────────── */
+.ep-detected-issues {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 14px 22px;
+  background: #fff;
+  border: 1.5px solid #e8ecef;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.ep-issues-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ep-issues-label i {
+  color: #e67e22;
+}
+
+.ep-issue-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Base issue tag */
+.ep-issue-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  border: 1.5px solid transparent;
+}
+
+.ep-issue-tag i {
+  font-size: 0.72rem;
+}
+
+/* Severity colours */
+.ep-issue-tag.severe {
+  background: rgba(231, 76, 60, 0.1);
+  color: #c0392b;
+  border-color: rgba(231, 76, 60, 0.3);
+}
+
+.ep-issue-tag.moderate {
+  background: rgba(230, 126, 34, 0.1);
+  color: #d35400;
+  border-color: rgba(230, 126, 34, 0.3);
+}
+
+/* ── Gait Phase Badge ─────────────────────────────────────────────── */
+.ep-card-phase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  background: rgba(71, 154, 195, 0.08);
+  border: 1px solid rgba(71, 154, 195, 0.25);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-secondary, #479ac3);
+  width: fit-content;
+}
+
+.ep-card-phase-badge i {
+  font-size: 0.68rem;
+  opacity: 0.8;
+}
+
+/* ── Addresses Tag (recommended cards only) ──────────────────────── */
+.ep-addresses-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 7px 12px;
+  background: linear-gradient(135deg, rgba(249, 168, 37, 0.08), rgba(249, 168, 37, 0.04));
+  border: 1px solid rgba(249, 168, 37, 0.35);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #7d5a00;
+}
+
+.ep-addresses-tag i {
+  color: #f9a825;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.ep-addresses-tag span {
+  line-height: 1.4;
+}
+
+/* ── Responsive additions ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ep-detected-issues {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .ep-issues-label {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

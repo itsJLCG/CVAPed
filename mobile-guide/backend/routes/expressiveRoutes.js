@@ -23,7 +23,18 @@ router.get('/progress/all', protect, async (req, res) => {
       { $match: { mode: 'expressive' } },
       {
         $addFields: {
-          userObjectId: { $toObjectId: '$user_id' }
+          userObjectId: {
+            $convert: {
+              input: '$user_id',
+              to: 'objectId',
+              onError: null
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          userObjectId: { $ne: null }
         }
       },
       {

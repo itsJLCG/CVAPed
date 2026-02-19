@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { healthAPI } from '../services/api';
+import { healthAPI, diagnosticComparisonAPI } from '../services/api';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/apiConfig';
@@ -31,10 +33,12 @@ const HealthScreen = ({ onBack }) => {
   const [receptivePrediction, setReceptivePrediction] = useState(null);
   const [expressivePrediction, setExpressivePrediction] = useState(null);
   const [overallSpeechPrediction, setOverallSpeechPrediction] = useState(null);
+  const [facilityComparison, setFacilityComparison] = useState(null);
 
   useEffect(() => {
     fetchHealthData();
     fetchPredictions();
+    fetchFacilityComparison();
   }, []);
 
   const fetchHealthData = async () => {
@@ -178,6 +182,43 @@ const HealthScreen = ({ onBack }) => {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchHealthData();
+    await fetchFacilityComparison();
+  };
+
+  const fetchFacilityComparison = async () => {
+    try {
+      const data = await diagnosticComparisonAPI.getMyComparison();
+      if (data.success && data.has_facility_data) {
+        setFacilityComparison(data);
+      }
+    } catch (error) {
+      console.log('Facility comparison not available');
+    }
+  };
+
+  const getFacilityDeltaDisplay = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'N/A', color: '#999' };
+    if (delta > 0) return { text: `▲ +${delta}%`, color: '#10b981' };
+    if (delta < 0) return { text: `▼ ${delta}%`, color: '#ef4444' };
+    return { text: '— 0%', color: '#6b7280' };
+  };
+
+  const getFcScoreBand = (score) => {
+    if (score === null || score === undefined) return { label: 'N/A', color: '#999' };
+    if (score >= 86) return { label: 'Mastered', color: '#10b981' };
+    if (score >= 71) return { label: 'Functional', color: '#3b82f6' };
+    if (score >= 51) return { label: 'Mild', color: '#f59e0b' };
+    if (score >= 31) return { label: 'Moderate', color: '#f97316' };
+    return { label: 'Severe', color: '#ef4444' };
+  };
+
+  const getFcAlertBadge = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'No Data', color: '#999', icon: '📋' };
+    if (delta >= 20) return { text: 'Great Progress!', color: '#10b981', icon: '🎉' };
+    if (delta >= 5) return { text: 'Improving', color: '#3b82f6', icon: '📈' };
+    if (delta >= -3) return { text: 'Stable', color: '#6b7280', icon: '➡️' };
+    if (delta >= -10) return { text: 'Keep Practicing', color: '#f59e0b', icon: '💪' };
+    return { text: 'Needs Focus', color: '#ef4444', icon: '⚠️' };
   };
 
   const loadFullHistory = async () => {
@@ -890,9 +931,11 @@ const HealthScreen = ({ onBack }) => {
       <View style={styles.header}>
         <View style={styles.headerLeft} />
         <Text style={styles.headerTitle}>Health Logs</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={24} color="#C9302C" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+            <Ionicons name="refresh" size={24} color="#C9302C" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {error ? (
@@ -912,6 +955,155 @@ const HealthScreen = ({ onBack }) => {
         >
           {/* Summary Card */}
           {renderSummaryCard()}
+
+          {/* Facility vs Home Comparison Card */}
+          {facilityComparison && facilityComparison.has_facility_data && (
+            <View style={fcStyles.card}>
+              {/* Card Header */}
+              <View style={fcStyles.cardHeader}>
+                <View style={fcStyles.cardIconWrap}>
+                  <Ionicons name="git-compare-outline" size={18} color="#C9302C" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={fcStyles.cardTitle}>Facility vs. Home</Text>
+                  <Text style={fcStyles.cardSubtitle}>
+                    {facilityComparison.assessment_type?.charAt(0).toUpperCase() + facilityComparison.assessment_type?.slice(1)} diagnostic • {new Date(facilityComparison.assessment_date).toLocaleDateString()}
+                    {facilityComparison.assessor_name ? ` • by ${facilityComparison.assessor_name}` : ''}
+                  </Text>
+                </View>
+                {facilityComparison.severity_level ? (
+                  <View style={[fcStyles.severityBadge, {
+                    backgroundColor: facilityComparison.severity_level === 'severe' ? '#fee2e2' : facilityComparison.severity_level === 'moderate' ? '#fef3c7' : '#dcfce7'
+                  }]}>
+                    <Text style={[fcStyles.severityText, {
+                      color: facilityComparison.severity_level === 'severe' ? '#dc2626' : facilityComparison.severity_level === 'moderate' ? '#d97706' : '#16a34a'
+                    }]}>
+                      {facilityComparison.severity_level.toUpperCase()}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Summary Insights Row */}
+              {facilityComparison.summary_insights && Object.keys(facilityComparison.summary_insights).length > 0 && (
+                <View style={fcStyles.insightsRow}>
+                  <View style={fcStyles.insightItem}>
+                    <Text style={[fcStyles.insightValue, {
+                      color: facilityComparison.summary_insights.overall_avg_delta >= 0 ? '#10b981' : '#ef4444'
+                    }]}>
+                      {facilityComparison.summary_insights.overall_avg_delta >= 0 ? '+' : ''}{facilityComparison.summary_insights.overall_avg_delta}%
+                    </Text>
+                    <Text style={fcStyles.insightLabel}>Avg Delta</Text>
+                  </View>
+                  <View style={fcStyles.insightDivider} />
+                  <View style={fcStyles.insightItem}>
+                    <Text style={[fcStyles.insightValue, { color: '#10b981' }]}>{facilityComparison.summary_insights.improving_count}</Text>
+                    <Text style={fcStyles.insightLabel}>Improving</Text>
+                  </View>
+                  <View style={fcStyles.insightDivider} />
+                  <View style={fcStyles.insightItem}>
+                    <Text style={[fcStyles.insightValue, { color: '#6b7280' }]}>{facilityComparison.summary_insights.stable_count}</Text>
+                    <Text style={fcStyles.insightLabel}>Stable</Text>
+                  </View>
+                  <View style={fcStyles.insightDivider} />
+                  <View style={fcStyles.insightItem}>
+                    <Text style={[fcStyles.insightValue, { color: '#ef4444' }]}>{facilityComparison.summary_insights.declining_count}</Text>
+                    <Text style={fcStyles.insightLabel}>Declining</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Score Comparison Table */}
+              <View style={fcStyles.tableContainer}>
+                {/* Table Header */}
+                <View style={fcStyles.tableHeader}>
+                  <Text style={fcStyles.tableHeaderCell}>Area</Text>
+                  <Text style={fcStyles.tableHeaderCellCenter}>Facility</Text>
+                  <Text style={fcStyles.tableHeaderCellCenter}>Home</Text>
+                  <Text style={fcStyles.tableHeaderCellCenter}>Delta</Text>
+                  <Text style={fcStyles.tableHeaderCellCenter}>Status</Text>
+                </View>
+
+                {/* Articulation scores */}
+                {Object.keys({ ...(facilityComparison.facility_scores?.articulation || {}), ...(facilityComparison.home_scores?.articulation || {}) }).map(sound => {
+                  const fVal = facilityComparison.facility_scores?.articulation?.[sound];
+                  const hVal = facilityComparison.home_scores?.articulation?.[sound];
+                  const delta = facilityComparison.deltas?.articulation?.[sound];
+                  const deltaD = getFacilityDeltaDisplay(delta);
+                  const badge = getFcAlertBadge(delta);
+                  return (
+                    <View key={`fc-art-${sound}`} style={fcStyles.tableRow}>
+                      <Text style={fcStyles.tableCell}>/{sound.toUpperCase()}/</Text>
+                      <Text style={fcStyles.tableCellCenter}>{fVal != null ? `${fVal}%` : '—'}</Text>
+                      <Text style={fcStyles.tableCellCenter}>{hVal != null ? `${hVal}%` : '—'}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: deltaD.color, fontWeight: '600' }]}>{deltaD.text}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: badge.color, fontSize: 14 }]}>{badge.icon}</Text>
+                    </View>
+                  );
+                })}
+
+                {/* Fluency */}
+                {(facilityComparison.facility_scores?.fluency != null || facilityComparison.home_scores?.fluency != null) && (() => {
+                  const deltaD = getFacilityDeltaDisplay(facilityComparison.deltas?.fluency);
+                  const badge = getFcAlertBadge(facilityComparison.deltas?.fluency);
+                  return (
+                    <View style={fcStyles.tableRow}>
+                      <Text style={fcStyles.tableCell}>Fluency</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.facility_scores?.fluency != null ? `${facilityComparison.facility_scores.fluency}%` : '—'}</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.home_scores?.fluency != null ? `${facilityComparison.home_scores.fluency}%` : '—'}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: deltaD.color, fontWeight: '600' }]}>{deltaD.text}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: badge.color, fontSize: 14 }]}>{badge.icon}</Text>
+                    </View>
+                  );
+                })()}
+
+                {/* Receptive */}
+                {(facilityComparison.facility_scores?.receptive != null || facilityComparison.home_scores?.receptive != null) && (() => {
+                  const deltaD = getFacilityDeltaDisplay(facilityComparison.deltas?.receptive);
+                  const badge = getFcAlertBadge(facilityComparison.deltas?.receptive);
+                  return (
+                    <View style={fcStyles.tableRow}>
+                      <Text style={fcStyles.tableCell}>Receptive</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.facility_scores?.receptive != null ? `${facilityComparison.facility_scores.receptive}%` : '—'}</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.home_scores?.receptive != null ? `${facilityComparison.home_scores.receptive}%` : '—'}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: deltaD.color, fontWeight: '600' }]}>{deltaD.text}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: badge.color, fontSize: 14 }]}>{badge.icon}</Text>
+                    </View>
+                  );
+                })()}
+
+                {/* Expressive */}
+                {(facilityComparison.facility_scores?.expressive != null || facilityComparison.home_scores?.expressive != null) && (() => {
+                  const deltaD = getFacilityDeltaDisplay(facilityComparison.deltas?.expressive);
+                  const badge = getFcAlertBadge(facilityComparison.deltas?.expressive);
+                  return (
+                    <View style={fcStyles.tableRow}>
+                      <Text style={fcStyles.tableCell}>Expressive</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.facility_scores?.expressive != null ? `${facilityComparison.facility_scores.expressive}%` : '—'}</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.home_scores?.expressive != null ? `${facilityComparison.home_scores.expressive}%` : '—'}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: deltaD.color, fontWeight: '600' }]}>{deltaD.text}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: badge.color, fontSize: 14 }]}>{badge.icon}</Text>
+                    </View>
+                  );
+                })()}
+
+                {/* Gait */}
+                {(Object.keys(facilityComparison.facility_scores?.gait || {}).length > 0 || Object.keys(facilityComparison.home_scores?.gait || {}).length > 0) && (() => {
+                  const deltaD = getFacilityDeltaDisplay(facilityComparison.deltas?.gait);
+                  const badge = getFcAlertBadge(facilityComparison.deltas?.gait);
+                  return (
+                    <View style={[fcStyles.tableRow, { borderBottomWidth: 0 }]}>
+                      <Text style={fcStyles.tableCell}>Gait</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.facility_scores?.gait?.overall_gait != null ? `${facilityComparison.facility_scores.gait.overall_gait}%` : '—'}</Text>
+                      <Text style={fcStyles.tableCellCenter}>{facilityComparison.home_scores?.gait?.overall_gait != null ? `${facilityComparison.home_scores.gait.overall_gait}%` : '—'}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: deltaD.color, fontWeight: '600' }]}>{deltaD.text}</Text>
+                      <Text style={[fcStyles.tableCellCenter, { color: badge.color, fontSize: 14 }]}>{badge.icon}</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+            </View>
+          )}
 
           {/* Filter Buttons */}
           {renderFilterButtons()}
@@ -990,6 +1182,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+    marginTop: Platform.OS === 'android' ? -StatusBar.currentHeight : 0,
   },
   header: {
     flexDirection: 'row',
@@ -997,6 +1190,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 15,
     paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 15 : 15,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -1005,15 +1199,19 @@ const styles = StyleSheet.create({
     width: 34,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
+    textAlign: 'center',
   },
   headerRight: {
     width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   refreshButton: {
-    padding: 5,
+    padding: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -1641,6 +1839,133 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+});
+
+// ==================== FACILITY COMPARISON STYLES ====================
+const fcStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 15,
+    marginTop: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 12,
+  },
+  cardIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fee2e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  cardSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  severityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  severityText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  insightsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  insightItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  insightDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#e2e8f0',
+  },
+  insightValue: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  insightLabel: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  tableContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 4,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  tableHeaderCell: {
+    flex: 2,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tableHeaderCellCenter: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  tableCell: {
+    flex: 2,
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  tableCellCenter: {
+    flex: 1,
+    fontSize: 12,
+    color: '#334155',
+    textAlign: 'center',
   },
 });
 

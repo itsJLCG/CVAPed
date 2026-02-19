@@ -18,6 +18,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { authAPI } from '../services/api';
 import '../config/firebase';
 import { Picker } from '@react-native-picker/picker';
+import TermsAndConditionsModal from './TermsAndConditionsModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,6 +29,9 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('');
+  const [phone, setPhone] = useState('');
   
   // Therapy Selection
   const [therapyType, setTherapyType] = useState(''); // 'speech' or 'physical'
@@ -56,7 +60,9 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
   
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1); // 1: Basic Info, 2: Therapy Type, 3: Patient Type, 4: Additional Info
+  const [currentStep, setCurrentStep] = useState(1); // 1: Basic Info, 2: Therapy Type, 3: Patient Type & Register
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Handle copying parent info
   const toggleCopyParentInfo = () => {
@@ -103,8 +109,16 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
   // Validate current step
   const validateStep = () => {
     if (currentStep === 1) {
-      if (!firstName.trim() || !lastName.trim() || !email.trim() || !password || !confirmPassword) {
+      if (!firstName.trim() || !lastName.trim() || !email.trim() || !password || !confirmPassword || !phone.trim()) {
         Alert.alert('Error', 'Please fill in all fields');
+        return false;
+      }
+      if (!age || !gender) {
+        Alert.alert('Error', 'Please provide your age and gender');
+        return false;
+      }
+      if (parseInt(age) < 1 || parseInt(age) > 120) {
+        Alert.alert('Error', 'Please enter a valid age between 1 and 120');
         return false;
       }
       if (password !== confirmPassword) {
@@ -113,6 +127,10 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
       }
       if (password.length < 6) {
         Alert.alert('Error', 'Password must be at least 6 characters long');
+        return false;
+      }
+      if (!agreedToTerms) {
+        Alert.alert('Error', 'Please agree to the Terms and Conditions');
         return false;
       }
       return true;
@@ -131,51 +149,6 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
         Alert.alert('Error', 'Please select who needs therapy');
         return false;
       }
-      return true;
-    }
-    
-    if (currentStep === 4) {
-      // Speech therapy - Child
-      if (therapyType === 'speech' && patientType === 'child') {
-        if (!childFirstName.trim() || !childLastName.trim() || !childDateOfBirth.trim() || !childGender) {
-          Alert.alert('Error', 'Please fill in all child information');
-          return false;
-        }
-        if (!parentFirstName.trim() || !parentLastName.trim() || !parentEmail.trim() || !parentPhone.trim() || !relationshipWithChild.trim()) {
-          Alert.alert('Error', 'Please fill in all parent/guardian information');
-          return false;
-        }
-      }
-      
-      // Speech therapy - Myself
-      if (therapyType === 'speech' && patientType === 'myself') {
-        if (!patientGender || !patientPhone.trim()) {
-          Alert.alert('Error', 'Please fill in all required fields');
-          return false;
-        }
-      }
-      
-      // Speech therapy - Dependent
-      if (therapyType === 'speech' && patientType === 'dependent') {
-        if (!patientFirstName.trim() || !patientLastName.trim() || !childDateOfBirth.trim() || !childGender || !patientPhone.trim() || !relationshipWithChild.trim()) {
-          Alert.alert('Error', 'Please fill in all required fields');
-          return false;
-        }
-      }
-      
-      // Physical therapy
-      if (therapyType === 'physical') {
-        if (!patientFirstName.trim() || !patientLastName.trim() || !patientGender) {
-          Alert.alert('Error', 'Please fill in all patient information');
-          return false;
-        }
-        // Phone required only if not myself
-        if (patientType !== 'myself' && !patientPhone.trim()) {
-          Alert.alert('Error', 'Please provide patient phone number');
-          return false;
-        }
-      }
-      
       return true;
     }
     
@@ -204,43 +177,12 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
         lastName,
         email,
         password,
+        phone,
+        age: parseInt(age),
+        gender,
         therapyType,
         patientType,
       };
-
-      // Add conditional fields based on therapy type and patient type
-      if (therapyType === 'speech' && patientType === 'child') {
-        registrationData.childFirstName = childFirstName;
-        registrationData.childLastName = childLastName;
-        registrationData.childDateOfBirth = childDateOfBirth;
-        registrationData.childGender = childGender;
-        registrationData.parentFirstName = parentFirstName;
-        registrationData.parentLastName = parentLastName;
-        registrationData.parentEmail = parentEmail;
-        registrationData.parentPhone = parentPhone;
-        registrationData.relationshipWithChild = relationshipWithChild;
-      }
-
-      if (therapyType === 'speech' && patientType === 'myself') {
-        registrationData.patientGender = patientGender;
-        registrationData.patientPhone = patientPhone;
-      }
-
-      if (therapyType === 'speech' && patientType === 'dependent') {
-        registrationData.patientFirstName = patientFirstName;
-        registrationData.patientLastName = patientLastName;
-        registrationData.childDateOfBirth = childDateOfBirth;
-        registrationData.childGender = childGender;
-        registrationData.patientPhone = patientPhone;
-        registrationData.relationshipWithChild = relationshipWithChild;
-      }
-
-      if (therapyType === 'physical') {
-        registrationData.patientFirstName = patientFirstName;
-        registrationData.patientLastName = patientLastName;
-        registrationData.patientGender = patientGender;
-        registrationData.patientPhone = patientPhone;
-      }
 
       const response = await authAPI.register(registrationData);
       Alert.alert(
@@ -359,6 +301,36 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
             />
             <TextInput
               style={styles.input}
+              placeholder="Age"
+              placeholderTextColor="#B0B0B0"
+              value={age}
+              onChangeText={setAge}
+              keyboardType="numeric"
+              maxLength={3}
+            />
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={gender}
+                onValueChange={setGender}
+                style={styles.picker}
+              >
+                <Picker.Item label="Select Gender" value="" />
+                <Picker.Item label="Male" value="male" />
+                <Picker.Item label="Female" value="female" />
+                <Picker.Item label="Other" value="other" />
+                <Picker.Item label="Prefer not to say" value="prefer-not-to-say" />
+              </Picker>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Phone Number"
+              placeholderTextColor="#B0B0B0"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+            />
+            <TextInput
+              style={styles.input}
               placeholder="Password"
               placeholderTextColor="#B0B0B0"
               value={password}
@@ -375,6 +347,26 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
               secureTextEntry
               autoCapitalize="none"
             />
+            
+            {/* Terms and Conditions Checkbox */}
+            <View style={styles.termsContainer}>
+              <TouchableOpacity 
+                style={styles.termsCheckboxContainer}
+                onPress={() => setAgreedToTerms(!agreedToTerms)}
+              >
+                <Ionicons 
+                  name={agreedToTerms ? "checkbox" : "square-outline"} 
+                  size={24} 
+                  color={agreedToTerms ? "#C9302C" : "#D0D0D0"} 
+                />
+                <Text style={styles.termsText}>
+                  I have read and agree to the{' '}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowTermsModal(true)}>
+                <Text style={styles.termsLink}>Terms and Conditions</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         );
 
@@ -396,7 +388,7 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
                 />
                 <View style={styles.optionText}>
                   <Text style={[styles.optionTitle, therapyType === 'speech' && styles.optionTitleSelected]}>
-                    Speech Therapy
+                    Speech/Language Therapy
                   </Text>
                   <Text style={styles.optionDescription}>For pediatric speech and language development</Text>
                 </View>
@@ -490,246 +482,6 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
           </View>
         );
 
-      case 4:
-        // Speech therapy - Child
-        if (therapyType === 'speech' && patientType === 'child') {
-          return (
-            <View style={styles.formContainer}>
-              <Text style={styles.stepTitle}>Child Information</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Child's First Name"
-                placeholderTextColor="#B0B0B0"
-                value={childFirstName}
-                onChangeText={setChildFirstName}
-                autoCapitalize="words"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Child's Last Name"
-                placeholderTextColor="#B0B0B0"
-                value={childLastName}
-                onChangeText={setChildLastName}
-                autoCapitalize="words"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Date of Birth (MM/DD/YYYY)"
-                placeholderTextColor="#B0B0B0"
-                value={childDateOfBirth}
-                onChangeText={setChildDateOfBirth}
-              />
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={childGender}
-                  onValueChange={setChildGender}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Select Gender" value="" />
-                  <Picker.Item label="Male" value="male" />
-                  <Picker.Item label="Female" value="female" />
-                </Picker>
-              </View>
-
-              <Text style={[styles.stepTitle, { marginTop: 20 }]}>Parent/Guardian Information</Text>
-              
-              <TouchableOpacity 
-                style={styles.checkboxContainer}
-                onPress={toggleCopyParentInfo}
-              >
-                <Ionicons 
-                  name={copyParentInfo ? "checkbox" : "square-outline"} 
-                  size={24} 
-                  color="#C9302C" 
-                />
-                <Text style={styles.checkboxLabel}>Copy my information</Text>
-              </TouchableOpacity>
-
-              <TextInput
-                style={styles.input}
-                placeholder="Parent's First Name"
-                placeholderTextColor="#B0B0B0"
-                value={parentFirstName}
-                onChangeText={setParentFirstName}
-                autoCapitalize="words"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Parent's Last Name"
-                placeholderTextColor="#B0B0B0"
-                value={parentLastName}
-                onChangeText={setParentLastName}
-                autoCapitalize="words"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Parent's Email"
-                placeholderTextColor="#B0B0B0"
-                value={parentEmail}
-                onChangeText={setParentEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Parent's Phone"
-                placeholderTextColor="#B0B0B0"
-                value={parentPhone}
-                onChangeText={setParentPhone}
-                keyboardType="phone-pad"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Relationship (e.g., Mother, Father)"
-                placeholderTextColor="#B0B0B0"
-                value={relationshipWithChild}
-                onChangeText={setRelationshipWithChild}
-                autoCapitalize="words"
-              />
-            </View>
-          );
-        }
-
-        // Speech therapy - Myself or Dependent
-        if (therapyType === 'speech' && (patientType === 'myself' || patientType === 'dependent')) {
-          return (
-            <View style={styles.formContainer}>
-              <Text style={styles.stepTitle}>Patient Information</Text>
-              <Text style={styles.subtitle}>
-                {patientType === 'myself' 
-                  ? 'Please provide additional contact information' 
-                  : 'Please provide patient information'}
-              </Text>
-
-              {patientType === 'dependent' && (
-                <>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Patient's First Name"
-                    placeholderTextColor="#B0B0B0"
-                    value={patientFirstName}
-                    onChangeText={setPatientFirstName}
-                    autoCapitalize="words"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Patient's Last Name"
-                    placeholderTextColor="#B0B0B0"
-                    value={patientLastName}
-                    onChangeText={setPatientLastName}
-                    autoCapitalize="words"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Date of Birth (MM/DD/YYYY)"
-                    placeholderTextColor="#B0B0B0"
-                    value={childDateOfBirth}
-                    onChangeText={setChildDateOfBirth}
-                  />
-                </>
-              )}
-
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={patientType === 'dependent' ? childGender : patientGender}
-                  onValueChange={patientType === 'dependent' ? setChildGender : setPatientGender}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Select Gender" value="" />
-                  <Picker.Item label="Male" value="male" />
-                  <Picker.Item label="Female" value="female" />
-                </Picker>
-              </View>
-
-              <TextInput
-                style={styles.input}
-                placeholder="Phone Number"
-                placeholderTextColor="#B0B0B0"
-                value={patientPhone}
-                onChangeText={setPatientPhone}
-                keyboardType="phone-pad"
-              />
-
-              {patientType === 'dependent' && (
-                <>
-                  <Text style={[styles.stepTitle, { marginTop: 20 }]}>Your Information (Guardian/Caregiver)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Your Relationship to Patient"
-                    placeholderTextColor="#B0B0B0"
-                    value={relationshipWithChild}
-                    onChangeText={setRelationshipWithChild}
-                    autoCapitalize="words"
-                  />
-                </>
-              )}
-            </View>
-          );
-        }
-
-        // Physical therapy
-        if (therapyType === 'physical') {
-          return (
-            <View style={styles.formContainer}>
-              <Text style={styles.stepTitle}>Patient Information</Text>
-              
-              {patientType !== 'myself' && (
-                <TouchableOpacity 
-                  style={styles.checkboxContainer}
-                  onPress={toggleCopyPatientInfo}
-                >
-                  <Ionicons 
-                    name={copyPatientInfo ? "checkbox" : "square-outline"} 
-                    size={24} 
-                    color="#C9302C" 
-                  />
-                  <Text style={styles.checkboxLabel}>Copy my information</Text>
-                </TouchableOpacity>
-              )}
-
-              <TextInput
-                style={styles.input}
-                placeholder="Patient's First Name"
-                placeholderTextColor="#B0B0B0"
-                value={patientFirstName}
-                onChangeText={setPatientFirstName}
-                autoCapitalize="words"
-                editable={patientType !== 'myself'}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Patient's Last Name"
-                placeholderTextColor="#B0B0B0"
-                value={patientLastName}
-                onChangeText={setPatientLastName}
-                autoCapitalize="words"
-                editable={patientType !== 'myself'}
-              />
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={patientGender}
-                  onValueChange={setPatientGender}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Select Gender" value="" />
-                  <Picker.Item label="Male" value="male" />
-                  <Picker.Item label="Female" value="female" />
-                </Picker>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Patient's Phone Number"
-                placeholderTextColor="#B0B0B0"
-                value={patientPhone}
-                onChangeText={setPatientPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-          );
-        }
-
-        return null;
-
       default:
         return null;
     }
@@ -761,7 +513,7 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
 
           {/* Progress Indicator */}
           <View style={styles.progressContainer}>
-            {[1, 2, 3, 4].map((step) => (
+            {[1, 2, 3].map((step) => (
               <View
                 key={step}
                 style={[
@@ -783,14 +535,14 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
               </TouchableOpacity>
             )}
 
-            {currentStep < 4 && (
+            {currentStep < 3 && (
               <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
                 <Text style={styles.nextButtonText}>Next</Text>
                 <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             )}
 
-            {currentStep === 4 && (
+            {currentStep === 3 && (
               <TouchableOpacity 
                 style={[styles.registerButton, loading && styles.registerButtonDisabled]} 
                 onPress={handleRegister}
@@ -837,6 +589,12 @@ const RegisterScreen = ({ onLogin, onRegisterSuccess, onGoogleSignIn }) => {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/* Terms and Conditions Modal */}
+        <TermsAndConditionsModal 
+          isOpen={showTermsModal} 
+          onClose={() => setShowTermsModal(false)} 
+        />
       </KeyboardAvoidingView>
   );
 };
@@ -1012,7 +770,8 @@ const styles = StyleSheet.create({
   },
   registerButton: {
     backgroundColor: '#C9302C',
-    paddingVertical: 18,
+    paddingVertical: 15,
+    paddingHorizontal: 25,
     borderRadius: 10,
     alignItems: 'center',
     flex: 1,
@@ -1022,9 +781,8 @@ const styles = StyleSheet.create({
   },
   registerButtonText: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
-    letterSpacing: 1,
   },
   loginContainer: {
     flexDirection: 'row',
@@ -1080,6 +838,27 @@ const styles = StyleSheet.create({
     color: '#4285F4',
     fontSize: 16,
     fontWeight: '600',
+  },
+  termsContainer: {
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  termsCheckboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  termsText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#333',
+  },
+  termsLink: {
+    fontSize: 14,
+    color: '#C9302C',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+    marginLeft: 34,
   },
 });
 

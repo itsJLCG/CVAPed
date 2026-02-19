@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { images, hasImage } from '../assets/images';
+import SuccessStoriesSection from '../components/SuccessStoriesSection';
 import './Landing.css';
 
 function Landing() {
@@ -280,6 +281,9 @@ function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Success Stories Section */}
+      <SuccessStoriesSection />
 
       {/* Footer */}
       <footer className="landing-footer">

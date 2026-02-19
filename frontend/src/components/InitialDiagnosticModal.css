@@ -1,0 +1,222 @@
+    /* Initial Diagnostic Modal Overlay */
+.diagnostic-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: diagnosticFadeIn 0.3s ease;
+}
+
+@keyframes diagnosticFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal Content Container */
+.diagnostic-modal-content {
+  background: white;
+  border-radius: 16px;
+  max-width: 520px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: diagnosticSlideUp 0.3s ease;
+}
+
+@keyframes diagnosticSlideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Modal Header */
+.diagnostic-modal-header {
+  padding: 24px 32px;
+  border-bottom: 2px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 16px 16px 0 0;
+}
+
+.diagnostic-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.diagnostic-modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #6b7280;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.diagnostic-modal-close:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  transform: scale(1.1);
+}
+
+/* Modal Body */
+.diagnostic-modal-body {
+  padding: 32px;
+  text-align: center;
+}
+
+.diagnostic-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+}
+
+.diagnostic-question {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+
+.diagnostic-description {
+  font-size: 0.95rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Modal Footer */
+.diagnostic-modal-footer {
+  padding: 20px 32px;
+  border-top: 2px solid #e5e7eb;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  background: #f9fafb;
+  border-radius: 0 0 16px 16px;
+}
+
+.btn-diagnostic {
+  padding: 12px 32px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 140px;
+}
+
+.btn-diagnostic:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-diagnostic-yes {
+  background: linear-gradient(135deg, #ce3630 0%, #b52e29 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(206, 54, 48, 0.2);
+}
+
+.btn-diagnostic-yes:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b52e29 0%, #9a2621 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.3);
+}
+
+.btn-diagnostic-yes:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-diagnostic-no {
+  background: white;
+  color: #374151;
+  border: 2px solid #d1d5db;
+}
+
+.btn-diagnostic-no:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-diagnostic-no:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .diagnostic-modal-overlay {
+    padding: 10px;
+  }
+
+  .diagnostic-modal-content {
+    border-radius: 12px;
+  }
+
+  .diagnostic-modal-header {
+    padding: 20px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .diagnostic-modal-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .diagnostic-modal-body {
+    padding: 24px 20px;
+  }
+
+  .diagnostic-icon {
+    font-size: 2.5rem;
+  }
+
+  .diagnostic-question {
+    font-size: 1.05rem;
+  }
+
+  .diagnostic-description {
+    font-size: 0.9rem;
+  }
+
+  .diagnostic-modal-footer {
+    padding: 16px 20px;
+    flex-direction: column;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .btn-diagnostic {
+    width: 100%;
+    padding: 14px;
+  }
+}

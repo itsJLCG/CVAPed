@@ -34,31 +34,17 @@ function SpeechTherapy({ onLogout }) {
       id: 'language',
       icon: '💬',
       title: 'Language Therapy',
-      subtitle: 'Receptive & Expressive Language',
-      description: 'Build vocabulary and communication skills through engaging language activities.',
+      subtitle: 'Receptive, Expressive & Fluency',
+      description: 'Build vocabulary, communication skills, and speech fluency through engaging language activities covering key domains:',
       features: [
-        'Interactive exercises',
-        'Grammar & comprehension',
-        'Smart evaluation system'
+        'F - Fluency: Speech flow and rhythm',
+        'N - Naming: Word retrieval and vocabulary',
+        'C - Comprehension: Understanding language',
+        'R - Repetition: Speech pattern practice'
       ],
       benefits: 'Enhanced communication',
       color: '#479ac3',
       gradient: 'linear-gradient(135deg, #479ac3 0%, #74b9ff 100%)'
-    },
-    {
-      id: 'fluency',
-      icon: '⚡',
-      title: 'Fluency Therapy',
-      subtitle: 'Speech Flow & Rhythm',
-      description: 'Improve speech fluency and reduce stuttering with proven therapeutic techniques.',
-      features: [
-        'Speech rate monitoring',
-        'Real-time feedback',
-        'Pattern analysis'
-      ],
-      benefits: 'Smoother speech flow',
-      color: '#e8b04e',
-      gradient: 'linear-gradient(135deg, #e8b04e 0%, #ffd93d 100%)'
     }
   ];
 

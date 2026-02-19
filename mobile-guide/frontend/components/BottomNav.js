@@ -77,6 +77,20 @@ const BottomNav = ({ activeTab, onTabPress }) => {
 
       <TouchableOpacity 
         style={styles.navItem}
+        onPress={() => onTabPress('schedule')}
+      >
+        <Ionicons 
+          name={activeTab === 'schedule' ? 'calendar' : 'calendar-outline'} 
+          size={26} 
+          color={activeTab === 'schedule' ? '#C9302C' : '#666'} 
+        />
+        <Text style={[styles.navText, activeTab === 'schedule' && styles.navTextActive]}>
+          Schedule
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.navItem}
         onPress={() => onTabPress('profile')}
       >
         <Ionicons 

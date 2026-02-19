@@ -11,7 +11,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import ArticulationTherapyScreen from './speech/ArticulationTherapyScreen';
 import LanguageTherapyScreen from './speech/LanguageTherapyScreen';
-import FluencyTherapyScreen from './speech/FluencyTherapyScreen';
 
 const { width } = Dimensions.get('window');
 
@@ -23,7 +22,6 @@ const SpeechTherapyScreen = ({ onBack }) => {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const card1Anim = useRef(new Animated.Value(0)).current;
   const card2Anim = useRef(new Animated.Value(0)).current;
-  const card3Anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Fade in and slide up animation for welcome section
@@ -52,11 +50,6 @@ const SpeechTherapyScreen = ({ onBack }) => {
         duration: 500,
         useNativeDriver: true,
       }),
-      Animated.timing(card3Anim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
     ]).start();
   }, []);
 
@@ -74,9 +67,6 @@ const SpeechTherapyScreen = ({ onBack }) => {
   }
   if (selectedTherapy === 'language') {
     return <LanguageTherapyScreen onBack={handleBackFromTherapy} />;
-  }
-  if (selectedTherapy === 'fluency') {
-    return <FluencyTherapyScreen onBack={handleBackFromTherapy} />;
   }
 
   const therapyTypes = [
@@ -101,31 +91,15 @@ const SpeechTherapyScreen = ({ onBack }) => {
       icon: 'chatbubbles',
       title: 'Language Therapy',
       subtitle: 'Receptive & Expressive Language',
-      description: 'Comprehensive language intervention program designed to support receptive development, comprehension skills, and expressive language use.',
+      description: 'Build vocabulary, comprehension, and communication skills through engaging language activities covering receptive and expressive language domains.',
       color: '#4ECDC4',
       type: 'language',
       animRef: card2Anim,
       features: [
-        'Receptive language assessment',
-        'Expressive language evaluation',
-        'Grammar and syntax exercises',
-        'Age-appropriate progression',
-      ],
-    },
-    {
-      id: 3,
-      icon: 'volume-high',
-      title: 'Fluency Therapy',
-      subtitle: 'Speech Flow & Rate Control',
-      description: 'Evidence-based fluency intervention program designed to address stuttering behaviors and improve speech flow through systematic techniques.',
-      color: '#F4A460',
-      type: 'fluency',
-      animRef: card3Anim,
-      features: [
-        'Structured speaking tasks',
-        'Speech rate analysis (WPM)',
-        'Dysfluency identification',
-        'Real-time biofeedback',
+        'Receptive Language: Understanding language',
+        'Expressive Language: Communication & expression',
+        'Vocabulary building and word retrieval',
+        'Sentence formation and comprehension',
       ],
     },
   ];
@@ -184,7 +158,7 @@ const SpeechTherapyScreen = ({ onBack }) => {
           </View>
           
           <Text style={styles.infoDescription}>
-            Select from our three specialized therapy programs:
+            Select from our two specialized therapy programs:
           </Text>
 
           <View style={styles.benefitsList}>
@@ -195,10 +169,6 @@ const SpeechTherapyScreen = ({ onBack }) => {
             <View style={styles.benefitItem}>
               <Ionicons name="chatbubbles" size={20} color="#4ECDC4" />
               <Text style={styles.benefitText}>Language for comprehension & expression</Text>
-            </View>
-            <View style={styles.benefitItem}>
-              <Ionicons name="volume-high" size={20} color="#F4A460" />
-              <Text style={styles.benefitText}>Fluency for speech flow control</Text>
             </View>
           </View>
         </Animated.View>

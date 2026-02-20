@@ -270,18 +270,18 @@ function GaitAnalysis({ onLogout }) {
               {renderMPUTooltip(sensorData.RIGHT_KNEE)}
             </div>
             <div
-              className={`sensor-indicator sensor-left-ankle ${hasMPUData(sensorData.LEFT_TOE) ? 'active' : ''}`}
+              className={`sensor-indicator sensor-left-ankle ${hasMPUData(sensorData.LEFT_ANKLE) ? 'active' : ''}`}
               title="Left Ankle"
             >
               LA
-              {renderMPUTooltip(sensorData.LEFT_TOE)}
+              {renderMPUTooltip(sensorData.LEFT_ANKLE)}
             </div>
             <div
-              className={`sensor-indicator sensor-right-ankle ${hasMPUData(sensorData.RIGHT_TOE) ? 'active' : ''}`}
+              className={`sensor-indicator sensor-right-ankle ${hasMPUData(sensorData.RIGHT_ANKLE) ? 'active' : ''}`}
               title="Right Ankle"
             >
               RA
-              {renderMPUTooltip(sensorData.RIGHT_TOE)}
+              {renderMPUTooltip(sensorData.RIGHT_ANKLE)}
             </div>
           </div>
           <div className="legend">

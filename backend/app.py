@@ -10,6 +10,9 @@ import os
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, auth
+import socket
+import threading
+import atexit
 
 # Import fluency CRUD blueprint
 from fluency_crud import fluency_bp, init_fluency_crud
@@ -2994,27 +2997,23 @@ latest_wearable_data = {}
 def wearable_data():
     """
     Endpoint for wearable gait analysis sensor data
-    POST: Receive sensor data from hardware device (saves to DB)
+    POST: Receive combined sensor data from ESP-NOW master device
     GET: Retrieve latest sensor data for web interface
     """
     global latest_wearable_data
     
     if request.method == 'POST':
-        # Receive data from wearable sensors
+        # Receive data from wearable sensors (already synchronized via ESP-NOW)
         try:
             latest_wearable_data = request.json
             # Log received data for debugging
-            print("\n" + "="*30)
-            print(f"WEARABLE DATA RECEIVED AT: {datetime.datetime.now().strftime('%H:%M:%S')}")
-            print(latest_wearable_data)
-            print("="*30 + "\n")
+            print("\n" + "="*50)
+            print(f"📡 SYNCHRONIZED DATA RECEIVED: {datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+            print(f"   Device: {latest_wearable_data.get('device_id', 'UNKNOWN')}")
+            print("="*50 + "\n")
             
             # NOTE: NOT saving to MongoDB to prevent database from filling up
             # Only analyzed gait sessions are saved (in gaitprogresses collection)
-            # If you need raw sensor logs, uncomment below:
-            # wearable_data_collection = db['wearable_sensor_data']
-            # sensor_document = {'timestamp': utc_now(), 'data': latest_wearable_data}
-            # wearable_data_collection.insert_one(sensor_document)
             
             return jsonify({"status": "ok"}), 200
         except Exception as e:
@@ -3238,7 +3237,71 @@ def get_physical_therapy_patients(current_user):
         }), 500
 
 
+# ================= mDNS SERVICE INTEGRATION =================
+def start_mdns_service():
+    """Start mDNS service in background thread to advertise backend as cvacare.local"""
+    try:
+        from zeroconf import ServiceInfo, Zeroconf
+        
+        # Get local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        
+        print("\n" + "="*60)
+        print("🌐 mDNS Service Starting...")
+        print("="*60)
+        print(f"📍 Local IP: {local_ip}")
+        print(f"🔗 Hostname: cvacare.local")
+        print(f"📡 ESP32 can connect using: http://cvacare.local:5000")
+        print("="*60 + "\n")
+        
+        # Create Zeroconf instance
+        zeroconf = Zeroconf()
+        
+        # Register the service
+        service_type = "_http._tcp.local."
+        info = ServiceInfo(
+            service_type,
+            f"CVACare Backend.{service_type}",
+            addresses=[socket.inet_aton(local_ip)],
+            port=5000,
+            properties={'path': '/api/wearable/data'},
+            server="cvacare.local."
+        )
+        
+        zeroconf.register_service(info)
+        
+        # Cleanup on exit
+        def cleanup():
+            try:
+                zeroconf.unregister_service(info)
+                zeroconf.close()
+                print("\n🛑 mDNS service stopped")
+            except:
+                pass
+        
+        atexit.register(cleanup)
+        return zeroconf, info
+        
+    except ImportError:
+        print("\n⚠️  WARNING: 'zeroconf' not installed - mDNS disabled")
+        print("   ESP32 will need to use IP address instead of hostname")
+        print("   To enable mDNS: pip install zeroconf\n")
+        return None, None
+    except Exception as e:
+        print(f"\n⚠️  mDNS service failed to start: {e}")
+        print("   ESP32 will need to use IP address instead\n")
+        return None, None
+
+
 if __name__ == '__main__':
+    # Start mDNS service in background
+    mdns_thread = threading.Thread(target=start_mdns_service, daemon=True)
+    mdns_thread.start()
+    
+    # Start Flask app
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
     app.run(host='0.0.0.0', debug=debug, port=port)

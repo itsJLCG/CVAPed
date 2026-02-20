@@ -27,6 +27,8 @@ function GaitRecording({ onLogout }) {
     RIGHT_WAIST: [],
     LEFT_KNEE: [],
     RIGHT_KNEE: [],
+    LEFT_ANKLE: [],
+    RIGHT_ANKLE: [],
     LEFT_TOE: [],
     RIGHT_TOE: []
   });
@@ -109,6 +111,8 @@ function GaitRecording({ onLogout }) {
       'RIGHT_WAIST': 'RIGHT_WAIST',
       'LEFT_KNEE': 'LEFT_KNEE',
       'RIGHT_KNEE': 'RIGHT_KNEE',
+      'LEFT_ANKLE': 'LEFT_ANKLE',
+      'RIGHT_ANKLE': 'RIGHT_ANKLE',
       'LEFT_TOE': 'LEFT_TOE',
       'RIGHT_TOE': 'RIGHT_TOE'
     };
@@ -130,13 +134,23 @@ function GaitRecording({ onLogout }) {
     });
     
     // Log buffering progress every 20 samples
-    if (sensorBuffer.current.LEFT_WAIST.length % 20 === 0) {
-      console.log(`📊 Buffered ${sensorBuffer.current.LEFT_WAIST.length} samples, ${bufferedCount} sensors`);
+    const totalBuffered = sensorBuffer.current.LEFT_KNEE?.length || 0;
+    if (totalBuffered > 0 && totalBuffered % 20 === 0) {
+      console.log(`📊 Buffered ${totalBuffered} samples, ${bufferedCount} sensors active`);
     }
     
-    // Buffer FSR data - handle LEFT_FOOT_FSR array format
-    if (data.LEFT_FOOT_FSR && Array.isArray(data.LEFT_FOOT_FSR)) {
-      const [heel, mid, toe] = data.LEFT_FOOT_FSR;
+    // Buffer FSR data - handle both object and array formats
+    if (data.LEFT_FOOT_FSR) {
+      let heel, mid, toe;
+      if (Array.isArray(data.LEFT_FOOT_FSR)) {
+        // Array format: [toe, mid, heel]
+        [toe, mid, heel] = data.LEFT_FOOT_FSR;
+      } else if (typeof data.LEFT_FOOT_FSR === 'object') {
+        // Object format: {heel, mid, toe}
+        heel = data.LEFT_FOOT_FSR.heel;
+        mid = data.LEFT_FOOT_FSR.mid;
+        toe = data.LEFT_FOOT_FSR.toe;
+      }
       if (fsrBuffer.current.LEFT_HEEL) fsrBuffer.current.LEFT_HEEL.push(heel || 0);
       if (fsrBuffer.current.LEFT_MID) fsrBuffer.current.LEFT_MID.push(mid || 0);
       if (fsrBuffer.current.LEFT_TOE) fsrBuffer.current.LEFT_TOE.push(toe || 0);
@@ -165,9 +179,18 @@ function GaitRecording({ onLogout }) {
       }
     }
     
-    // RIGHT foot FSR data
-    if (data.RIGHT_FOOT_FSR && Array.isArray(data.RIGHT_FOOT_FSR)) {
-      const [heel, mid, toe] = data.RIGHT_FOOT_FSR;
+    // RIGHT foot FSR data - handle both object and array formats
+    if (data.RIGHT_FOOT_FSR) {
+      let heel, mid, toe;
+      if (Array.isArray(data.RIGHT_FOOT_FSR)) {
+        // Array format: [toe, mid, heel]
+        [toe, mid, heel] = data.RIGHT_FOOT_FSR;
+      } else if (typeof data.RIGHT_FOOT_FSR === 'object') {
+        // Object format: {heel, mid, toe}
+        heel = data.RIGHT_FOOT_FSR.heel;
+        mid = data.RIGHT_FOOT_FSR.mid;
+        toe = data.RIGHT_FOOT_FSR.toe;
+      }
       if (fsrBuffer.current.RIGHT_HEEL) fsrBuffer.current.RIGHT_HEEL.push(heel || 0);
       if (fsrBuffer.current.RIGHT_MID) fsrBuffer.current.RIGHT_MID.push(mid || 0);
       if (fsrBuffer.current.RIGHT_TOE) fsrBuffer.current.RIGHT_TOE.push(toe || 0);
@@ -244,8 +267,9 @@ function GaitRecording({ onLogout }) {
       return;
     }
     
-    // Check if we have enough data
-    const totalDataPoints = sensorBuffer.current.LEFT_WAIST.length;
+    // Check if we have enough data - use first available sensor
+    const activeSensors = Object.keys(sensorBuffer.current).filter(key => sensorBuffer.current[key].length > 0);
+    const totalDataPoints = activeSensors.length > 0 ? sensorBuffer.current[activeSensors[0]].length : 0;
     console.log('\n' + '='.repeat(60));
     console.log('📊 RECORDING STOPPED - DATA SUMMARY');
     console.log('='.repeat(60));
@@ -385,9 +409,10 @@ function GaitRecording({ onLogout }) {
                 <div className="setup-info">
                   <h3>Sensor Placement:</h3>
                   <ul>
-                    <li><strong>Left Waist & Right Waist</strong> - Hip/waist area</li>
+                    <li><strong>Left Waist & Right Waist</strong> - Hip/waist area (optional)</li>
                     <li><strong>Left Knee & Right Knee</strong> - Knee joints</li>
-                    <li><strong>Left Toe & Right Toe</strong> - Ankle/foot area</li>
+                    <li><strong>Left Ankle & Right Ankle</strong> - Ankle area</li>
+                    <li><strong>Left Toe & Right Toe</strong> - Toe/foot area (optional)</li>
                     <li><strong>FSR Sensors</strong> - 3 per foot (heel, mid, toe)</li>
                   </ul>
                 </div>

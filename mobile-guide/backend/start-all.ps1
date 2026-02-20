@@ -57,7 +57,8 @@ Write-Host "[1/5] Checking Gait Analysis Python environment..." -ForegroundColor
 if (-not (Test-Path "gait-analysis\venv")) {
     Write-Host "[WARN] Gait venv not found. Creating it..." -ForegroundColor Yellow
     python -m venv gait-analysis\venv
-    & gait-analysis\venv\Scripts\Activate.ps1
+    $activatePath = Join-Path $PSScriptRoot "gait-analysis\venv\Scripts\Activate.ps1"
+    . $activatePath
     pip install --upgrade pip
     pip install -r gait-analysis\requirements.txt
     Write-Host "[OK] Gait venv created and dependencies installed" -ForegroundColor Green
@@ -71,7 +72,8 @@ Write-Host "[2/5] Checking Therapy Exercises Python environment..." -ForegroundC
 if (-not (Test-Path "therapy-exercises\venv")) {
     Write-Host "[WARN] Therapy venv not found. Creating it..." -ForegroundColor Yellow
     python -m venv therapy-exercises\venv
-    & therapy-exercises\venv\Scripts\Activate.ps1
+    $activatePath = Join-Path $PSScriptRoot "therapy-exercises\venv\Scripts\Activate.ps1"
+    . $activatePath
     pip install --upgrade pip
     pip install -r therapy-exercises\requirements.txt
     Write-Host "[OK] Therapy venv created and dependencies installed" -ForegroundColor Green
@@ -79,7 +81,8 @@ if (-not (Test-Path "therapy-exercises\venv")) {
 } else {
     Write-Host "[OK] Therapy venv found" -ForegroundColor Green
     # Check if XGBoost ML dependencies are installed
-    & therapy-exercises\venv\Scripts\Activate.ps1
+    $activatePath = Join-Path $PSScriptRoot "therapy-exercises\venv\Scripts\Activate.ps1"
+    . $activatePath
     $xgboostCheck = & python -c "import xgboost; print('ok')" 2>&1
     if ($xgboostCheck -notmatch "ok") {
         Write-Host "[WARN] XGBoost ML dependencies missing. Installing..." -ForegroundColor Yellow

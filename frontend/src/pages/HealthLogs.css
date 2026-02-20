@@ -773,3 +773,512 @@
     font-size: 1.2rem;
   }
 }
+
+/* ===== Facility vs At-Home Comparison Card ===== */
+.fc-comparison-card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 28px;
+  margin-bottom: 24px;
+  border: 1px solid #e8ecf1;
+  transition: box-shadow 0.3s ease;
+}
+
+.fc-comparison-card:hover {
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.12);
+}
+
+.fc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f2f5;
+}
+
+.fc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fc-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.fc-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 4px 0;
+}
+
+.fc-subtitle {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Severity Badge */
+.fc-severity-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.fc-severity-mild {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.fc-severity-moderate {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fc-severity-severe {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* Summary Insights Banner */
+.fc-insights-banner {
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #f8fafc, #eef2ff);
+  border-radius: 12px;
+  border: 1px solid #e0e7ff;
+}
+
+.fc-insights-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.fc-insight-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* Comparison Table */
+.fc-table-wrapper {
+  margin-bottom: 20px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e8ecf1;
+}
+
+.fc-comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fc-comparison-table thead th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 700;
+  color: #374151;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fc-comparison-table tbody tr {
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s;
+}
+
+.fc-comparison-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.fc-table-metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.fc-table-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: white;
+  flex-shrink: 0;
+}
+
+.fc-table-score {
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.fc-table-facility {
+  color: #3b82f6;
+}
+
+.fc-table-home {
+  color: #10b981;
+}
+
+.fc-table-band {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  margin-left: 6px;
+}
+
+.fc-band-mastered {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.fc-band-functional {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.fc-band-mild {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fc-band-moderate {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.fc-band-severe {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.fc-band-na {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+.fc-table-delta {
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.fc-table-status {
+  padding: 12px 14px;
+}
+
+/* Alert Badges for Patient View */
+.fc-alert-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fc-alert-great {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.fc-alert-good {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.fc-alert-stable {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.fc-alert-caution {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fc-alert-warning {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.fc-alert-nodata {
+  background: #f3f4f6;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Bar Chart Section */
+.fc-bar-chart-section {
+  margin-bottom: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.fc-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 16px 0;
+}
+
+.fc-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fc-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fc-bar-label {
+  width: 80px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #374151;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.fc-bar-tracks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fc-bar-track {
+  height: 18px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.fc-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  transition: width 0.6s ease;
+  min-width: fit-content;
+}
+
+.fc-bar-facility {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.fc-bar-home {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.fc-bar-value {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.fc-bar-legend {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.fc-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.fc-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.fc-legend-facility {
+  background: #3b82f6;
+}
+
+.fc-legend-home {
+  background: #22c55e;
+}
+
+/* Notes Section */
+.fc-notes-section {
+  margin-bottom: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.fc-notes-text {
+  color: #374151;
+  line-height: 1.6;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  background: #f9fafb;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #e8ecf1;
+}
+
+/* Focus Areas Section */
+.fc-focus-section {
+  margin-bottom: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.fc-focus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fc-focus-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border-radius: 8px;
+  border: 1px solid #fef3c7;
+  color: #92400e;
+  font-size: 0.88rem;
+}
+
+.fc-focus-bullet {
+  font-size: 1.2rem;
+  color: #f59e0b;
+  font-weight: bold;
+  line-height: 1.2;
+}
+
+.fc-footer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.fc-footer-text {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Responsive - Facility Comparison */
+@media (max-width: 768px) {
+  .fc-comparison-card {
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+
+  .fc-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fc-header-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+
+  .fc-title {
+    font-size: 1.1rem;
+  }
+
+  .fc-comparison-table {
+    font-size: 0.82rem;
+  }
+
+  .fc-table-metric {
+    padding: 8px 10px;
+  }
+
+  .fc-table-score,
+  .fc-table-delta,
+  .fc-table-status {
+    padding: 8px 10px;
+  }
+
+  .fc-table-band {
+    display: none;
+  }
+
+  .fc-comparison-table thead th:nth-child(5),
+  .fc-comparison-table tbody td:nth-child(5) {
+    display: none;
+  }
+
+  .fc-bar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fc-bar-label {
+    text-align: left;
+    width: auto;
+  }
+
+  .fc-insights-stats {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .fc-comparison-table thead th:nth-child(5),
+  .fc-comparison-table tbody td:nth-child(5) {
+    display: none;
+  }
+}

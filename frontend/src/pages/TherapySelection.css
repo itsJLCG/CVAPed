@@ -380,6 +380,99 @@
   opacity: 0.9;
 }
 
+/* Diagnostic Guidance Banner */
+.diagnostic-banner {
+  max-width: 800px;
+  margin: 20px auto 10px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid #93c5fd;
+  border-left: 4px solid #3b82f6;
+  border-radius: 12px;
+  padding: 20px 24px;
+  animation: bannerSlideDown 0.4s ease;
+}
+
+@keyframes bannerSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.diagnostic-banner-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.diagnostic-banner-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.diagnostic-banner-text {
+  flex: 1;
+  font-size: 0.95rem;
+  color: #1e3a5f;
+  line-height: 1.6;
+}
+
+.diagnostic-banner-text strong {
+  color: #1e40af;
+}
+
+.diagnostic-banner-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.diagnostic-banner-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1f2937;
+}
+
+.diagnostic-banner-btn {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 10px 22px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.diagnostic-banner-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.diagnostic-banner-btn:active {
+  transform: translateY(0);
+}
+
 /* Responsive Design */
 @media (max-width: 1024px) {
   .therapy-options {
@@ -486,5 +579,20 @@
 
   .therapy-description p {
     font-size: 0.95rem;
+  }
+
+  .diagnostic-banner {
+    padding: 16px 18px;
+    margin: 15px auto 5px;
+  }
+
+  .diagnostic-banner-text {
+    font-size: 0.9rem;
+  }
+
+  .diagnostic-banner-btn {
+    width: 100%;
+    text-align: center;
+    padding: 12px;
   }
 }

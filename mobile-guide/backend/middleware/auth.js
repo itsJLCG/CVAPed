@@ -56,3 +56,17 @@ exports.authorize = (...roles) => {
     next();
   };
 };
+
+// Alias for protect (used by some routes)
+exports.authenticateToken = exports.protect;
+
+// Middleware to check if user is a therapist
+exports.therapistOnly = (req, res, next) => {
+  if (req.user.role !== 'therapist' && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Therapist privileges required.'
+    });
+  }
+  next();
+};

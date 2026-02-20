@@ -134,6 +134,14 @@ export const authService = {
     }
     return response.data;
   },
+
+  updateDiagnosticStatus: async (hasInitialDiagnostic) => {
+    const response = await api.put('/user/diagnostic-status', { hasInitialDiagnostic });
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
 };
 
 // Articulation Progress API
@@ -221,6 +229,11 @@ export const therapistService = {
 
   getPhysicalPatients: async () => {
     const response = await api.get('/therapist/physical/patients');
+    return response.data;
+  },
+
+  getReports: async () => {
+    const response = await api.get('/therapist/reports');
     return response.data;
   },
 };
@@ -580,6 +593,183 @@ export const predictionService = {
     const response = await api.get('/predictions/overall');
     return response.data;
   }
+};
+
+// Success Stories Service
+export const successStoryService = {
+  // Get all success stories
+  getAll: async () => {
+    const response = await api.get('/success-stories');
+    return response.data;
+  },
+
+  // Create a new success story
+  create: async (formData) => {
+    const response = await api.post('/success-stories', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Update an existing success story
+  update: async (storyId, formData) => {
+    const response = await api.put(`/success-stories/${storyId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Delete a success story
+  delete: async (storyId) => {
+    const response = await api.delete(`/success-stories/${storyId}`);
+    return response.data;
+  },
+
+  // Remove an image from a success story
+  removeImage: async (storyId, imagePath) => {
+    const response = await api.post(`/success-stories/${storyId}/remove-image`, {
+      imagePath,
+    });
+    return response.data;
+  },
+};
+
+// Appointment Service
+export const appointmentService = {
+  // Therapist Endpoints
+  therapist: {
+    // Get all appointments for therapist
+    getAppointments: async (filters = {}) => {
+      const params = new URLSearchParams();
+      if (filters.date) params.append('date', filters.date);
+      if (filters.status) params.append('status', filters.status);
+      if (filters.therapy_type) params.append('therapy_type', filters.therapy_type);
+      
+      const response = await api.get(`/therapist/appointments?${params.toString()}`);
+      return response.data;
+    },
+
+    // Get unassigned appointments
+    getUnassignedAppointments: async (therapyType = null) => {
+      const params = therapyType ? `?therapy_type=${therapyType}` : '';
+      const response = await api.get(`/therapist/appointments/unassigned${params}`);
+      return response.data;
+    },
+
+    // Assign therapist to appointment
+    assignToAppointment: async (appointmentId) => {
+      const response = await api.put(`/therapist/appointments/${appointmentId}/assign`);
+      return response.data;
+    },
+
+    // Create a new appointment
+    createAppointment: async (appointmentData) => {
+      const response = await api.post('/therapist/appointments', appointmentData);
+      return response.data;
+    },
+
+    // Update an appointment
+    updateAppointment: async (appointmentId, updateData) => {
+      const response = await api.put(`/therapist/appointments/${appointmentId}`, updateData);
+      return response.data;
+    },
+
+    // Cancel/delete an appointment
+    cancelAppointment: async (appointmentId) => {
+      const response = await api.delete(`/therapist/appointments/${appointmentId}`);
+      return response.data;
+    },
+
+    // Search patients by name
+    searchPatients: async (query, limit = 10) => {
+      const response = await api.get(`/therapist/patients/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+      return response.data;
+    },
+  },
+
+  // Patient Endpoints
+  patient: {
+    // Get all appointments for patient
+    getAppointments: async (status = null) => {
+      const params = status ? `?status=${status}` : '';
+      const response = await api.get(`/patient/appointments${params}`);
+      return response.data;
+    },
+
+    // Book a new appointment
+    bookAppointment: async (appointmentData) => {
+      const response = await api.post('/patient/appointments/book', appointmentData);
+      return response.data;
+    },
+
+    // Cancel an appointment
+    cancelAppointment: async (appointmentId, reason = '') => {
+      const response = await api.put(`/patient/appointments/${appointmentId}/cancel`, { reason });
+      return response.data;
+    },
+  },
+
+  // Shared Endpoints
+  getAvailableTherapists: async (therapyType = null) => {
+    const params = therapyType ? `?therapy_type=${therapyType}` : '';
+    const response = await api.get(`/therapists/available${params}`);
+    return response.data;
+  },
+
+  checkAvailability: async (therapistId, date) => {
+    const response = await api.get(`/appointments/availability?therapist_id=${therapistId}&date=${date}`);
+    return response.data;
+  },
+};
+
+// Diagnostic Comparison Service
+export const diagnosticComparisonService = {
+  // Therapist: Create a facility diagnostic for a patient
+  createDiagnostic: async (diagnosticData) => {
+    const response = await api.post('/therapist/diagnostics', diagnosticData);
+    return response.data;
+  },
+
+  // Therapist: Get all facility diagnostics for a patient
+  getDiagnostics: async (userId) => {
+    const response = await api.get(`/therapist/diagnostics/${userId}`);
+    return response.data;
+  },
+
+  // Therapist: Update a facility diagnostic
+  updateDiagnostic: async (diagnosticId, updateData) => {
+    const response = await api.put(`/therapist/diagnostics/${diagnosticId}`, updateData);
+    return response.data;
+  },
+
+  // Therapist: Delete a facility diagnostic
+  deleteDiagnostic: async (diagnosticId) => {
+    const response = await api.delete(`/therapist/diagnostics/${diagnosticId}`);
+    return response.data;
+  },
+
+  // Therapist: Get comparison data (facility vs home) for a patient
+  getComparison: async (userId, diagnosticId = null) => {
+    const params = diagnosticId ? `?diagnostic_id=${diagnosticId}` : '';
+    const response = await api.get(`/therapist/diagnostics/${userId}/comparison${params}`);
+    return response.data;
+  },
+
+  // Therapist: Get comparison history (all diagnostics with scores for trend chart)
+  getComparisonHistory: async (userId) => {
+    const response = await api.get(`/therapist/diagnostics/${userId}/comparison-history`);
+    return response.data;
+  },
+
+  // Patient: Get own comparison (read-only)
+  getMyComparison: async () => {
+    const response = await api.get('/diagnostic-comparison');
+    return response.data;
+  },
 };
 
 export default api;

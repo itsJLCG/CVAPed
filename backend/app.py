@@ -24,6 +24,8 @@ from receptive_crud import receptive_bp, init_receptive_crud
 from articulation_crud import articulation_bp, init_articulation_crud
 # Import admin management blueprint
 from admin.AdminManagement import admin_bp, init_admin_management
+# Import success story CRUD blueprint
+from success_story_crud import success_story_bp, init_success_story_crud
 
 # Load environment variables from .env file
 load_dotenv()
@@ -55,6 +57,8 @@ articulation_trials_collection = db['articulation_trials']
 articulation_exercises_collection = db['articulation_exercises']
 language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
+appointments_collection = db['appointments']
+facility_diagnostics_collection = db['facility_diagnostics']
 
 # Register fluency CRUD blueprint
 app.register_blueprint(fluency_bp)
@@ -75,6 +79,10 @@ init_articulation_crud(db, app.config['SECRET_KEY'])
 # Register admin management blueprint
 app.register_blueprint(admin_bp)
 init_admin_management(db)
+
+# Register success story CRUD blueprint
+app.register_blueprint(success_story_bp, url_prefix='/api')
+init_success_story_crud(db)
 
 # Initialize XGBoost Prediction Service (Standalone - all 4 predictors)
 print("\n🤖 Initializing XGBoost Prediction Models...")
@@ -120,13 +128,25 @@ def token_required(f):
     
     return decorated
 
+# Therapist required decorator
+def therapist_required(f):
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if current_user.get('role') != 'therapist':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized. Only therapists can access this endpoint.'
+            }), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 @app.route('/api/register', methods=['POST'])
 def register():
     try:
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['email', 'password', 'firstName', 'lastName', 'therapyType', 'patientType']
+        required_fields = ['email', 'password', 'firstName', 'lastName', 'age', 'gender', 'therapyType', 'patientType']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'message': f'{field} is required'}), 400
@@ -135,9 +155,24 @@ def register():
         password = data['password']
         first_name = data['firstName']
         last_name = data['lastName']
+        age = data['age']
+        gender = data['gender']
         therapy_type = data['therapyType']  # 'speech' or 'physical'
         patient_type = data['patientType']  # 'myself', 'child', 'dependent'
         role = 'patient'  # Default role for all new registrations
+        
+        # Validate age
+        try:
+            age_int = int(age)
+            if age_int < 1 or age_int > 120:
+                return jsonify({'message': 'Age must be between 1 and 120'}), 400
+        except ValueError:
+            return jsonify({'message': 'Age must be a valid number'}), 400
+        
+        # Validate gender
+        valid_genders = ['male', 'female', 'other', 'prefer-not-to-say']
+        if gender not in valid_genders:
+            return jsonify({'message': 'Invalid gender value'}), 400
         
         # Check if user already exists
         if users_collection.find_one({'email': email}):
@@ -152,6 +187,8 @@ def register():
             'password': hashed_password,
             'firstName': first_name,
             'lastName': last_name,
+            'age': age_int,
+            'gender': gender,
             'role': role,
             'therapyType': therapy_type,
             'patientType': patient_type,
@@ -167,11 +204,11 @@ def register():
             
             for field in child_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             for field in parent_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             user['childInfo'] = {
                 'firstName': data['childFirstName'],
@@ -220,6 +257,8 @@ def register():
                 'email': email,
                 'firstName': first_name,
                 'lastName': last_name,
+                'age': age_int,
+                'gender': gender,
                 'role': role,
                 'therapyType': therapy_type,
                 'patientType': patient_type
@@ -266,7 +305,8 @@ def login():
                 'email': user['email'],
                 'firstName': user['firstName'],
                 'lastName': user['lastName'],
-                'role': user.get('role', 'user')
+                'role': user.get('role', 'user'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
             }
         }), 200
         
@@ -337,7 +377,8 @@ def firebase_auth():
                     'role': user.get('role', 'patient'),
                     'isProfileComplete': user.get('isProfileComplete', True),
                     'therapyType': user.get('therapyType'),
-                    'patientType': user.get('patientType')
+                    'patientType': user.get('patientType'),
+                    'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
                 }
             }), 200
         
@@ -382,7 +423,8 @@ def firebase_auth():
                         'role': existing_user.get('role', 'patient'),
                         'isProfileComplete': existing_user.get('isProfileComplete', True),
                         'therapyType': existing_user.get('therapyType'),
-                        'patientType': existing_user.get('patientType')
+                        'patientType': existing_user.get('patientType'),
+                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic')
                     }
                 }), 200
             else:
@@ -439,16 +481,33 @@ def complete_profile(current_user):
             return jsonify({'message': 'Profile is already complete'}), 400
         
         # Validate required fields
-        required_fields = ['therapyType', 'patientType']
+        required_fields = ['age', 'gender', 'therapyType', 'patientType']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'message': f'{field} is required'}), 400
         
+        age = data['age']
+        gender = data['gender']
         therapy_type = data['therapyType']
         patient_type = data['patientType']
         
+        # Validate age
+        try:
+            age_int = int(age)
+            if age_int < 1 or age_int > 120:
+                return jsonify({'message': 'Age must be between 1 and 120'}), 400
+        except ValueError:
+            return jsonify({'message': 'Age must be a valid number'}), 400
+        
+        # Validate gender
+        valid_genders = ['male', 'female', 'other', 'prefer-not-to-say']
+        if gender not in valid_genders:
+            return jsonify({'message': 'Invalid gender value'}), 400
+        
         # Prepare update data
         update_data = {
+            'age': age_int,
+            'gender': gender,
             'therapyType': therapy_type,
             'patientType': patient_type,
             'isProfileComplete': True,
@@ -463,11 +522,11 @@ def complete_profile(current_user):
             
             for field in child_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             for field in parent_required:
                 if field not in data or not data[field]:
-                    return jsonify({'message': f'{field} is required for pediatric speech therapy'}), 400
+                    return jsonify({'message': f'{field} is required for pediatric speech/language therapy'}), 400
             
             update_data['childInfo'] = {
                 'firstName': data['childFirstName'],
@@ -514,10 +573,13 @@ def complete_profile(current_user):
                 'email': updated_user['email'],
                 'firstName': updated_user['firstName'],
                 'lastName': updated_user['lastName'],
+                'age': updated_user.get('age'),
+                'gender': updated_user.get('gender'),
                 'role': updated_user.get('role', 'patient'),
                 'isProfileComplete': True,
                 'therapyType': updated_user['therapyType'],
-                'patientType': updated_user['patientType']
+                'patientType': updated_user['patientType'],
+                'hasInitialDiagnostic': updated_user.get('hasInitialDiagnostic')
             }
         }), 200
         
@@ -591,6 +653,48 @@ def update_user(current_user):
         
     except Exception as e:
         return jsonify({'message': 'Failed to update profile', 'error': str(e)}), 500
+
+@app.route('/api/user/diagnostic-status', methods=['PUT'])
+@token_required
+def update_diagnostic_status(current_user):
+    try:
+        data = request.get_json()
+        
+        if 'hasInitialDiagnostic' not in data:
+            return jsonify({'message': 'hasInitialDiagnostic is required'}), 400
+        
+        has_initial_diagnostic = bool(data['hasInitialDiagnostic'])
+        
+        # Update user document
+        users_collection.update_one(
+            {'_id': current_user['_id']},
+            {'$set': {
+                'hasInitialDiagnostic': has_initial_diagnostic,
+                'diagnosticStatusUpdatedAt': datetime.datetime.utcnow(),
+                'updatedAt': datetime.datetime.utcnow()
+            }}
+        )
+        
+        # Get updated user
+        updated_user = users_collection.find_one({'_id': current_user['_id']})
+        
+        return jsonify({
+            'message': 'Diagnostic status updated successfully',
+            'user': {
+                'id': str(updated_user['_id']),
+                'email': updated_user['email'],
+                'firstName': updated_user['firstName'],
+                'lastName': updated_user['lastName'],
+                'role': updated_user.get('role', 'patient'),
+                'therapyType': updated_user.get('therapyType'),
+                'patientType': updated_user.get('patientType'),
+                'hasInitialDiagnostic': updated_user.get('hasInitialDiagnostic', False),
+                'diagnosticStatusUpdatedAt': str(updated_user.get('diagnosticStatusUpdatedAt', ''))
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': 'Failed to update diagnostic status', 'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():
@@ -1267,6 +1371,15 @@ def get_therapist_stats(current_user):
                 # If that fails, try as string (for test users like 'testuser1')
                 return users_collection.find_one({'_id': user_id})
         
+        # Helper to get display name from user doc
+        def get_user_display_name(user):
+            if user.get('name'):
+                return user['name']
+            first = user.get('firstName', '')
+            last = user.get('lastName', '')
+            full = f"{first} {last}".strip()
+            return full if full else 'Unknown'
+        
         # Get recent articulation trials
         articulation_recent = list(articulation_trials_collection.find(
             {},
@@ -1277,7 +1390,7 @@ def get_therapist_stats(current_user):
             user = find_user_by_id(trial['user_id'])
             if user:
                 recent_activities.append({
-                    'patient_name': user.get('name', 'Unknown'),
+                    'patient_name': get_user_display_name(user),
                     'therapy_type': 'Articulation',
                     'detail': f"/{trial.get('sound_id', '').upper()}/ sound",
                     'score': round(trial.get('accuracy', 0) * 100),
@@ -1294,7 +1407,7 @@ def get_therapist_stats(current_user):
             user = find_user_by_id(trial['user_id'])
             if user:
                 recent_activities.append({
-                    'patient_name': user.get('name', 'Unknown'),
+                    'patient_name': get_user_display_name(user),
                     'therapy_type': 'Language',
                     'detail': f"Level {trial.get('level', 1)}",
                     'score': round(trial.get('accuracy', 0) * 100),
@@ -1311,7 +1424,7 @@ def get_therapist_stats(current_user):
             user = find_user_by_id(trial['user_id'])
             if user:
                 recent_activities.append({
-                    'patient_name': user.get('name', 'Unknown'),
+                    'patient_name': get_user_display_name(user),
                     'therapy_type': 'Fluency',
                     'detail': f"Level {trial.get('level', 1)}",
                     'score': round(trial.get('accuracy', 0) * 100),
@@ -1339,10 +1452,39 @@ def get_therapist_stats(current_user):
             'fluency': round(fluency_avg[0]['avg_accuracy'] * 100, 1) if (fluency_avg and fluency_avg[0].get('avg_accuracy') is not None) else 0
         }
         
+        # Get appointment statistics
+        from datetime import datetime as dt
+        
+        # Get appointment counts by status
+        total_appointments = appointments_collection.count_documents({})
+        upcoming_appointments = appointments_collection.count_documents({
+            'appointment_date': {'$gte': utc_now()},
+            'status': {'$in': ['scheduled', 'confirmed']}
+        })
+        today_appointments = appointments_collection.count_documents({
+            'appointment_date': {
+                '$gte': utc_now().replace(hour=0, minute=0, second=0, microsecond=0),
+                '$lt': utc_now().replace(hour=23, minute=59, second=59, microsecond=999999)
+            },
+            'status': {'$in': ['scheduled', 'confirmed']}
+        })
+        completed_appointments = appointments_collection.count_documents({'status': 'completed'})
+        cancelled_appointments = appointments_collection.count_documents({'status': 'cancelled'})
+        
+        stats['appointments'] = {
+            'total': total_appointments,
+            'upcoming': upcoming_appointments,
+            'today': today_appointments,
+            'completed': completed_appointments,
+            'cancelled': cancelled_appointments,
+            'completion_rate': round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0
+        }
+        
         print(f"✅ Therapist stats retrieved successfully")
         print(f"   Total Patients: {total_patients}")
         print(f"   Active Patients: {stats['active_patients']}")
         print(f"   Total Sessions: {stats['total_sessions']}")
+        print(f"   Total Appointments: {total_appointments}")
         
         return jsonify({
             'success': True,
@@ -1356,6 +1498,884 @@ def get_therapist_stats(current_user):
         return jsonify({
             'success': False,
             'message': 'Failed to fetch therapist statistics',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/reports', methods=['GET'])
+@token_required
+def get_therapist_reports(current_user):
+    """
+    Get therapist reports including age bracket analysis and gender distribution
+    """
+    try:
+        # Verify user is a therapist
+        if current_user.get('role') != 'therapist':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized. Only therapists can access this endpoint.'
+            }), 403
+        
+        # Get all patients
+        patients = list(users_collection.find({'role': 'patient'}))
+        
+        if not patients:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'totalPatients': 0,
+                    'ageBrackets': [],
+                    'genderDistribution': [],
+                    'highestAgeBracket': None
+                }
+            }), 200
+        
+        total_patients = len(patients)
+        
+        # Calculate age brackets
+        age_brackets = {
+            '0-12': 0,
+            '13-17': 0,
+            '18-25': 0,
+            '26-35': 0,
+            '36-45': 0,
+            '46-55': 0,
+            '56-65': 0,
+            '66+': 0
+        }
+        
+        # Calculate gender distribution
+        gender_counts = {
+            'male': 0,
+            'female': 0,
+            'other': 0,
+            'prefer-not-to-say': 0
+        }
+        
+        for patient in patients:
+            # Age bracket calculation
+            age = patient.get('age')
+            if age is not None:
+                if age <= 12:
+                    age_brackets['0-12'] += 1
+                elif age <= 17:
+                    age_brackets['13-17'] += 1
+                elif age <= 25:
+                    age_brackets['18-25'] += 1
+                elif age <= 35:
+                    age_brackets['26-35'] += 1
+                elif age <= 45:
+                    age_brackets['36-45'] += 1
+                elif age <= 55:
+                    age_brackets['46-55'] += 1
+                elif age <= 65:
+                    age_brackets['56-65'] += 1
+                else:
+                    age_brackets['66+'] += 1
+            
+            # Gender distribution
+            gender = patient.get('gender', 'prefer-not-to-say')
+            if gender in gender_counts:
+                gender_counts[gender] += 1
+            else:
+                gender_counts['other'] += 1
+        
+        # Format age brackets data
+        age_brackets_list = []
+        highest_bracket = None
+        highest_count = 0
+        
+        for bracket_range, count in age_brackets.items():
+            percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
+            bracket_data = {
+                'range': bracket_range,
+                'count': count,
+                'percentage': percentage,
+                'isHighest': False
+            }
+            age_brackets_list.append(bracket_data)
+            
+            if count > highest_count:
+                highest_count = count
+                highest_bracket = bracket_data
+        
+        # Mark the highest bracket
+        if highest_bracket:
+            highest_bracket['isHighest'] = True
+            for bracket in age_brackets_list:
+                if bracket['range'] == highest_bracket['range']:
+                    bracket['isHighest'] = True
+        
+        # Format gender distribution data
+        gender_distribution_list = []
+        for gender, count in gender_counts.items():
+            if count > 0:  # Only include genders with patients
+                percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
+                gender_distribution_list.append({
+                    'gender': gender,
+                    'count': count,
+                    'percentage': percentage
+                })
+        
+        # Sort by count descending
+        gender_distribution_list.sort(key=lambda x: x['count'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'totalPatients': total_patients,
+                'ageBrackets': age_brackets_list,
+                'genderDistribution': gender_distribution_list,
+                'highestAgeBracket': highest_bracket
+            }
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching therapist reports: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch therapist reports',
+            'error': str(e)
+        }), 500
+
+
+# ========================================
+# APPOINTMENT MANAGEMENT ENDPOINTS
+# ========================================
+
+@app.route('/api/therapist/appointments', methods=['GET'])
+@token_required
+@therapist_required
+def get_therapist_appointments(current_user):
+    """Get all appointments for the logged-in therapist"""
+    try:
+        from datetime import datetime, timedelta
+        
+        therapist_id = str(current_user['_id'])
+        
+        # Get query parameters for filtering
+        date_filter = request.args.get('date')  # YYYY-MM-DD format
+        status_filter = request.args.get('status')  # scheduled, confirmed, completed, cancelled
+        therapy_type = request.args.get('therapy_type')  # articulation, language, fluency, physical
+        
+        # Build query
+        query = {'therapist_id': therapist_id}
+        
+        if date_filter:
+            # Filter by specific date
+            start_date = datetime.strptime(date_filter, '%Y-%m-%d')
+            end_date = start_date + timedelta(days=1)
+            query['appointment_date'] = {'$gte': start_date, '$lt': end_date}
+        
+        if status_filter:
+            query['status'] = status_filter
+            
+        if therapy_type:
+            query['therapy_type'] = therapy_type
+        
+        # Fetch appointments
+        appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
+        
+        # Convert ObjectId to string and format dates
+        for appt in appointments:
+            appt['_id'] = str(appt['_id'])
+            appt['patient_id'] = str(appt['patient_id'])
+            appt['therapist_id'] = str(appt['therapist_id'])
+            if isinstance(appt.get('appointment_date'), datetime):
+                appt['appointment_date'] = appt['appointment_date'].isoformat()
+            if isinstance(appt.get('created_at'), datetime):
+                appt['created_at'] = appt['created_at'].isoformat()
+            if isinstance(appt.get('updated_at'), datetime):
+                appt['updated_at'] = appt['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'appointments': appointments
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching therapist appointments: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch appointments',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/unassigned', methods=['GET'])
+@token_required
+@therapist_required
+def get_unassigned_appointments(current_user):
+    """Get all unassigned/pending appointments that need therapist assignment"""
+    try:
+        from datetime import datetime
+        
+        # Get query parameters for filtering
+        therapy_type = request.args.get('therapy_type')  # articulation, language, fluency, physical
+        
+        # Build query for pending appointments without therapist
+        query = {
+            '$or': [
+                {'therapist_id': None},
+                {'therapist_id': {'$exists': False}},
+                {'status': 'pending'}
+            ]
+        }
+        
+        if therapy_type:
+            query['therapy_type'] = therapy_type
+        
+        # Fetch unassigned appointments
+        appointments = list(appointments_collection.find(query).sort('created_at', -1))
+        
+        # Convert ObjectId to string and format dates
+        for appt in appointments:
+            appt['_id'] = str(appt['_id'])
+            appt['patient_id'] = str(appt['patient_id'])
+            if appt.get('therapist_id'):
+                appt['therapist_id'] = str(appt['therapist_id'])
+            if isinstance(appt.get('appointment_date'), datetime):
+                appt['appointment_date'] = appt['appointment_date'].isoformat()
+            if isinstance(appt.get('created_at'), datetime):
+                appt['created_at'] = appt['created_at'].isoformat()
+            if isinstance(appt.get('updated_at'), datetime):
+                appt['updated_at'] = appt['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'appointments': appointments,
+            'count': len(appointments)
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching unassigned appointments: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch unassigned appointments',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments', methods=['POST'])
+@token_required
+@therapist_required
+def create_therapist_appointment(current_user):
+    """Create a new appointment (therapist side)"""
+    try:
+        from datetime import datetime
+        
+        data = request.get_json()
+        therapist_id = str(current_user['_id'])
+        
+        # Validate required fields
+        if not data.get('patient_id'):
+            return jsonify({'success': False, 'message': 'Patient ID is required'}), 400
+        if not data.get('appointment_date'):
+            return jsonify({'success': False, 'message': 'Appointment date is required'}), 400
+        if not data.get('therapy_type'):
+            return jsonify({'success': False, 'message': 'Therapy type is required'}), 400
+        
+        # Validate therapy type
+        valid_therapy_types = ['articulation', 'language', 'fluency', 'physical']
+        if data['therapy_type'] not in valid_therapy_types:
+            return jsonify({'success': False, 'message': 'Invalid therapy type'}), 400
+        
+        # Get patient info
+        patient = users_collection.find_one({'_id': ObjectId(data['patient_id'])})
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+        
+        # Parse appointment date
+        try:
+            appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+        
+        # Create appointment document
+        appointment = {
+            'patient_id': data['patient_id'],
+            'therapist_id': therapist_id,
+            'therapy_type': data['therapy_type'],
+            'appointment_date': appointment_date,
+            'duration': data.get('duration', 60),  # Default 60 minutes
+            'status': 'confirmed',  # Therapist-created appointments are auto-approved
+            'approved': True,
+            'approved_at': datetime.utcnow(),
+            'approved_by': therapist_id,
+            'notes': data.get('notes', ''),
+            'patient_name': f"{patient.get('firstName', '')} {patient.get('lastName', '')}".strip(),
+            'patient_email': patient.get('email', ''),
+            'therapist_name': f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip(),
+            'therapist_email': current_user.get('email', ''),
+            'reminder_sent': False,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Insert appointment
+        result = appointments_collection.insert_one(appointment)
+        appointment['_id'] = str(result.inserted_id)
+        appointment['appointment_date'] = appointment['appointment_date'].isoformat()
+        appointment['created_at'] = appointment['created_at'].isoformat()
+        appointment['updated_at'] = appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment created successfully',
+            'appointment': appointment
+        }), 201
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error creating appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to create appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/<appointment_id>', methods=['PUT'])
+@token_required
+@therapist_required
+def update_therapist_appointment(current_user, appointment_id):
+    """Update an existing appointment"""
+    try:
+        from datetime import datetime
+        
+        data = request.get_json()
+        therapist_id = str(current_user['_id'])
+        
+        # Find appointment
+        appointment = appointments_collection.find_one({
+            '_id': ObjectId(appointment_id),
+            'therapist_id': therapist_id
+        })
+        
+        if not appointment:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        # Build update document
+        update_doc = {'updated_at': datetime.utcnow()}
+        
+        # Update allowed fields
+        if 'appointment_date' in data:
+            try:
+                update_doc['appointment_date'] = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+            except ValueError:
+                return jsonify({'success': False, 'message': 'Invalid date format'}), 400
+        
+        if 'duration' in data:
+            update_doc['duration'] = int(data['duration'])
+        
+        if 'status' in data:
+            valid_statuses = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no-show']
+            if data['status'] not in valid_statuses:
+                return jsonify({'success': False, 'message': 'Invalid status'}), 400
+            update_doc['status'] = data['status']
+        
+        if 'notes' in data:
+            update_doc['notes'] = data['notes']
+        
+        if 'session_summary' in data:
+            update_doc['session_summary'] = data['session_summary']
+        
+        if 'cancellation_reason' in data:
+            update_doc['cancellation_reason'] = data['cancellation_reason']
+        
+        # Update appointment
+        appointments_collection.update_one(
+            {'_id': ObjectId(appointment_id)},
+            {'$set': update_doc}
+        )
+        
+        # Fetch updated appointment
+        updated_appointment = appointments_collection.find_one({'_id': ObjectId(appointment_id)})
+        updated_appointment['_id'] = str(updated_appointment['_id'])
+        updated_appointment['patient_id'] = str(updated_appointment['patient_id'])
+        updated_appointment['therapist_id'] = str(updated_appointment['therapist_id'])
+        if isinstance(updated_appointment.get('appointment_date'), datetime):
+            updated_appointment['appointment_date'] = updated_appointment['appointment_date'].isoformat()
+        if isinstance(updated_appointment.get('created_at'), datetime):
+            updated_appointment['created_at'] = updated_appointment['created_at'].isoformat()
+        if isinstance(updated_appointment.get('updated_at'), datetime):
+            updated_appointment['updated_at'] = updated_appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment updated successfully',
+            'appointment': updated_appointment
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error updating appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/<appointment_id>', methods=['DELETE'])
+@token_required
+@therapist_required
+def delete_therapist_appointment(current_user, appointment_id):
+    """Cancel/delete an appointment"""
+    try:
+        from datetime import datetime
+        
+        therapist_id = str(current_user['_id'])
+        
+        # Find and update appointment status to cancelled
+        result = appointments_collection.update_one(
+            {
+                '_id': ObjectId(appointment_id),
+                'therapist_id': therapist_id
+            },
+            {
+                '$set': {
+                    'status': 'cancelled',
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment cancelled successfully'
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error deleting appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to cancel appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/patient/appointments', methods=['GET'])
+@token_required
+def get_patient_appointments(current_user):
+    """Get all appointments for the logged-in patient"""
+    try:
+        patient_id = str(current_user['_id'])
+        
+        # Get query parameters
+        status_filter = request.args.get('status')
+        
+        # Build query
+        query = {'patient_id': patient_id}
+        if status_filter:
+            query['status'] = status_filter
+        
+        # Fetch appointments
+        appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
+        
+        # Convert ObjectId to string and format dates
+        from datetime import datetime
+        for appt in appointments:
+            appt['_id'] = str(appt['_id'])
+            appt['patient_id'] = str(appt['patient_id'])
+            appt['therapist_id'] = str(appt['therapist_id'])
+            if isinstance(appt.get('appointment_date'), datetime):
+                appt['appointment_date'] = appt['appointment_date'].isoformat()
+            if isinstance(appt.get('created_at'), datetime):
+                appt['created_at'] = appt['created_at'].isoformat()
+            if isinstance(appt.get('updated_at'), datetime):
+                appt['updated_at'] = appt['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'appointments': appointments
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching patient appointments: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch appointments',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/patient/appointments/book', methods=['POST'])
+@token_required
+def book_patient_appointment(current_user):
+    """Book a new appointment (patient side)"""
+    try:
+        from datetime import datetime
+        
+        data = request.get_json()
+        patient_id = str(current_user['_id'])
+        
+        # Validate required fields
+        if not data.get('appointment_date'):
+            return jsonify({'success': False, 'message': 'Appointment date is required'}), 400
+        if not data.get('therapy_type'):
+            return jsonify({'success': False, 'message': 'Therapy type is required'}), 400
+        
+        # Validate therapy type
+        valid_therapy_types = ['articulation', 'language', 'fluency', 'physical']
+        if data['therapy_type'] not in valid_therapy_types:
+            return jsonify({'success': False, 'message': 'Invalid therapy type'}), 400
+        
+        # Parse appointment date
+        try:
+            appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+        
+        # Create appointment document (therapist assignment is optional)
+        appointment = {
+            'patient_id': patient_id,
+            'therapist_id': data.get('therapist_id', None),  # Optional - can be assigned later
+            'therapy_type': data['therapy_type'],
+            'appointment_date': appointment_date,
+            'duration': data.get('duration', 60),
+            'status': 'pending' if not data.get('therapist_id') else 'scheduled',
+            'notes': data.get('notes', ''),
+            'patient_name': f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip(),
+            'patient_email': current_user.get('email', ''),
+            'therapist_name': None,
+            'therapist_email': None,
+            'reminder_sent': False,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # If therapist is specified, get therapist info
+        if data.get('therapist_id'):
+            therapist = users_collection.find_one({'_id': ObjectId(data['therapist_id']), 'role': 'therapist'})
+            if therapist:
+                appointment['therapist_name'] = f"{therapist.get('firstName', '')} {therapist.get('lastName', '')}".strip()
+                appointment['therapist_email'] = therapist.get('email', '')
+        
+        # Insert appointment
+        result = appointments_collection.insert_one(appointment)
+        appointment['_id'] = str(result.inserted_id)
+        appointment['patient_id'] = str(appointment['patient_id'])
+        if appointment.get('therapist_id'):
+            appointment['therapist_id'] = str(appointment['therapist_id'])
+        appointment['appointment_date'] = appointment['appointment_date'].isoformat()
+        appointment['created_at'] = appointment['created_at'].isoformat()
+        appointment['updated_at'] = appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment request submitted successfully' if not data.get('therapist_id') else 'Appointment booked successfully',
+            'appointment': appointment
+        }), 201
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error booking appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to book appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/patient/appointments/<appointment_id>/cancel', methods=['PUT'])
+@token_required
+def cancel_patient_appointment(current_user, appointment_id):
+    """Cancel an appointment (patient side)"""
+    try:
+        from datetime import datetime
+        
+        patient_id = str(current_user['_id'])
+        data = request.get_json()
+        
+        # Find and update appointment
+        result = appointments_collection.update_one(
+            {
+                '_id': ObjectId(appointment_id),
+                'patient_id': patient_id
+            },
+            {
+                '$set': {
+                    'status': 'cancelled',
+                    'cancellation_reason': data.get('reason', 'Cancelled by patient'),
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'Appointment cancelled successfully'
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error cancelling appointment: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to cancel appointment',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/appointments/<appointment_id>/assign', methods=['PUT'])
+@token_required
+@therapist_required
+def assign_therapist_to_appointment(current_user, appointment_id):
+    """Assign therapist to an appointment"""
+    try:
+        from datetime import datetime
+        
+        therapist_id = str(current_user['_id'])
+        
+        # Get the appointment
+        appointment = appointments_collection.find_one({'_id': ObjectId(appointment_id)})
+        if not appointment:
+            return jsonify({'success': False, 'message': 'Appointment not found'}), 404
+        
+        # Check if appointment already has a therapist
+        if appointment.get('therapist_id') and appointment.get('therapist_id') != therapist_id:
+            return jsonify({
+                'success': False, 
+                'message': 'This appointment is already assigned to another therapist'
+            }), 400
+        
+        # Update appointment with therapist info
+        therapist_name = f"{current_user.get('firstName', '')} {current_user.get('lastName', '')}".strip()
+        therapist_email = current_user.get('email', '')
+        
+        result = appointments_collection.update_one(
+            {'_id': ObjectId(appointment_id)},
+            {
+                '$set': {
+                    'therapist_id': therapist_id,
+                    'therapist_name': therapist_name,
+                    'therapist_email': therapist_email,
+                    'status': 'confirmed',  # Approved and confirmed
+                    'approved': True,
+                    'approved_at': datetime.utcnow(),
+                    'approved_by': therapist_id,
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Failed to assign therapist'}), 400
+        
+        # Get updated appointment
+        updated_appointment = appointments_collection.find_one({'_id': ObjectId(appointment_id)})
+        updated_appointment['_id'] = str(updated_appointment['_id'])
+        updated_appointment['patient_id'] = str(updated_appointment['patient_id'])
+        updated_appointment['therapist_id'] = str(updated_appointment['therapist_id'])
+        if isinstance(updated_appointment.get('appointment_date'), datetime):
+            updated_appointment['appointment_date'] = updated_appointment['appointment_date'].isoformat()
+        if isinstance(updated_appointment.get('created_at'), datetime):
+            updated_appointment['created_at'] = updated_appointment['created_at'].isoformat()
+        if isinstance(updated_appointment.get('updated_at'), datetime):
+            updated_appointment['updated_at'] = updated_appointment['updated_at'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Successfully assigned to appointment',
+            'appointment': updated_appointment
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error assigning therapist: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to assign therapist',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapists/available', methods=['GET'])
+@token_required
+def get_available_therapists(current_user):
+    """Get list of available therapists"""
+    try:
+        therapy_type = request.args.get('therapy_type')
+        
+        # Build query
+        query = {'role': 'therapist'}
+        if therapy_type:
+            query['therapyType'] = therapy_type
+        
+        # Fetch therapists
+        therapists = list(users_collection.find(
+            query,
+            {'firstName': 1, 'lastName': 1, 'email': 1, 'therapyType': 1}
+        ))
+        
+        # Convert ObjectId to string
+        for therapist in therapists:
+            therapist['_id'] = str(therapist['_id'])
+        
+        return jsonify({
+            'success': True,
+            'therapists': therapists
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching available therapists: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch therapists',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/therapist/patients/search', methods=['GET'])
+@token_required
+@therapist_required
+def search_patients(current_user):
+    """Search patients by name for autocomplete (therapist only)"""
+    try:
+        search_query = request.args.get('query', '').strip()
+        limit = int(request.args.get('limit', 10))
+        
+        if not search_query:
+            return jsonify({
+                'success': True,
+                'patients': []
+            }), 200
+        
+        # Build regex search for first name or last name
+        regex_pattern = {'$regex': search_query, '$options': 'i'}  # case-insensitive
+        
+        # Search for patients
+        query = {
+            'role': 'patient',
+            '$or': [
+                {'firstName': regex_pattern},
+                {'lastName': regex_pattern},
+                {'email': regex_pattern}
+            ]
+        }
+        
+        # Fetch matching patients
+        patients = list(users_collection.find(
+            query,
+            {
+                'firstName': 1,
+                'lastName': 1,
+                'email': 1,
+                'age': 1,
+                'gender': 1,
+                'therapyType': 1,
+                'patientType': 1
+            }
+        ).limit(limit))
+        
+        # Convert ObjectId to string and format full name
+        for patient in patients:
+            patient['_id'] = str(patient['_id'])
+            patient['fullName'] = f"{patient.get('firstName', '')} {patient.get('lastName', '')}".strip()
+        
+        return jsonify({
+            'success': True,
+            'patients': patients
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error searching patients: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to search patients',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/appointments/availability', methods=['GET'])
+@token_required
+def check_appointment_availability(current_user):
+    """Check available time slots for a therapist on a specific date"""
+    try:
+        from datetime import datetime, timedelta
+        
+        therapist_id = request.args.get('therapist_id')
+        date_str = request.args.get('date')  # YYYY-MM-DD
+        
+        if not therapist_id or not date_str:
+            return jsonify({'success': False, 'message': 'Therapist ID and date are required'}), 400
+        
+        # Parse date
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        
+        # Get all appointments for this therapist on this date
+        start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        
+        appointments = list(appointments_collection.find({
+            'therapist_id': therapist_id,
+            'appointment_date': {'$gte': start_of_day, '$lt': end_of_day},
+            'status': {'$in': ['scheduled', 'confirmed']}
+        }))
+        
+        # Generate available time slots (9 AM to 5 PM, 30-minute increments)
+        available_slots = []
+        current_time = start_of_day.replace(hour=9, minute=0)
+        end_time = start_of_day.replace(hour=17, minute=0)
+        
+        while current_time < end_time:
+            # Check if this slot is available
+            slot_available = True
+            for appt in appointments:
+                appt_start = appt['appointment_date']
+                appt_end = appt_start + timedelta(minutes=appt.get('duration', 60))
+                
+                # Check for overlap
+                if current_time >= appt_start and current_time < appt_end:
+                    slot_available = False
+                    break
+            
+            if slot_available:
+                available_slots.append(current_time.isoformat())
+            
+            current_time += timedelta(minutes=30)
+        
+        return jsonify({
+            'success': True,
+            'availableSlots': available_slots
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ Error checking availability: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to check availability',
             'error': str(e)
         }), 500
 
@@ -3236,6 +4256,649 @@ def get_physical_therapy_patients(current_user):
             'error': str(e)
         }), 500
 
+# Serve uploaded files
+@app.route('/uploads/<path:filename>')
+def serve_uploaded_file(filename):
+    """Serve uploaded files (images, etc.)"""
+    from flask import send_from_directory
+    upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    return send_from_directory(upload_dir, filename)
+
+# ======================
+# DIAGNOSTIC COMPARISON ENDPOINTS
+# ======================
+
+@app.route('/api/therapist/diagnostics', methods=['POST'])
+@token_required
+@therapist_required
+def create_facility_diagnostic(current_user):
+    """Create a new facility diagnostic assessment for a patient"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        if not data.get('user_id'):
+            return jsonify({'success': False, 'message': 'user_id is required'}), 400
+        if not data.get('assessment_date'):
+            return jsonify({'success': False, 'message': 'assessment_date is required'}), 400
+
+        # Validate score ranges (0-100)
+        for field_name in ['fluency_score', 'receptive_score', 'expressive_score']:
+            val = data.get(field_name)
+            if val is not None and val != '':
+                try:
+                    num_val = float(val)
+                    if num_val < 0 or num_val > 100:
+                        return jsonify({'success': False, 'message': f'{field_name} must be between 0 and 100'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'message': f'{field_name} must be a number'}), 400
+
+        for sound, val in data.get('articulation_scores', {}).items():
+            if val is not None and val != '':
+                try:
+                    num_val = float(val)
+                    if num_val < 0 or num_val > 100:
+                        return jsonify({'success': False, 'message': f'Articulation score for {sound} must be between 0 and 100'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'message': f'Articulation score for {sound} must be a number'}), 400
+
+        for gait_key, val in data.get('gait_scores', {}).items():
+            if val is not None and val != '':
+                try:
+                    num_val = float(val)
+                    if num_val < 0 or num_val > 100:
+                        return jsonify({'success': False, 'message': f'Gait score {gait_key} must be between 0 and 100'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'success': False, 'message': f'Gait score {gait_key} must be a number'}), 400
+
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(data['user_id'])})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        diagnostic = {
+            'user_id': data['user_id'],
+            'assessed_by': str(current_user['_id']),
+            'assessment_date': datetime.datetime.fromisoformat(data['assessment_date'].replace('Z', '+00:00')) if isinstance(data['assessment_date'], str) else data['assessment_date'],
+            'assessment_type': data.get('assessment_type', 'initial'),
+            'articulation_scores': data.get('articulation_scores', {}),
+            'fluency_score': data.get('fluency_score'),
+            'receptive_score': data.get('receptive_score'),
+            'expressive_score': data.get('expressive_score'),
+            'gait_scores': data.get('gait_scores', {}),
+            'notes': data.get('notes', ''),
+            'severity_level': data.get('severity_level', ''),
+            'recommended_focus': data.get('recommended_focus', []),
+            'created_at': datetime.datetime.utcnow(),
+            'updated_at': datetime.datetime.utcnow()
+        }
+
+        result = facility_diagnostics_collection.insert_one(diagnostic)
+
+        # Also update the patient's hasInitialDiagnostic flag if this is an initial assessment
+        if diagnostic['assessment_type'] == 'initial':
+            users_collection.update_one(
+                {'_id': ObjectId(data['user_id'])},
+                {'$set': {
+                    'hasInitialDiagnostic': True,
+                    'diagnosticStatusUpdatedAt': datetime.datetime.utcnow(),
+                    'updatedAt': datetime.datetime.utcnow()
+                }}
+            )
+
+        print(f"✅ Facility diagnostic created for patient {data['user_id']} by therapist {current_user['_id']}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Facility diagnostic created successfully',
+            'diagnostic_id': str(result.inserted_id)
+        }), 201
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error creating facility diagnostic: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to create facility diagnostic', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<user_id>', methods=['GET'])
+@token_required
+@therapist_required
+def get_facility_diagnostics(current_user, user_id):
+    """Get all facility diagnostic assessments for a patient"""
+    try:
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        diagnostics = list(facility_diagnostics_collection.find({'user_id': user_id}).sort('assessment_date', -1))
+
+        result = []
+        for diag in diagnostics:
+            # Look up the therapist who assessed
+            try:
+                assessor = users_collection.find_one({'_id': ObjectId(diag.get('assessed_by', ''))})
+                assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
+            except Exception:
+                assessor_name = 'Unknown'
+
+            result.append({
+                '_id': str(diag['_id']),
+                'user_id': diag['user_id'],
+                'assessed_by': diag.get('assessed_by', ''),
+                'assessor_name': assessor_name,
+                'assessment_date': diag['assessment_date'].isoformat() if isinstance(diag['assessment_date'], datetime.datetime) else str(diag['assessment_date']),
+                'assessment_type': diag.get('assessment_type', 'initial'),
+                'articulation_scores': diag.get('articulation_scores', {}),
+                'fluency_score': diag.get('fluency_score'),
+                'receptive_score': diag.get('receptive_score'),
+                'expressive_score': diag.get('expressive_score'),
+                'gait_scores': diag.get('gait_scores', {}),
+                'notes': diag.get('notes', ''),
+                'severity_level': diag.get('severity_level', ''),
+                'recommended_focus': diag.get('recommended_focus', []),
+                'created_at': diag['created_at'].isoformat() if isinstance(diag.get('created_at'), datetime.datetime) else str(diag.get('created_at', ''))
+            })
+
+        return jsonify({
+            'success': True,
+            'diagnostics': result,
+            'patient_name': f"{patient['firstName']} {patient['lastName']}"
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching facility diagnostics: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch facility diagnostics', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['PUT'])
+@token_required
+@therapist_required
+def update_facility_diagnostic(current_user, diagnostic_id):
+    """Update a facility diagnostic assessment"""
+    try:
+        data = request.get_json()
+
+        # Verify the diagnostic exists
+        try:
+            existing = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id)})
+        except Exception:
+            existing = None
+        if not existing:
+            return jsonify({'success': False, 'message': 'Diagnostic not found'}), 404
+
+        update_fields = {'updated_at': datetime.datetime.utcnow()}
+
+        # Update only provided fields
+        allowed_fields = [
+            'assessment_date', 'assessment_type', 'articulation_scores',
+            'fluency_score', 'receptive_score', 'expressive_score',
+            'gait_scores', 'notes', 'severity_level', 'recommended_focus'
+        ]
+        for field in allowed_fields:
+            if field in data:
+                if field == 'assessment_date' and isinstance(data[field], str):
+                    update_fields[field] = datetime.datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                else:
+                    update_fields[field] = data[field]
+
+        facility_diagnostics_collection.update_one(
+            {'_id': ObjectId(diagnostic_id)},
+            {'$set': update_fields}
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Diagnostic updated successfully'
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error updating facility diagnostic: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to update diagnostic', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['DELETE'])
+@token_required
+@therapist_required
+def delete_facility_diagnostic(current_user, diagnostic_id):
+    """Delete a facility diagnostic assessment"""
+    try:
+        try:
+            result = facility_diagnostics_collection.delete_one({'_id': ObjectId(diagnostic_id)})
+        except Exception:
+            return jsonify({'success': False, 'message': 'Invalid diagnostic ID'}), 400
+
+        if result.deleted_count == 0:
+            return jsonify({'success': False, 'message': 'Diagnostic not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Diagnostic deleted successfully'
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Failed to delete diagnostic', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<user_id>/comparison', methods=['GET'])
+@token_required
+@therapist_required
+def get_diagnostic_comparison(current_user, user_id):
+    """Get computed comparison between facility diagnostic and current at-home performance"""
+    try:
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        # Get the latest facility diagnostic (or specific one if diagnostic_id query param provided)
+        diagnostic_id = request.args.get('diagnostic_id')
+        if diagnostic_id:
+            try:
+                facility_diag = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id)})
+            except Exception:
+                facility_diag = None
+        else:
+            facility_diag = facility_diagnostics_collection.find_one(
+                {'user_id': user_id},
+                sort=[('assessment_date', -1)]
+            )
+
+        if not facility_diag:
+            return jsonify({
+                'success': True,
+                'has_facility_data': False,
+                'message': 'No facility diagnostic found for this patient'
+            }), 200
+
+        # Build facility scores
+        facility_scores = {
+            'articulation': facility_diag.get('articulation_scores', {}),
+            'fluency': facility_diag.get('fluency_score'),
+            'receptive': facility_diag.get('receptive_score'),
+            'expressive': facility_diag.get('expressive_score'),
+            'gait': facility_diag.get('gait_scores', {})
+        }
+
+        # Aggregate current at-home scores from progress collections
+        home_scores = {}
+
+        # Articulation: get mastery per sound from articulation_progress
+        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        art_scores = {}
+        for prog in articulation_progress:
+            sound = prog.get('sound_id', '')
+            mastery = prog.get('overall_mastery', 0)
+            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        home_scores['articulation'] = art_scores
+
+        # Fluency: get from fluency_progress
+        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
+        if fluency_progress:
+            fluency_mastery = fluency_progress.get('overall_mastery', 0)
+            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        else:
+            home_scores['fluency'] = None
+
+        # Receptive: get from language_progress (mode=receptive)
+        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
+        if receptive_progress:
+            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['receptive'] = None
+
+        # Expressive: get from language_progress (mode=expressive)
+        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
+        if expressive_progress:
+            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['expressive'] = None
+
+        # Gait: get average from gaitprogresses
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        if gait_records:
+            gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+            for gait in gait_records:
+                metrics = gait.get('metrics', {})
+                gait_metrics_avg['stability_score'] += metrics.get('stability_score', 0)
+                gait_metrics_avg['gait_symmetry'] += metrics.get('gait_symmetry', 0)
+                gait_metrics_avg['step_regularity'] += metrics.get('step_regularity', 0)
+            count = len(gait_records)
+            home_scores['gait'] = {
+                'stability_score': round((gait_metrics_avg['stability_score'] / count) * 100, 1),
+                'gait_symmetry': round((gait_metrics_avg['gait_symmetry'] / count) * 100, 1),
+                'step_regularity': round((gait_metrics_avg['step_regularity'] / count) * 100, 1),
+                'overall_gait': round(((gait_metrics_avg['stability_score'] + gait_metrics_avg['gait_symmetry'] + gait_metrics_avg['step_regularity']) / (count * 3)) * 100, 1)
+            }
+        else:
+            home_scores['gait'] = {}
+
+        # Compute deltas
+        deltas = {}
+
+        # Articulation deltas per sound
+        art_deltas = {}
+        facility_art = facility_scores.get('articulation', {})
+        home_art = home_scores.get('articulation', {})
+        all_sounds = set(list(facility_art.keys()) + list(home_art.keys()))
+        for sound in all_sounds:
+            f_val = facility_art.get(sound)
+            h_val = home_art.get(sound)
+            if f_val is not None and h_val is not None:
+                art_deltas[sound] = round(h_val - f_val, 1)
+            else:
+                art_deltas[sound] = None
+        deltas['articulation'] = art_deltas
+
+        # Simple deltas for fluency, receptive, expressive
+        for key in ['fluency', 'receptive', 'expressive']:
+            f_val = facility_scores.get(key)
+            h_val = home_scores.get(key)
+            if f_val is not None and h_val is not None:
+                deltas[key] = round(h_val - f_val, 1)
+            else:
+                deltas[key] = None
+
+        # Gait delta (overall)
+        facility_gait = facility_scores.get('gait', {})
+        home_gait = home_scores.get('gait', {})
+        f_gait_overall = facility_gait.get('overall_gait')
+        h_gait_overall = home_gait.get('overall_gait')
+        if f_gait_overall is not None and h_gait_overall is not None:
+            deltas['gait'] = round(h_gait_overall - f_gait_overall, 1)
+        else:
+            deltas['gait'] = None
+
+        # Look up assessor name
+        try:
+            assessor = users_collection.find_one({'_id': ObjectId(facility_diag.get('assessed_by', ''))})
+            assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
+        except Exception:
+            assessor_name = 'Unknown'
+
+        # Compute summary insights
+        all_deltas = []
+        art_deltas = deltas.get('articulation', {})
+        for sound, d in art_deltas.items():
+            if d is not None:
+                all_deltas.append({'metric': f'/{sound.upper()}/ Sound', 'delta': d, 'category': 'articulation'})
+        for key in ['fluency', 'receptive', 'expressive']:
+            if deltas.get(key) is not None:
+                all_deltas.append({'metric': key.capitalize(), 'delta': deltas[key], 'category': key})
+        if deltas.get('gait') is not None:
+            all_deltas.append({'metric': 'Gait', 'delta': deltas['gait'], 'category': 'gait'})
+
+        summary_insights = {}
+        if all_deltas:
+            valid_deltas = [d['delta'] for d in all_deltas]
+            summary_insights['overall_avg_delta'] = round(sum(valid_deltas) / len(valid_deltas), 1)
+            best = max(all_deltas, key=lambda x: x['delta'])
+            worst = min(all_deltas, key=lambda x: x['delta'])
+            summary_insights['strongest_area'] = {'metric': best['metric'], 'delta': best['delta']}
+            summary_insights['weakest_area'] = {'metric': worst['metric'], 'delta': worst['delta']}
+            summary_insights['total_metrics'] = len(all_deltas)
+            summary_insights['improving_count'] = len([d for d in valid_deltas if d > 0])
+            summary_insights['declining_count'] = len([d for d in valid_deltas if d < 0])
+            summary_insights['stable_count'] = len([d for d in valid_deltas if d == 0])
+
+        return jsonify({
+            'success': True,
+            'has_facility_data': True,
+            'patient_name': f"{patient['firstName']} {patient['lastName']}",
+            'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
+            'assessment_type': facility_diag.get('assessment_type', 'initial'),
+            'assessor_name': assessor_name,
+            'severity_level': facility_diag.get('severity_level', ''),
+            'notes': facility_diag.get('notes', ''),
+            'recommended_focus': facility_diag.get('recommended_focus', []),
+            'facility_scores': facility_scores,
+            'home_scores': home_scores,
+            'deltas': deltas,
+            'summary_insights': summary_insights
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error computing diagnostic comparison: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison', 'error': str(e)}), 500
+
+
+@app.route('/api/therapist/diagnostics/<user_id>/comparison-history', methods=['GET'])
+@token_required
+@therapist_required
+def get_diagnostic_comparison_history(current_user, user_id):
+    """Get all historical facility diagnostics with scores for trend visualization"""
+    try:
+        # Verify the patient exists
+        try:
+            patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        except Exception:
+            patient = None
+        if not patient:
+            return jsonify({'success': False, 'message': 'Patient not found'}), 404
+
+        diagnostics = list(facility_diagnostics_collection.find({'user_id': user_id}).sort('assessment_date', 1))
+
+        history = []
+        for diag in diagnostics:
+            entry = {
+                '_id': str(diag['_id']),
+                'assessment_date': diag['assessment_date'].isoformat() if isinstance(diag['assessment_date'], datetime.datetime) else str(diag['assessment_date']),
+                'assessment_type': diag.get('assessment_type', 'initial'),
+                'severity_level': diag.get('severity_level', ''),
+                'articulation_scores': diag.get('articulation_scores', {}),
+                'fluency_score': diag.get('fluency_score'),
+                'receptive_score': diag.get('receptive_score'),
+                'expressive_score': diag.get('expressive_score'),
+                'gait_scores': diag.get('gait_scores', {}),
+            }
+            history.append(entry)
+
+        return jsonify({
+            'success': True,
+            'patient_name': f"{patient['firstName']} {patient['lastName']}",
+            'history': history,
+            'total': len(history)
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching diagnostic history: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic history', 'error': str(e)}), 500
+
+
+@app.route('/api/diagnostic-comparison', methods=['GET'])
+@token_required
+def get_patient_diagnostic_comparison(current_user):
+    """Get the patient's own facility vs home comparison (read-only) - with full data parity"""
+    try:
+        user_id = str(current_user['_id'])
+
+        # Support selecting a specific diagnostic via query param
+        diagnostic_id = request.args.get('diagnostic_id')
+        if diagnostic_id:
+            try:
+                facility_diag = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id), 'user_id': user_id})
+            except Exception:
+                facility_diag = None
+        else:
+            facility_diag = facility_diagnostics_collection.find_one(
+                {'user_id': user_id},
+                sort=[('assessment_date', -1)]
+            )
+
+        if not facility_diag:
+            return jsonify({
+                'success': True,
+                'has_facility_data': False,
+                'message': 'No facility diagnostic found'
+            }), 200
+
+        # Build facility scores (now includes gait)
+        facility_scores = {
+            'articulation': facility_diag.get('articulation_scores', {}),
+            'fluency': facility_diag.get('fluency_score'),
+            'receptive': facility_diag.get('receptive_score'),
+            'expressive': facility_diag.get('expressive_score'),
+            'gait': facility_diag.get('gait_scores', {})
+        }
+
+        # Aggregate at-home scores (same logic as therapist comparison)
+        home_scores = {}
+
+        # Articulation
+        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        art_scores = {}
+        for prog in articulation_progress:
+            sound = prog.get('sound_id', '')
+            if not sound:
+                continue
+            mastery = prog.get('overall_mastery', 0)
+            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        home_scores['articulation'] = art_scores
+
+        # Fluency
+        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
+        if fluency_progress:
+            fluency_mastery = fluency_progress.get('overall_mastery', 0)
+            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        else:
+            home_scores['fluency'] = None
+
+        # Receptive
+        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
+        if receptive_progress:
+            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['receptive'] = None
+
+        # Expressive
+        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
+        if expressive_progress:
+            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        else:
+            home_scores['expressive'] = None
+
+        # Gait: get average from gaitprogresses
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        if gait_records:
+            gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+            for gait in gait_records:
+                metrics = gait.get('metrics', {})
+                gait_metrics_avg['stability_score'] += metrics.get('stability_score', 0)
+                gait_metrics_avg['gait_symmetry'] += metrics.get('gait_symmetry', 0)
+                gait_metrics_avg['step_regularity'] += metrics.get('step_regularity', 0)
+            count = len(gait_records)
+            home_scores['gait'] = {
+                'stability_score': round((gait_metrics_avg['stability_score'] / count) * 100, 1),
+                'gait_symmetry': round((gait_metrics_avg['gait_symmetry'] / count) * 100, 1),
+                'step_regularity': round((gait_metrics_avg['step_regularity'] / count) * 100, 1),
+                'overall_gait': round(((gait_metrics_avg['stability_score'] + gait_metrics_avg['gait_symmetry'] + gait_metrics_avg['step_regularity']) / (count * 3)) * 100, 1)
+            }
+        else:
+            home_scores['gait'] = {}
+
+        # Compute deltas
+        deltas = {}
+        facility_art = facility_scores.get('articulation', {})
+        home_art = home_scores.get('articulation', {})
+        art_deltas = {}
+        all_sounds = set([k for k in list(facility_art.keys()) + list(home_art.keys()) if k])
+        for sound in all_sounds:
+            f_val = facility_art.get(sound)
+            h_val = home_art.get(sound)
+            if f_val is not None and h_val is not None:
+                art_deltas[sound] = round(h_val - f_val, 1)
+            else:
+                art_deltas[sound] = None
+        deltas['articulation'] = art_deltas
+
+        for key in ['fluency', 'receptive', 'expressive']:
+            f_val = facility_scores.get(key)
+            h_val = home_scores.get(key)
+            if f_val is not None and h_val is not None:
+                deltas[key] = round(h_val - f_val, 1)
+            else:
+                deltas[key] = None
+
+        # Gait delta (overall)
+        facility_gait = facility_scores.get('gait', {})
+        home_gait = home_scores.get('gait', {})
+        f_gait_overall = facility_gait.get('overall_gait')
+        h_gait_overall = home_gait.get('overall_gait')
+        if f_gait_overall is not None and h_gait_overall is not None:
+            deltas['gait'] = round(h_gait_overall - f_gait_overall, 1)
+        else:
+            deltas['gait'] = None
+
+        # Look up assessor name (data parity with therapist endpoint)
+        try:
+            assessor = users_collection.find_one({'_id': ObjectId(facility_diag.get('assessed_by', ''))})
+            assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
+        except Exception:
+            assessor_name = 'Unknown'
+
+        # Compute summary insights
+        all_deltas = []
+        for sound, d in art_deltas.items():
+            if d is not None:
+                all_deltas.append({'metric': f'/{sound.upper()}/ Sound', 'delta': d, 'category': 'articulation'})
+        for key in ['fluency', 'receptive', 'expressive']:
+            if deltas.get(key) is not None:
+                all_deltas.append({'metric': key.capitalize(), 'delta': deltas[key], 'category': key})
+        if deltas.get('gait') is not None:
+            all_deltas.append({'metric': 'Gait', 'delta': deltas['gait'], 'category': 'gait'})
+
+        summary_insights = {}
+        if all_deltas:
+            valid_deltas = [d['delta'] for d in all_deltas]
+            summary_insights['overall_avg_delta'] = round(sum(valid_deltas) / len(valid_deltas), 1)
+            best = max(all_deltas, key=lambda x: x['delta'])
+            worst = min(all_deltas, key=lambda x: x['delta'])
+            summary_insights['strongest_area'] = {'metric': best['metric'], 'delta': best['delta']}
+            summary_insights['weakest_area'] = {'metric': worst['metric'], 'delta': worst['delta']}
+            summary_insights['total_metrics'] = len(all_deltas)
+            summary_insights['improving_count'] = len([d for d in valid_deltas if d > 0])
+            summary_insights['declining_count'] = len([d for d in valid_deltas if d < 0])
+            summary_insights['stable_count'] = len([d for d in valid_deltas if d == 0])
+
+        return jsonify({
+            'success': True,
+            'has_facility_data': True,
+            'patient_name': f"{current_user['firstName']} {current_user['lastName']}",
+            'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
+            'assessment_type': facility_diag.get('assessment_type', 'initial'),
+            'assessor_name': assessor_name,
+            'severity_level': facility_diag.get('severity_level', ''),
+            'notes': facility_diag.get('notes', ''),
+            'recommended_focus': facility_diag.get('recommended_focus', []),
+            'facility_scores': facility_scores,
+            'home_scores': home_scores,
+            'deltas': deltas,
+            'summary_insights': summary_insights
+        }), 200
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error fetching patient diagnostic comparison: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic comparison', 'error': str(e)}), 500
 
 # ================= mDNS SERVICE INTEGRATION =================
 def start_mdns_service():

@@ -29,6 +29,9 @@ exports.register = async (req, res) => {
       lastName,
       email,
       password,
+      phone,
+      age,
+      gender,
       therapyType,
       patientType,
       // Speech therapy - child fields
@@ -50,6 +53,7 @@ exports.register = async (req, res) => {
     } = req.body;
     
     console.log('📝 Extracted fields - FirstName:', firstName, 'LastName:', lastName, 'Email:', email);
+    console.log('📝 Age:', age, 'Gender:', gender);
     console.log('📝 Therapy Type:', therapyType, 'Patient Type:', patientType);
 
     // Basic validation
@@ -87,6 +91,9 @@ exports.register = async (req, res) => {
       lastName,
       email,
       password,
+      phone,
+      age,
+      gender,
       otp,
       otpExpiry,
       isVerified: false,
@@ -374,7 +381,7 @@ exports.login = async (req, res) => {
 
     // Check for user (include password field)
     console.log('🔍 Finding user in database...');
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select('+password +otp +otpExpiry');
 
     if (!user) {
       console.log('❌ User not found');
@@ -401,10 +408,38 @@ exports.login = async (req, res) => {
     // Check if user is verified
     console.log('🔍 Checking verification status...');
     if (!user.isVerified) {
-      console.log('❌ User not verified');
-      return res.status(401).json({
+      console.log('❌ User not verified - sending OTP redirect response');
+      
+      // Generate and send new OTP if not exists or expired
+      const currentTime = new Date();
+      const otpExpiry = user.otpExpiry ? new Date(user.otpExpiry) : null;
+      
+      if (!user.otp || !otpExpiry || currentTime > otpExpiry) {
+        console.log('🔢 Generating new OTP for unverified user...');
+        const newOtp = generateOTP();
+        const newOtpExpiry = generateOTPExpiry();
+        
+        user.otp = newOtp;
+        user.otpExpiry = newOtpExpiry;
+        await user.save();
+        
+        // Send OTP email
+        try {
+          const fullName = `${user.firstName} ${user.lastName}`;
+          await sendOTPEmail(email, newOtp, fullName);
+          console.log('✅ New OTP sent to user email');
+        } catch (emailError) {
+          console.error('⚠️  Error sending OTP email:', emailError.message);
+        }
+      } else {
+        console.log('📧 Existing OTP is still valid');
+      }
+      
+      return res.status(403).json({
         success: false,
-        message: 'Please verify your email first'
+        requiresVerification: true,
+        email: user.email,
+        message: 'Please verify your email. A verification code has been sent to your email.'
       });
     }
     console.log('✅ User is verified');
@@ -430,6 +465,7 @@ exports.login = async (req, res) => {
         patientInfo: user.patientInfo,
         picture: user.picture,
         googleId: user.googleId,
+        hasInitialDiagnostic: user.hasInitialDiagnostic,
         token: token
       }
     });
@@ -492,6 +528,60 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
+// @desc    Update diagnostic status
+// @route   PUT /api/auth/diagnostic-status
+// @access  Private
+exports.updateDiagnosticStatus = async (req, res) => {
+  try {
+    const { hasInitialDiagnostic } = req.body;
+
+    if (hasInitialDiagnostic === undefined || hasInitialDiagnostic === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'hasInitialDiagnostic is required'
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        hasInitialDiagnostic: Boolean(hasInitialDiagnostic),
+        diagnosticStatusUpdatedAt: new Date()
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Diagnostic status updated successfully',
+      data: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        therapyType: user.therapyType,
+        patientType: user.patientType,
+        hasInitialDiagnostic: user.hasInitialDiagnostic,
+        diagnosticStatusUpdatedAt: user.diagnosticStatusUpdatedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update diagnostic status',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Google Sign In / Sign Up
 // @route   POST /api/auth/google
 // @access  Public
@@ -546,6 +636,15 @@ exports.googleAuth = async (req, res) => {
       if (!user.googleId) {
         user.googleId = googleId;
         user.picture = picture;
+        
+        // If user was previously unverified (registered via email), verify them now
+        if (!user.isVerified) {
+          console.log('📧 User was unverified, verifying via Google Sign-In...');
+          user.isVerified = true;
+          user.otp = undefined;
+          user.otpExpiry = undefined;
+        }
+        
         // Ensure firstName and lastName are set from name if they don't exist
         if (!user.firstName || !user.lastName) {
           const nameParts = name.split(' ');
@@ -594,6 +693,7 @@ exports.googleAuth = async (req, res) => {
           parentInfo: user.parentInfo,
           patientInfo: user.patientInfo,
           googleId: user.googleId,
+          hasInitialDiagnostic: user.hasInitialDiagnostic,
           token: token
         }
       });
@@ -786,6 +886,7 @@ exports.completeProfile = async (req, res) => {
         parentInfo: user.parentInfo,
         patientInfo: user.patientInfo,
         isVerified: user.isVerified,
+        hasInitialDiagnostic: user.hasInitialDiagnostic,
         token: token
       }
     });

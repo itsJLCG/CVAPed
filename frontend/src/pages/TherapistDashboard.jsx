@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 
@@ -12,7 +12,6 @@ function TherapistDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSub, setActiveSub] = useState('receptive');
   const [therapyData, setTherapyData] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFluencyLevels, setShowFluencyLevels] = useState(false);
   const [fluencyExercises, setFluencyExercises] = useState({});
@@ -107,6 +106,86 @@ function TherapistDashboard({ onLogout }) {
   const [expandedGaitRows, setExpandedGaitRows] = useState({});
   const [currentGaitPage, setCurrentGaitPage] = useState(1);
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
+
+  // Success Stories state
+  const [successStories, setSuccessStories] = useState([]);
+  const [loadingStories, setLoadingStories] = useState(false);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [editingStory, setEditingStory] = useState(null);
+  const [currentStoryPage, setCurrentStoryPage] = useState(1);
+  const [storyEntriesPerPage, setStoryEntriesPerPage] = useState(5);
+  const [storySearchTerm, setStorySearchTerm] = useState('');
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
+  const [newStory, setNewStory] = useState({
+    patientName: '',
+    story: ''
+  });
+
+  // Reports state
+  const [reportsData, setReportsData] = useState(null);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  // Diagnostic Comparison state
+  const [diagComparisonData, setDiagComparisonData] = useState(null);
+  const [diagPatientDiagnostics, setDiagPatientDiagnostics] = useState([]);
+  const [diagComparisonHistory, setDiagComparisonHistory] = useState([]);
+  const [loadingDiagComparison, setLoadingDiagComparison] = useState(false);
+  const [showDiagModal, setShowDiagModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(null);
+  const [diagSearchQuery, setDiagSearchQuery] = useState('');
+  const [diagSearchResults, setDiagSearchResults] = useState([]);
+  const [showDiagPatientDropdown, setShowDiagPatientDropdown] = useState(false);
+  const [searchingDiagPatients, setSearchingDiagPatients] = useState(false);
+  const [selectedDiagPatient, setSelectedDiagPatient] = useState(null);
+  const [selectedDiagnosticId, setSelectedDiagnosticId] = useState(null);
+  const [savingDiagnostic, setSavingDiagnostic] = useState(false);
+  const [showTrendChart, setShowTrendChart] = useState(false);
+  const [newDiagnostic, setNewDiagnostic] = useState({
+    assessment_date: new Date().toISOString().split('T')[0],
+    assessment_type: 'initial',
+    articulation_scores: { r: '', s: '', l: '', th: '', k: '' },
+    fluency_score: '',
+    receptive_score: '',
+    expressive_score: '',
+    gait_scores: { stability_score: '', gait_symmetry: '', step_regularity: '', overall_gait: '' },
+    notes: '',
+    severity_level: '',
+    recommended_focus: []
+  });
+
+  // Appointments state
+  const [appointments, setAppointments] = useState([]);
+  const [unassignedAppointments, setUnassignedAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [loadingUnassigned, setLoadingUnassigned] = useState(false);
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
+  const [appointmentFilters, setAppointmentFilters] = useState({
+    date: '',
+    status: '',
+    therapy_type: ''
+  });
+  const [newAppointment, setNewAppointment] = useState({
+    patient_id: '',
+    therapy_type: 'articulation',
+    appointment_date: '',
+    duration: 60,
+    notes: ''
+  });
+  const [patients, setPatients] = useState([]);
+  const [showAppointmentDetails, setShowAppointmentDetails] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [showUnassignedSection, setShowUnassignedSection] = useState(true);
+  const [currentAppointmentPage, setCurrentAppointmentPage] = useState(1);
+  const [appointmentEntriesPerPage, setAppointmentEntriesPerPage] = useState(5);
+  
+  // Patient search autocomplete state
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [searchingPatients, setSearchingPatients] = useState(false);
 
   // Load overview statistics
   const loadOverviewStats = async (days = selectedDays) => {
@@ -636,10 +715,19 @@ function TherapistDashboard({ onLogout }) {
       loadFluencyExercises(); // Always load exercises for fluency
     }
     if (activeTab === 'physical') loadPhysical();
+    if (activeTab === 'success-stories') loadSuccessStories();
+    if (activeTab === 'reports') loadReports();
+    if (activeTab === 'appointments') {
+      loadAppointments();
+      loadUnassignedAppointments();
+    }
+    // Diagnostic comparison tab resets when switching to it
+    if (activeTab === 'diagnostics') {
+      // Keep selectedDiagPatient if already set; otherwise no auto-load
+    }
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
-    setLoading(true);
     try {
       // Therapists don't have access to admin stats
       // Show a simple welcome message instead
@@ -649,13 +737,10 @@ function TherapistDashboard({ onLogout }) {
       ]);
     } catch (e) {
       console.error('Failed to load overview', e);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadArticulation = async () => {
-    setLoading(true);
     try {
       // Therapists don't have access to patient data
       // This is for managing exercises only
@@ -665,13 +750,10 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load articulation', e);
       setTherapyData([]);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadLanguage = async (mode) => {
-    setLoading(true);
     try {
       // Therapists don't have access to patient data
       setTherapyData([
@@ -680,13 +762,10 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load language', e);
       setTherapyData([]);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadFluency = async () => {
-    setLoading(true);
     try {
       // Therapists don't have access to patient session data
       // They can only manage exercises via the Therapy Levels tab
@@ -694,8 +773,6 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load fluency', e);
       setTherapyData([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -736,6 +813,579 @@ function TherapistDashboard({ onLogout }) {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Success Stories Functions
+  const loadSuccessStories = async () => {
+    console.log('🔍 Loading success stories...');
+    setLoadingStories(true);
+    try {
+      const response = await successStoryService.getAll();
+      console.log('📦 Success stories response:', response);
+      if (response.success) {
+        setSuccessStories(response.data || []);
+        console.log('✅ Success stories loaded:', response.data?.length || 0);
+      }
+    } catch (e) {
+      console.error('❌ Failed to load success stories', e);
+      setSuccessStories([]);
+    } finally {
+      setLoadingStories(false);
+    }
+  };
+
+  // Diagnostic Comparison Functions
+  const searchDiagPatients = async (query) => {
+    if (!query || query.length < 2) {
+      setDiagSearchResults([]);
+      setShowDiagPatientDropdown(false);
+      return;
+    }
+    setSearchingDiagPatients(true);
+    try {
+      const response = await appointmentService.therapist.searchPatients(query);
+      if (response.success) {
+        setDiagSearchResults(response.patients || []);
+        setShowDiagPatientDropdown(true);
+      }
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    } finally {
+      setSearchingDiagPatients(false);
+    }
+  };
+
+  const selectDiagPatient = async (patient) => {
+    setSelectedDiagPatient(patient);
+    setDiagSearchQuery(`${patient.firstName} ${patient.lastName}`);
+    setShowDiagPatientDropdown(false);
+    // Load comparison data for this patient
+    await loadDiagComparison(patient._id || patient.id);
+  };
+
+  const loadDiagComparison = async (userId, diagnosticId = null) => {
+    setLoadingDiagComparison(true);
+    try {
+      const [comparisonRes, diagnosticsRes, historyRes] = await Promise.all([
+        diagnosticComparisonService.getComparison(userId, diagnosticId),
+        diagnosticComparisonService.getDiagnostics(userId),
+        diagnosticComparisonService.getComparisonHistory(userId)
+      ]);
+      setDiagComparisonData(comparisonRes);
+      setDiagPatientDiagnostics(diagnosticsRes.diagnostics || []);
+      setDiagComparisonHistory(historyRes.history || []);
+    } catch (error) {
+      console.error('Error loading diagnostic comparison:', error);
+      setDiagComparisonData(null);
+      setDiagPatientDiagnostics([]);
+      setDiagComparisonHistory([]);
+    } finally {
+      setLoadingDiagComparison(false);
+    }
+  };
+
+  const handleSaveDiagnostic = async () => {
+    if (!selectedDiagPatient) {
+      alert('Please select a patient first');
+      return;
+    }
+    setSavingDiagnostic(true);
+    try {
+      // Build the payload, converting empty strings to null
+      const payload = {
+        user_id: selectedDiagPatient._id || selectedDiagPatient.id,
+        assessment_date: newDiagnostic.assessment_date,
+        assessment_type: newDiagnostic.assessment_type,
+        articulation_scores: {},
+        fluency_score: newDiagnostic.fluency_score !== '' ? Number(newDiagnostic.fluency_score) : null,
+        receptive_score: newDiagnostic.receptive_score !== '' ? Number(newDiagnostic.receptive_score) : null,
+        expressive_score: newDiagnostic.expressive_score !== '' ? Number(newDiagnostic.expressive_score) : null,
+        gait_scores: {},
+        notes: newDiagnostic.notes,
+        severity_level: newDiagnostic.severity_level,
+        recommended_focus: newDiagnostic.recommended_focus
+      };
+
+      // Only include articulation scores that have values
+      ['r', 's', 'l', 'th', 'k'].forEach(sound => {
+        if (newDiagnostic.articulation_scores[sound] !== '') {
+          payload.articulation_scores[sound] = Number(newDiagnostic.articulation_scores[sound]);
+        }
+      });
+
+      // Only include gait scores that have values
+      ['stability_score', 'gait_symmetry', 'step_regularity', 'overall_gait'].forEach(key => {
+        if (newDiagnostic.gait_scores[key] !== '') {
+          payload.gait_scores[key] = Number(newDiagnostic.gait_scores[key]);
+        }
+      });
+
+      const response = await diagnosticComparisonService.createDiagnostic(payload);
+      if (response.success) {
+        alert('Facility diagnostic saved successfully!');
+        setShowDiagModal(false);
+        // Reset form
+        setNewDiagnostic({
+          assessment_date: new Date().toISOString().split('T')[0],
+          assessment_type: 'initial',
+          articulation_scores: { r: '', s: '', l: '', th: '', k: '' },
+          fluency_score: '',
+          receptive_score: '',
+          expressive_score: '',
+          gait_scores: { stability_score: '', gait_symmetry: '', step_regularity: '', overall_gait: '' },
+          notes: '',
+          severity_level: '',
+          recommended_focus: []
+        });
+        // Reload comparison
+        await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id);
+      }
+    } catch (error) {
+      console.error('Error saving diagnostic:', error);
+      alert(error.response?.data?.message || 'Failed to save diagnostic');
+    } finally {
+      setSavingDiagnostic(false);
+    }
+  };
+
+  const handleDeleteDiagnostic = async (diagnosticId) => {
+    try {
+      const response = await diagnosticComparisonService.deleteDiagnostic(diagnosticId);
+      if (response.success) {
+        setShowDeleteConfirmModal(null);
+        await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id);
+      }
+    } catch (error) {
+      console.error('Error deleting diagnostic:', error);
+      alert('Failed to delete diagnostic');
+      setShowDeleteConfirmModal(null);
+    }
+  };
+
+  const getDeltaDisplay = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'N/A', className: 'delta-na', icon: '—' };
+    if (delta > 0) return { text: `+${delta}%`, className: 'delta-positive', icon: '▲' };
+    if (delta < 0) return { text: `${delta}%`, className: 'delta-negative', icon: '▼' };
+    return { text: '0%', className: 'delta-neutral', icon: '—' };
+  };
+
+  const getScoreBand = (score) => {
+    if (score === null || score === undefined) return { label: 'N/A', className: 'band-na' };
+    if (score >= 86) return { label: 'Mastered', className: 'band-mastered' };
+    if (score >= 71) return { label: 'Functional', className: 'band-functional' };
+    if (score >= 51) return { label: 'Mild', className: 'band-mild' };
+    if (score >= 31) return { label: 'Moderate', className: 'band-moderate' };
+    return { label: 'Severe', className: 'band-severe' };
+  };
+
+  const getAlertBadge = (delta) => {
+    if (delta === null || delta === undefined) return { text: 'No Data', className: 'alert-nodata', icon: '📋' };
+    if (delta >= 20) return { text: 'Significant Progress', className: 'alert-great', icon: '🎉' };
+    if (delta >= 5) return { text: 'Improving', className: 'alert-good', icon: '📈' };
+    if (delta >= -3) return { text: 'Stable', className: 'alert-stable', icon: '➡️' };
+    if (delta >= -10) return { text: 'Slight Decline', className: 'alert-caution', icon: '⚠️' };
+    return { text: 'Regression', className: 'alert-warning', icon: '🚨' };
+  };
+
+  const handleSelectAssessment = async (diagnosticId) => {
+    setSelectedDiagnosticId(diagnosticId);
+    await loadDiagComparison(selectedDiagPatient._id || selectedDiagPatient.id, diagnosticId);
+  };
+
+  const handlePrintReport = () => {
+    window.print();
+  };
+
+  // Reports Functions
+  const loadReports = async () => {
+    setLoadingReports(true);
+    try {
+      const response = await therapistService.getReports();
+      if (response.success) {
+        setReportsData(response.data || null);
+      }
+    } catch (e) {
+      console.error('Failed to load reports', e);
+      setReportsData(null);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  // Appointments Functions
+  const loadAppointments = async () => {
+    setLoadingAppointments(true);
+    try {
+      const response = await appointmentService.therapist.getAppointments(appointmentFilters);
+      if (response.success) {
+        setAppointments(response.appointments || []);
+      }
+    } catch (e) {
+      console.error('Failed to load appointments', e);
+      setAppointments([]);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  const loadUnassignedAppointments = async () => {
+    setLoadingUnassigned(true);
+    try {
+      const response = await appointmentService.therapist.getUnassignedAppointments();
+      if (response.success) {
+        setUnassignedAppointments(response.appointments || []);
+      }
+    } catch (error) {
+      console.error('Error loading unassigned appointments:', error);
+    } finally {
+      setLoadingUnassigned(false);
+    }
+  };
+
+  const handleAssignToMe = async (appointmentId) => {
+    try {
+      const response = await appointmentService.therapist.assignToAppointment(appointmentId);
+      if (response.success) {
+        alert('Appointment approved and assigned to you! The patient will be notified.');
+        // Refresh both lists
+        loadAppointments();
+        loadUnassignedAppointments();
+      }
+    } catch (error) {
+      console.error('Error assigning to appointment:', error);
+      alert(error.response?.data?.message || 'Failed to approve and assign appointment');
+    }
+  };
+
+  const loadPatients = async () => {
+    // This would be a new endpoint to get all patients
+    // For now, we'll leave it empty and handle it when creating appointments
+    try {
+      // TODO: Add endpoint to fetch all patients
+      // const response = await therapistService.getPatients();
+      // setPatients(response.patients || []);
+    } catch (e) {
+      console.error('Failed to load patients', e);
+    }
+  };
+
+  const handleAddAppointment = () => {
+    setEditingAppointment(null);
+    setNewAppointment({
+      patient_id: '',
+      therapy_type: 'articulation',
+      appointment_date: '',
+      duration: 60,
+      notes: ''
+    });
+    // Reset patient search
+    setPatientSearchQuery('');
+    setSelectedPatient(null);
+    setPatientSearchResults([]);
+    setShowPatientDropdown(false);
+    setShowAppointmentModal(true);
+  };
+
+  const handleSaveAppointment = async () => {
+    try {
+      // Validation
+      if (!newAppointment.patient_id) {
+        alert('Please select a patient');
+        return;
+      }
+      if (!newAppointment.appointment_date) {
+        alert('Please select date and time');
+        return;
+      }
+
+      if (editingAppointment) {
+        // Update existing appointment
+        const response = await appointmentService.therapist.updateAppointment(
+          editingAppointment._id,
+          newAppointment
+        );
+        if (response.success) {
+          alert('Appointment updated successfully');
+          setShowAppointmentModal(false);
+          loadAppointments();
+        }
+      } else {
+        // Create new appointment
+        const response = await appointmentService.therapist.createAppointment(newAppointment);
+        if (response.success) {
+          alert('Appointment created successfully');
+          setShowAppointmentModal(false);
+          loadAppointments();
+        }
+      }
+    } catch (error) {
+      console.error('Error saving appointment:', error);
+      alert(error.response?.data?.message || 'Failed to save appointment');
+    }
+  };
+
+  const handleEditAppointment = (appointment) => {
+    setEditingAppointment(appointment);
+    setNewAppointment({
+      patient_id: appointment.patient_id,
+      therapy_type: appointment.therapy_type,
+      appointment_date: appointment.appointment_date,
+      duration: appointment.duration,
+      notes: appointment.notes || '',
+      status: appointment.status || 'scheduled'
+    });
+    
+    // Set patient search info for editing
+    if (appointment.patient_name) {
+      setPatientSearchQuery(appointment.patient_name);
+      setSelectedPatient({
+        _id: appointment.patient_id,
+        fullName: appointment.patient_name,
+        email: appointment.patient_email || ''
+      });
+    }
+    
+    setShowAppointmentModal(true);
+  };
+
+  const handleCancelAppointment = async (appointmentId) => {
+    if (!confirm('Are you sure you want to cancel this appointment?')) {
+      return;
+    }
+
+    try {
+      const response = await appointmentService.therapist.cancelAppointment(appointmentId);
+      if (response.success) {
+        alert('Appointment cancelled successfully');
+        loadAppointments();
+      }
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      alert('Failed to cancel appointment');
+    }
+  };
+
+  const handleViewAppointment = (appointment) => {
+    setSelectedAppointment(appointment);
+    setShowAppointmentDetails(true);
+  };
+
+  const handleMarkComplete = async (appointmentId) => {
+    try {
+      const response = await appointmentService.therapist.updateAppointment(appointmentId, {
+        status: 'completed'
+      });
+      if (response.success) {
+        alert('Appointment marked as completed');
+        loadAppointments();
+      }
+    } catch (error) {
+      console.error('Error marking appointment complete:', error);
+      alert('Failed to update appointment');
+    }
+  };
+
+  // Patient search with debouncing
+  useEffect(() => {
+    const searchPatients = async () => {
+      if (!patientSearchQuery || patientSearchQuery.trim().length < 2) {
+        setPatientSearchResults([]);
+        setShowPatientDropdown(false);
+        return;
+      }
+
+      setSearchingPatients(true);
+      try {
+        const response = await appointmentService.therapist.searchPatients(patientSearchQuery.trim(), 10);
+        if (response.success) {
+          setPatientSearchResults(response.patients || []);
+          setShowPatientDropdown(true);
+        }
+      } catch (error) {
+        console.error('Error searching patients:', error);
+        setPatientSearchResults([]);
+      } finally {
+        setSearchingPatients(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchPatients, 300);
+    return () => clearTimeout(timeoutId);
+  }, [patientSearchQuery]);
+
+  // Close autocomplete dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showPatientDropdown && !event.target.closest('.autocomplete-container')) {
+        setShowPatientDropdown(false);
+      }
+    };
+
+    if (showPatientDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showPatientDropdown]);
+
+  const handleSelectPatient = (patient) => {
+    setSelectedPatient(patient);
+    setPatientSearchQuery(patient.fullName);
+    setNewAppointment({ ...newAppointment, patient_id: patient._id });
+    setShowPatientDropdown(false);
+  };
+
+  const handlePatientSearchChange = (e) => {
+    const value = e.target.value;
+    setPatientSearchQuery(value);
+    
+    // Clear selected patient if search is cleared
+    if (!value) {
+      setSelectedPatient(null);
+      setNewAppointment({ ...newAppointment, patient_id: '' });
+    }
+  };
+
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setSelectedImages(files);
+    
+    // Create preview URLs
+    const previews = files.map(file => URL.createObjectURL(file));
+    setImagePreviewUrls(previews);
+  };
+
+  const handleRemoveImage = (index) => {
+    const newImages = selectedImages.filter((_, i) => i !== index);
+    const newPreviews = imagePreviewUrls.filter((_, i) => i !== index);
+    setSelectedImages(newImages);
+    setImagePreviewUrls(newPreviews);
+  };
+
+  const handleAddStory = () => {
+    setEditingStory(null);
+    setNewStory({
+      patientName: '',
+      story: ''
+    });
+    setSelectedImages([]);
+    setImagePreviewUrls([]);
+    setShowStoryModal(true);
+  };
+
+  const handleSaveStory = async () => {
+    try {
+      // Validation
+      if (!newStory.patientName.trim()) {
+        alert('Patient name is required');
+        return;
+      }
+      if (!newStory.story.trim()) {
+        alert('Success story content is required');
+        return;
+      }
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('patientName', newStory.patientName);
+      formData.append('story', newStory.story);
+      
+      // Append images
+      selectedImages.forEach((image) => {
+        formData.append('images', image);
+      });
+
+      const response = await successStoryService.create(formData);
+      
+      if (response.success) {
+        setShowStoryModal(false);
+        setSelectedImages([]);
+        setImagePreviewUrls([]);
+        loadSuccessStories();
+        alert('Success story added successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to add success story:', error);
+      alert(error.response?.data?.message || 'Failed to add success story');
+    }
+  };
+
+  const handleEditStory = (story) => {
+    setEditingStory(story);
+    setNewStory({
+      patientName: story.patientName,
+      story: story.story
+    });
+    setSelectedImages([]);
+    setImagePreviewUrls([]);
+    setShowStoryModal(true);
+  };
+
+  const handleUpdateStory = async () => {
+    try {
+      // Validation
+      if (!newStory.patientName.trim()) {
+        alert('Patient name is required');
+        return;
+      }
+      if (!newStory.story.trim()) {
+        alert('Success story content is required');
+        return;
+      }
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('patientName', newStory.patientName);
+      formData.append('story', newStory.story);
+      
+      // Append new images
+      selectedImages.forEach((image) => {
+        formData.append('images', image);
+      });
+
+      const response = await successStoryService.update(editingStory.id, formData);
+      
+      if (response.success) {
+        setShowStoryModal(false);
+        setEditingStory(null);
+        setSelectedImages([]);
+        setImagePreviewUrls([]);
+        loadSuccessStories();
+        alert('Success story updated successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to update success story:', error);
+      alert(error.response?.data?.message || 'Failed to update success story');
+    }
+  };
+
+  const handleDeleteStory = async (storyId) => {
+    if (!window.confirm('Are you sure you want to delete this success story?')) return;
+    
+    try {
+      const response = await successStoryService.delete(storyId);
+      if (response.success) {
+        loadSuccessStories();
+        alert('Success story deleted successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to delete success story:', error);
+      alert(error.response?.data?.message || 'Failed to delete success story');
+    }
+  };
+
+  const handleRemoveExistingImage = async (storyId, imagePath) => {
+    if (!window.confirm('Are you sure you want to remove this image?')) return;
+    
+    try {
+      const response = await successStoryService.removeImage(storyId, imagePath);
+      if (response.success) {
+        loadSuccessStories();
+        alert('Image removed successfully!');
+      }
+    } catch (error) {
+      console.error('Failed to remove image:', error);
+      alert(error.response?.data?.message || 'Failed to remove image');
+    }
   };
 
   const filtered = therapyData.filter(item => {
@@ -819,6 +1469,26 @@ function TherapistDashboard({ onLogout }) {
             <span className="nav-icon">🏃</span>
             {!sidebarCollapsed && <span className="nav-label">Physical Therapy</span>}
           </button>
+
+          <button className={`nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => { setActiveTab('appointments'); setTherapyData([]); }}>
+            <span className="nav-icon">📅</span>
+            {!sidebarCollapsed && <span className="nav-label">Appointments</span>}
+          </button>
+
+          <button className={`nav-item ${activeTab === 'success-stories' ? 'active' : ''}`} onClick={() => { setActiveTab('success-stories'); setTherapyData([]); }}>
+            <span className="nav-icon">⭐</span>
+            {!sidebarCollapsed && <span className="nav-label">Success Stories</span>}
+          </button>
+
+          <button className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => { setActiveTab('reports'); setTherapyData([]); }}>
+            <span className="nav-icon">📊</span>
+            {!sidebarCollapsed && <span className="nav-label">Reports</span>}
+          </button>
+
+          <button className={`nav-item ${activeTab === 'diagnostics' ? 'active' : ''}`} onClick={() => { setActiveTab('diagnostics'); setTherapyData([]); }}>
+            <span className="nav-icon">🔬</span>
+            {!sidebarCollapsed && <span className="nav-label">Diagnostic Comparison</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -837,7 +1507,7 @@ function TherapistDashboard({ onLogout }) {
       <main className="admin-main">
         <header className="admin-header">
           <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : 'Therapist'}</h1>
+            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : activeTab === 'diagnostics' ? 'Diagnostic Comparison' : 'Therapist'}</h1>
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
@@ -846,13 +1516,6 @@ function TherapistDashboard({ onLogout }) {
         </header>
 
         <div className="admin-content">
-          {loading && (
-            <div className="loading-overlay">
-              <div className="loading-spinner"></div>
-              <p>Loading...</p>
-            </div>
-          )}
-
           {activeTab === 'overview' && (
             <div className="overview-section">
               {loadingStats ? (
@@ -862,8 +1525,8 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               ) : overviewStats ? (
                 <>
-                  {/* Stats Cards */}
-                  <div className="stats-grid">
+                  {/* Primary Stats Row */}
+                  <div className="overview-stats-row">
                     <div className="stat-card">
                       <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
                         <span className="stat-icon-emoji">👥</span>
@@ -877,7 +1540,7 @@ function TherapistDashboard({ onLogout }) {
 
                     <div className="stat-card">
                       <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-                        <span className="stat-icon-emoji">�</span>
+                        <span className="stat-icon-emoji">📋</span>
                       </div>
                       <div className="stat-details">
                         <h3 className="stat-value">{overviewStats.total_sessions || 0}</h3>
@@ -921,18 +1584,68 @@ function TherapistDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  {/* Therapy Sessions Distribution - Donut Chart */}
-                  <div className="therapy-distribution-section">
-                    <div className="chart-card full-width">
-                      <div className="chart-header">
-                        <h3 className="chart-title">
-                          <span className="chart-icon">�</span>
+                  {/* Appointments Stats Row */}
+                  {overviewStats.appointments && (
+                    <div className="overview-stats-row">
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' }}>
+                          <span className="stat-icon-emoji">📅</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.today || 0}</h3>
+                          <p className="stat-label">Today's Appointments</p>
+                          <span className="stat-badge">Scheduled</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
+                          <span className="stat-icon-emoji">📆</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.upcoming || 0}</h3>
+                          <p className="stat-label">Upcoming</p>
+                          <span className="stat-badge">Next 7 Days</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' }}>
+                          <span className="stat-icon-emoji">✔️</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.completed || 0}</h3>
+                          <p className="stat-label">Completed</p>
+                          <span className="stat-badge">{overviewStats.appointments.completion_rate || 0}% Rate</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card">
+                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' }}>
+                          <span className="stat-icon-emoji">📊</span>
+                        </div>
+                        <div className="stat-details">
+                          <h3 className="stat-value">{overviewStats.appointments.total || 0}</h3>
+                          <p className="stat-label">Total Appointments</p>
+                          <span className="stat-badge">All Time</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unified Dashboard Grid */}
+                  <div className="overview-unified-grid">
+                    {/* 1 - Therapy Sessions Distribution */}
+                    <div className="overview-card overview-chart-card" style={{ gridArea: 'sessions' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">📊</span>
                           Therapy Sessions Distribution
                         </h3>
                       </div>
-                      <div className="donut-chart-container">
+                      <div className="overview-chart-body">
                         {/* Donut Chart */}
-                        <div className="donut-chart-wrapper">
+                        <div className="overview-donut-wrapper">
                           <svg className="donut-chart" viewBox="0 0 200 200">
                             <defs>
                               <linearGradient id="articulation-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -960,60 +1673,38 @@ function TherapistDashboard({ onLogout }) {
                               const languageCount = overviewStats.language_sessions || 0;
                               const fluencyCount = overviewStats.fluency_sessions || 0;
                               
-                              // Build dynamic therapy data array based on what exists
                               const therapyData = [];
                               
                               if (articulationCount > 0) {
                                 therapyData.push({
-                                  name: 'Articulation',
-                                  count: articulationCount,
+                                  name: 'Articulation', count: articulationCount,
                                   percentage: (articulationCount / total) * 100,
-                                  color: 'url(#articulation-gradient)',
-                                  hoverColor: 'rgba(245, 158, 11, 0.4)',
-                                  icon: '🗣️',
-                                  description: 'Sound pronunciation therapy',
-                                  className: 'articulation-slice'
+                                  color: 'url(#articulation-gradient)', className: 'articulation-slice'
                                 });
                               }
-                              
                               if (languageCount > 0) {
                                 therapyData.push({
-                                  name: 'Language',
-                                  count: languageCount,
+                                  name: 'Language', count: languageCount,
                                   percentage: (languageCount / total) * 100,
-                                  color: 'url(#language-gradient)',
-                                  hoverColor: 'rgba(139, 92, 246, 0.4)',
-                                  icon: '💬',
-                                  description: 'Receptive & expressive skills',
-                                  className: 'language-slice'
+                                  color: 'url(#language-gradient)', className: 'language-slice'
                                 });
                               }
-                              
                               if (fluencyCount > 0) {
                                 therapyData.push({
-                                  name: 'Fluency',
-                                  count: fluencyCount,
+                                  name: 'Fluency', count: fluencyCount,
                                   percentage: (fluencyCount / total) * 100,
-                                  color: 'url(#fluency-gradient)',
-                                  hoverColor: 'rgba(16, 185, 129, 0.4)',
-                                  icon: '⚡',
-                                  description: 'Speech flow & rhythm training',
-                                  className: 'fluency-slice'
+                                  color: 'url(#fluency-gradient)', className: 'fluency-slice'
                                 });
                               }
                               
-                              // Helper function to create pie slice path
                               const createPieSlice = (startAngle, endAngle, radius = 85) => {
                                 const start = (startAngle - 90) * Math.PI / 180;
                                 const end = (endAngle - 90) * Math.PI / 180;
-                                
                                 const x1 = 100 + radius * Math.cos(start);
                                 const y1 = 100 + radius * Math.sin(start);
                                 const x2 = 100 + radius * Math.cos(end);
                                 const y2 = 100 + radius * Math.sin(end);
-                                
                                 const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-                                
                                 return `M 100 100 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
                               };
                               
@@ -1022,23 +1713,18 @@ function TherapistDashboard({ onLogout }) {
                               return (
                                 <g className="pie-chart-group">
                                   {therapyData.length === 0 ? (
-                                    // No data - show empty state
                                     <>
                                       <circle cx="100" cy="100" r="85" fill="#f1f5f9" opacity="0.5" />
                                       <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">
-                                        No Data
-                                      </text>
+                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">No Data</text>
                                     </>
                                   ) : (
                                     <>
-                                      {/* Dynamic pie slices based on available data */}
-                                      {therapyData.map((therapy, index) => {
+                                      {therapyData.map((therapy) => {
                                         const angle = (therapy.percentage / 100) * 360;
                                         const sliceStartAngle = currentAngle;
                                         const sliceEndAngle = currentAngle + angle;
                                         currentAngle += angle;
-                                        
                                         return (
                                           <path
                                             key={therapy.name}
@@ -1046,263 +1732,217 @@ function TherapistDashboard({ onLogout }) {
                                             d={createPieSlice(sliceStartAngle, sliceEndAngle)}
                                             fill={therapy.color}
                                             filter="url(#shadow)"
-                                            style={{ 
-                                              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                                              cursor: 'pointer',
-                                              transformOrigin: '100px 100px'
-                                            }}
-                                            onMouseEnter={(e) => {
-                                              e.currentTarget.setAttribute('filter', 'url(#shadow-hover)');
-                                              e.currentTarget.style.transform = 'scale(1.05)';
-                                              e.currentTarget.style.opacity = '0.95';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              e.currentTarget.setAttribute('filter', 'url(#shadow)');
-                                              e.currentTarget.style.transform = 'scale(1)';
-                                              e.currentTarget.style.opacity = '1';
-                                            }}
-                                            onClick={() => {
-                                              console.log(`${therapy.name} sessions:`, therapy.count);
-                                            }}
+                                            style={{ transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'pointer', transformOrigin: '100px 100px' }}
+                                            onMouseEnter={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow-hover)'); e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                            onMouseLeave={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow)'); e.currentTarget.style.transform = 'scale(1)'; }}
                                           >
-                                            <title>{therapy.icon} {therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
+                                            <title>{therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
                                           </path>
                                         );
                                       })}
-                                      
-                                      {/* Separator lines between slices */}
                                       {therapyData.map((therapy, index) => {
-                                        if (index === 0) {
-                                          // First separator at top
-                                          return <line key={`sep-0`} x1="100" y1="100" x2="100" y2="15" stroke="white" strokeWidth="2" opacity="0.8" />;
-                                        }
-                                        
-                                        // Calculate cumulative angle for each separator
                                         let cumulativeAngle = 0;
                                         for (let i = 0; i < index; i++) {
                                           cumulativeAngle += (therapyData[i].percentage / 100) * 360;
                                         }
-                                        
                                         const angle = (cumulativeAngle - 90) * Math.PI / 180;
                                         return (
-                                          <line 
-                                            key={`sep-${index}`}
-                                            x1="100" 
-                                            y1="100" 
-                                            x2={100 + 85 * Math.cos(angle)} 
-                                            y2={100 + 85 * Math.sin(angle)} 
-                                            stroke="white" 
-                                            strokeWidth="2" 
-                                            opacity="0.8" 
-                                          />
+                                          <line key={`sep-${index}`} x1="100" y1="100"
+                                            x2={index === 0 ? 100 : 100 + 85 * Math.cos(angle)}
+                                            y2={index === 0 ? 15 : 100 + 85 * Math.sin(angle)}
+                                            stroke="white" strokeWidth="2" opacity="0.8" />
                                         );
                                       })}
-                                      
-                                      {/* Center circle with stats */}
                                       <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      
-                                      {/* Center content */}
-                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">
-                                        {total}
-                                      </text>
-                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">
-                                        TOTAL
-                                      </text>
-                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">
-                                        SESSIONS
-                                      </text>
+                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">{total}</text>
+                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">TOTAL</text>
+                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">SESSIONS</text>
                                     </>
                                   )}
                                 </g>
                               );
                             })()}
                           </svg>
-                          
-                          {/* Stats Summary Below Chart */}
-                          <div className="donut-stats-summary">
-                            <div className="donut-stat-item">
-                              <div className="donut-stat-value">{overviewStats.total_sessions || 0}</div>
-                              <div className="donut-stat-label">Total</div>
-                            </div>
-                            <div className="donut-stat-divider"></div>
-                            <div className="donut-stat-item">
-                              <div className="donut-stat-value">
-                                {overviewStats.total_sessions > 0 
-                                  ? Math.round((overviewStats.articulation_sessions || 0) + (overviewStats.language_sessions || 0) + (overviewStats.fluency_sessions || 0))
-                                  : 0}
-                              </div>
-                              <div className="donut-stat-label">Active</div>
-                            </div>
-                            <div className="donut-stat-divider"></div>
-                            <div className="donut-stat-item">
-                              <div className="donut-stat-value">
-                                {[
-                                  overviewStats.articulation_sessions || 0,
-                                  overviewStats.language_sessions || 0,
-                                  overviewStats.fluency_sessions || 0
-                                ].filter(count => count > 0).length}
-                              </div>
-                              <div className="donut-stat-label">Types</div>
-                            </div>
-                          </div>
                         </div>
 
-                        {/* Enhanced Legend - Dynamic based on data */}
-                        <div className="donut-legend">
-                          <div className="legend-header">
-                            <h4 className="legend-title">Session Breakdown</h4>
-                            <span className="legend-total">{overviewStats.total_sessions || 0} Total</span>
-                          </div>
-                          
-                          <div className="legend-items">
-                            {/* Articulation - only show if has data */}
-                            {(overviewStats.articulation_sessions || 0) > 0 && (
-                              <div 
-                                className="legend-item"
-                                onMouseEnter={() => {
-                                  const segment = document.querySelector('.articulation-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow-hover)');
-                                    segment.style.transform = 'scale(1.05)';
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  const segment = document.querySelector('.articulation-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow)');
-                                    segment.style.transform = 'scale(1)';
-                                  }
-                                }}
-                              >
-                                <div className="legend-left">
-                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}>
-                                    <span className="legend-box-icon">🗣️</span>
-                                  </div>
-                                  <div className="legend-info">
-                                    <span className="legend-label">Articulation</span>
-                                    <span className="legend-description">Sound pronunciation therapy</span>
-                                  </div>
+                        {/* Legend */}
+                        <div className="overview-chart-legend">
+                          {[
+                            { key: 'articulation', label: 'Articulation', icon: '🗣️', desc: 'Sound pronunciation', sessions: overviewStats.articulation_sessions || 0, gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', sliceClass: 'articulation-slice', fillClass: 'articulation-fill' },
+                            { key: 'language', label: 'Language', icon: '💬', desc: 'Receptive & expressive', sessions: overviewStats.language_sessions || 0, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', sliceClass: 'language-slice', fillClass: 'language-fill' },
+                            { key: 'fluency', label: 'Fluency', icon: '⚡', desc: 'Speech flow & rhythm', sessions: overviewStats.fluency_sessions || 0, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', sliceClass: 'fluency-slice', fillClass: 'fluency-fill' },
+                          ].filter(t => t.sessions > 0).map(t => (
+                            <div key={t.key} className="overview-legend-item"
+                              onMouseEnter={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow-hover)'); s.style.transform = 'scale(1.05)'; } }}
+                              onMouseLeave={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow)'); s.style.transform = 'scale(1)'; } }}
+                            >
+                              <div className="overview-legend-left">
+                                <div className="overview-legend-color" style={{ background: t.gradient }}>
+                                  <span>{t.icon}</span>
                                 </div>
-                                <div className="legend-right">
-                                  <span className="legend-count">{overviewStats.articulation_sessions || 0}</span>
-                                  <div className="legend-percentage-bar">
-                                    <div 
-                                      className="legend-percentage-fill articulation-fill"
-                                      style={{
-                                        width: `${overviewStats.total_sessions > 0 
-                                          ? ((overviewStats.articulation_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                          : 0}%`
-                                      }}
-                                    ></div>
-                                  </div>
-                                  <span className="legend-percentage">
-                                    {overviewStats.total_sessions > 0 
-                                      ? ((overviewStats.articulation_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                      : 0}%
-                                  </span>
+                                <div className="overview-legend-info">
+                                  <span className="overview-legend-label">{t.label}</span>
+                                  <span className="overview-legend-desc">{t.desc}</span>
                                 </div>
                               </div>
-                            )}
-
-                            {/* Language - only show if has data */}
-                            {(overviewStats.language_sessions || 0) > 0 && (
-                              <div 
-                                className="legend-item"
-                                onMouseEnter={() => {
-                                  const segment = document.querySelector('.language-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow-hover)');
-                                    segment.style.transform = 'scale(1.05)';
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  const segment = document.querySelector('.language-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow)');
-                                    segment.style.transform = 'scale(1)';
-                                  }
-                                }}
-                              >
-                                <div className="legend-left">
-                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' }}>
-                                    <span className="legend-box-icon">💬</span>
-                                  </div>
-                                  <div className="legend-info">
-                                    <span className="legend-label">Language</span>
-                                    <span className="legend-description">Receptive & expressive skills</span>
-                                  </div>
+                              <div className="overview-legend-right">
+                                <span className="overview-legend-count">{t.sessions}</span>
+                                <div className="overview-legend-bar">
+                                  <div className={`overview-legend-bar-fill ${t.fillClass}`}
+                                    style={{ width: `${overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%` }}
+                                  ></div>
                                 </div>
-                                <div className="legend-right">
-                                  <span className="legend-count">{overviewStats.language_sessions || 0}</span>
-                                  <div className="legend-percentage-bar">
-                                    <div 
-                                      className="legend-percentage-fill language-fill"
-                                      style={{
-                                        width: `${overviewStats.total_sessions > 0 
-                                          ? ((overviewStats.language_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                          : 0}%`
-                                      }}
-                                    ></div>
-                                  </div>
-                                  <span className="legend-percentage">
-                                    {overviewStats.total_sessions > 0 
-                                      ? ((overviewStats.language_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                      : 0}%
-                                  </span>
-                                </div>
+                                <span className="overview-legend-pct">
+                                  {overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%
+                                </span>
                               </div>
-                            )}
-
-                            {/* Fluency - only show if has data */}
-                            {(overviewStats.fluency_sessions || 0) > 0 && (
-                              <div 
-                                className="legend-item"
-                                onMouseEnter={() => {
-                                  const segment = document.querySelector('.fluency-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow-hover)');
-                                    segment.style.transform = 'scale(1.05)';
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  const segment = document.querySelector('.fluency-slice');
-                                  if (segment) {
-                                    segment.setAttribute('filter', 'url(#shadow)');
-                                    segment.style.transform = 'scale(1)';
-                                  }
-                                }}
-                              >
-                                <div className="legend-left">
-                                  <div className="legend-color-box" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
-                                    <span className="legend-box-icon">⚡</span>
-                                  </div>
-                                  <div className="legend-info">
-                                    <span className="legend-label">Fluency</span>
-                                    <span className="legend-description">Speech flow & rhythm training</span>
-                                  </div>
-                                </div>
-                                <div className="legend-right">
-                                  <span className="legend-count">{overviewStats.fluency_sessions || 0}</span>
-                                  <div className="legend-percentage-bar">
-                                    <div 
-                                      className="legend-percentage-fill fluency-fill"
-                                      style={{
-                                        width: `${overviewStats.total_sessions > 0 
-                                          ? ((overviewStats.fluency_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                          : 0}%`
-                                      }}
-                                    ></div>
-                                  </div>
-                                  <span className="legend-percentage">
-                                    {overviewStats.total_sessions > 0 
-                                      ? ((overviewStats.fluency_sessions || 0) / overviewStats.total_sessions * 100).toFixed(1)
-                                      : 0}%
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          ))}
+                          {(overviewStats.articulation_sessions || 0) === 0 && (overviewStats.language_sessions || 0) === 0 && (overviewStats.fluency_sessions || 0) === 0 && (
+                            <div className="overview-legend-empty">
+                              <span>📭</span>
+                              <p>No session data available</p>
+                            </div>
+                          )}
                         </div>
+                      </div>
+                    </div>
+
+                    {/* 2 - Average Scores */}
+                    <div className="overview-card overview-avg-scores-card" style={{ gridArea: 'scores' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">📈</span>
+                          Average Scores
+                        </h3>
+                      </div>
+                      <div className="overview-avg-scores-body">
+                        {[
+                          { key: 'articulation', label: 'Articulation', icon: '🗣️', color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', score: overviewStats.average_scores?.articulation || 0 },
+                          { key: 'language', label: 'Language', icon: '💬', color: '#8b5cf6', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', score: overviewStats.average_scores?.language || 0 },
+                          { key: 'fluency', label: 'Fluency', icon: '⚡', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', score: overviewStats.average_scores?.fluency || 0 },
+                        ].map(t => (
+                          <div key={t.key} className="avg-score-row">
+                            <div className="avg-score-label">
+                              <span className="avg-score-icon">{t.icon}</span>
+                              <span className="avg-score-name">{t.label}</span>
+                            </div>
+                            <div className="avg-score-bar-wrapper">
+                              <div className="avg-score-bar-track">
+                                <div
+                                  className="avg-score-bar-fill"
+                                  style={{ width: `${t.score}%`, background: t.gradient }}
+                                ></div>
+                              </div>
+                              <span className={`avg-score-value ${t.score >= 80 ? 'score-high' : t.score >= 50 ? 'score-mid' : 'score-low'}`}>
+                                {t.score}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {(!overviewStats.average_scores || (overviewStats.average_scores.articulation === 0 && overviewStats.average_scores.language === 0 && overviewStats.average_scores.fluency === 0)) && (
+                          <div className="avg-scores-empty">
+                            <span>📭</span>
+                            <p>No score data available</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 3 - Patient Engagement */}
+                    <div className="overview-card overview-engagement-card" style={{ gridArea: 'engage' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">💡</span>
+                          Patient Engagement
+                        </h3>
+                      </div>
+                      <div className="overview-engagement-body">
+                        {(() => {
+                          const active = overviewStats.active_patients || 0;
+                          const total = overviewStats.total_patients || 0;
+                          const rate = total > 0 ? Math.round((active / total) * 100) : 0;
+                          const circumference = 2 * Math.PI * 54;
+                          const offset = circumference - (rate / 100) * circumference;
+                          const rateColor = rate >= 70 ? '#10b981' : rate >= 40 ? '#f59e0b' : '#ef4444';
+                          return (
+                            <div className="engagement-ring-container">
+                              <div className="engagement-ring-wrapper">
+                                <svg className="engagement-ring-svg" viewBox="0 0 128 128">
+                                  <circle cx="64" cy="64" r="54" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+                                  <circle cx="64" cy="64" r="54" fill="none" stroke={rateColor} strokeWidth="10"
+                                    strokeDasharray={circumference} strokeDashoffset={offset}
+                                    strokeLinecap="round" transform="rotate(-90 64 64)"
+                                    style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+                                  />
+                                </svg>
+                                <div className="engagement-ring-center">
+                                  <span className="engagement-ring-pct" style={{ color: rateColor }}>{rate}%</span>
+                                </div>
+                              </div>
+                              <div className="engagement-ring-details">
+                                <div className="engagement-detail-row">
+                                  <span className="engagement-detail-dot" style={{ background: rateColor }}></span>
+                                  <span className="engagement-detail-label">Active</span>
+                                  <span className="engagement-detail-value">{active}</span>
+                                </div>
+                                <div className="engagement-detail-row">
+                                  <span className="engagement-detail-dot" style={{ background: '#e2e8f0' }}></span>
+                                  <span className="engagement-detail-label">Inactive</span>
+                                  <span className="engagement-detail-value">{total - active}</span>
+                                </div>
+                                <div className="engagement-detail-row engagement-detail-total">
+                                  <span className="engagement-detail-label">Total</span>
+                                  <span className="engagement-detail-value">{total}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* 4 - Recent Activities (spans 2 rows on right) */}
+                    <div className="overview-card overview-activities-card" style={{ gridArea: 'activity' }}>
+                      <div className="overview-card-header">
+                        <h3 className="overview-card-title">
+                          <span className="overview-card-icon">🕑</span>
+                          Recent Activities
+                        </h3>
+                      </div>
+                      <div className="overview-activities-body">
+                        {overviewStats.recent_activities && overviewStats.recent_activities.length > 0 ? (
+                          <div className="overview-activities-list">
+                            {overviewStats.recent_activities.map((activity, index) => (
+                              <div className="overview-activity-item" key={index}>
+                                <div className="overview-activity-icon">
+                                  {activity.therapy_type === 'Articulation' && '🗣️'}
+                                  {activity.therapy_type === 'Language' && '📖'}
+                                  {activity.therapy_type === 'Fluency' && '💬'}
+                                </div>
+                                <div className="overview-activity-info">
+                                  <span className="overview-activity-patient">{activity.patient_name}</span>
+                                  <span className="overview-activity-detail">
+                                    {activity.therapy_type}{activity.detail ? ` — ${activity.detail}` : ''}
+                                  </span>
+                                </div>
+                                <div className="overview-activity-meta">
+                                  <span className={`overview-activity-score ${activity.score >= 80 ? 'score-high' : activity.score >= 50 ? 'score-mid' : 'score-low'}`}>
+                                    {activity.score != null ? `${activity.score}%` : '—'}
+                                  </span>
+                                  <span className="overview-activity-time">
+                                    {activity.timestamp ? new Date(activity.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="overview-activities-empty">
+                            <span>📭</span>
+                            <p>No recent activities yet</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1432,16 +2072,25 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'physical' && (
             <div className="physical-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Physical Therapy</h2>
+                  <p>Monitor and review patient gait analyses</p>
+                </div>
+              </div>
+
               {loadingPhysical ? (
                 <div className="loading-overlay">
                   <div className="loading-spinner"></div>
                   <p>Loading gait analyses...</p>
                 </div>
               ) : gaitAnalyses.length === 0 ? (
-                <div className="no-exercises">
-                  <div className="no-exercises-icon">🚶</div>
-                  <p className="no-exercises-text">No gait analyses found</p>
-                  <p className="no-exercises-hint">Gait analyses will appear here after patients perform them</p>
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🚶</span>
+                    <h3>No Gait Analyses Found</h3>
+                    <p>Gait analyses will appear here after patients perform them.</p>
+                  </div>
                 </div>
               ) : (
                 <div className="gait-analyses-container">
@@ -1483,7 +2132,7 @@ function TherapistDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  <div className="table-wrapper">
+                  <div className="datatable-container">
                     <table className="logs-table gait-table">
                       <thead>
                         <tr>
@@ -1648,81 +2297,81 @@ function TherapistDashboard({ onLogout }) {
                         })()}
                       </tbody>
                     </table>
+
+                    {/* Pagination Footer */}
+                    {(() => {
+                      const filteredAnalyses = gaitAnalyses.filter(analysis => 
+                        !searchTerm || 
+                        analysis.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        analysis.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+                      );
+                      const totalPages = Math.ceil(filteredAnalyses.length / gaitEntriesPerPage);
+                      if (totalPages <= 1) return null;
+                      
+                      const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
+                      const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage + 1;
+                      const actualLastEntry = Math.min(indexOfLastEntry, filteredAnalyses.length);
+                      
+                      return (
+                        <div className="pagination-footer">
+                          <div className="pagination-info">
+                            Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredAnalyses.length} entries
+                          </div>
+                          <div className="pagination-buttons">
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(1)}
+                              disabled={currentGaitPage === 1}
+                            >
+                              «
+                            </button>
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentGaitPage === 1}
+                            >
+                              ‹
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentGaitPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentGaitPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentGaitPage - 2 + i;
+                              }
+                              return (
+                                <button
+                                  key={pageNum}
+                                  className={`pagination-btn ${currentGaitPage === pageNum ? 'active' : ''}`}
+                                  onClick={() => setCurrentGaitPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentGaitPage === totalPages}
+                            >
+                              ›
+                            </button>
+                            <button 
+                              className="pagination-btn" 
+                              onClick={() => setCurrentGaitPage(totalPages)}
+                              disabled={currentGaitPage === totalPages}
+                            >
+                              »
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
-                  
-                  {/* Pagination Footer */}
-                  {(() => {
-                    const filteredAnalyses = gaitAnalyses.filter(analysis => 
-                      !searchTerm || 
-                      analysis.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      analysis.user_email.toLowerCase().includes(searchTerm.toLowerCase())
-                    );
-                    const totalPages = Math.ceil(filteredAnalyses.length / gaitEntriesPerPage);
-                    if (totalPages <= 1) return null;
-                    
-                    const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
-                    const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage + 1;
-                    const actualLastEntry = Math.min(indexOfLastEntry, filteredAnalyses.length);
-                    
-                    return (
-                      <div className="pagination-footer">
-                        <div className="pagination-info">
-                          Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredAnalyses.length} entries
-                        </div>
-                        <div className="pagination-buttons">
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(1)}
-                            disabled={currentGaitPage === 1}
-                          >
-                            «
-                          </button>
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(prev => Math.max(1, prev - 1))}
-                            disabled={currentGaitPage === 1}
-                          >
-                            ‹
-                          </button>
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            let pageNum;
-                            if (totalPages <= 5) {
-                              pageNum = i + 1;
-                            } else if (currentGaitPage <= 3) {
-                              pageNum = i + 1;
-                            } else if (currentGaitPage >= totalPages - 2) {
-                              pageNum = totalPages - 4 + i;
-                            } else {
-                              pageNum = currentGaitPage - 2 + i;
-                            }
-                            return (
-                              <button
-                                key={pageNum}
-                                className={`pagination-btn ${currentGaitPage === pageNum ? 'active' : ''}`}
-                                onClick={() => setCurrentGaitPage(pageNum)}
-                              >
-                                {pageNum}
-                              </button>
-                            );
-                          })}
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(prev => Math.min(totalPages, prev + 1))}
-                            disabled={currentGaitPage === totalPages}
-                          >
-                            ›
-                          </button>
-                          <button 
-                            className="pagination-btn" 
-                            onClick={() => setCurrentGaitPage(totalPages)}
-                            disabled={currentGaitPage === totalPages}
-                          >
-                            »
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               )}
             </div>
@@ -1863,6 +2512,240 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
+          {activeTab === 'success-stories' && (
+            <div className="success-stories-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Success Stories</h2>
+                  <p>Share and manage inspiring patient recovery journeys</p>
+                </div>
+                <button className="btn-primary" onClick={handleAddStory}>
+                  <span>⭐</span> Add Success Story
+                </button>
+              </div>
+
+              <div className="stories-toolbar">
+                <div className="toolbar-left">
+                  <div className="search-container">
+                    <input
+                      type="text"
+                      placeholder="Search by patient name..."
+                      value={storySearchTerm}
+                      onChange={(e) => setStorySearchTerm(e.target.value)}
+                      className="search-input"
+                    />
+                  </div>
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select 
+                        value={storyEntriesPerPage} 
+                        onChange={(e) => {
+                          setStoryEntriesPerPage(Number(e.target.value));
+                          setCurrentStoryPage(1);
+                        }}
+                        className="entries-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+                <div className="toolbar-right">
+                  <div className="stats-summary">
+                    <span className="stat-item">
+                      <strong>{successStories.length}</strong> Total Stories
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingStories ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading success stories...</p>
+                </div>
+              ) : successStories.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">⭐</span>
+                    <h3>No Success Stories Yet</h3>
+                    <p>Click "Add Success Story" to share patient achievements.</p>
+                    <button className="btn-primary" onClick={handleAddStory}>
+                      <span>⭐</span> Add Success Story
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="datatable-container">
+                    <table className="logs-table stories-table">
+                      <thead>
+                        <tr>
+                          <th>Patient Name</th>
+                          <th>Story Preview</th>
+                          <th>Images</th>
+                          <th>Date Added</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const filteredStories = successStories.filter(story =>
+                            !storySearchTerm ||
+                            story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                          );
+                          const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
+                          const currentEntries = filteredStories.slice(indexOfFirstEntry, indexOfLastEntry);
+                          return currentEntries.map(story => (
+                            <tr key={story.id}>
+                              <td>
+                                <div className="patient-cell">
+                                  <div className="patient-avatar-small">
+                                    {story.patientName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                  </div>
+                                  <span className="patient-name-text">{story.patientName}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="story-preview">
+                                  {story.story.length > 100 
+                                    ? `${story.story.substring(0, 100)}...` 
+                                    : story.story}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="story-images-preview">
+                                  {story.images && story.images.length > 0 ? (
+                                    <div className="image-thumbnails">
+                                      {story.images.slice(0, 3).map((imagePath, idx) => (
+                                        <img 
+                                          key={idx}
+                                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`}
+                                          alt={`${story.patientName} - Image ${idx + 1}`}
+                                          className="story-thumbnail"
+                                          title={`Image ${idx + 1} of ${story.images.length}`}
+                                        />
+                                      ))}
+                                      {story.images.length > 3 && (
+                                        <div className="more-images-badge">
+                                          +{story.images.length - 3}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="no-images-text">No images</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <span className="date-cell">{formatDate(story.createdAt)}</span>
+                              </td>
+                              <td>
+                                <div className="exercise-actions">
+                                  <button 
+                                    className="btn-edit" 
+                                    onClick={() => handleEditStory(story)}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button 
+                                    className="btn-delete" 
+                                    onClick={() => handleDeleteStory(story.id)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+
+                  {/* Pagination */}
+                  {(() => {
+                    const filteredStories = successStories.filter(story =>
+                      !storySearchTerm ||
+                      story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filteredStories.length / storyEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
+                    const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
+                    return (
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {indexOfFirstEntry + 1} to {Math.min(indexOfLastEntry, filteredStories.length)} of {filteredStories.length} entries
+                        </span>
+                        <div className="pagination-buttons">
+                          <button
+                            onClick={() => setCurrentStoryPage(1)}
+                            disabled={currentStoryPage === 1}
+                            className="pagination-btn"
+                            title="First Page"
+                          >
+                            «
+                          </button>
+                          <button
+                            onClick={() => setCurrentStoryPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentStoryPage === 1}
+                            className="pagination-btn"
+                            title="Previous Page"
+                          >
+                            ‹
+                          </button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentStoryPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentStoryPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentStoryPage - 2 + i;
+                            }
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCurrentStoryPage(pageNum)}
+                                className={`pagination-btn ${currentStoryPage === pageNum ? 'active' : ''}`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                          <button
+                            onClick={() => setCurrentStoryPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentStoryPage === totalPages}
+                            className="pagination-btn"
+                            title="Next Page"
+                          >
+                            ›
+                          </button>
+                          <button
+                            onClick={() => setCurrentStoryPage(totalPages)}
+                            disabled={currentStoryPage === totalPages}
+                            className="pagination-btn"
+                            title="Last Page"
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'fluency' && (
             <div className="fluency-section">
               <div className="controls-section">
@@ -1934,6 +2817,1418 @@ function TherapistDashboard({ onLogout }) {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'appointments' && (
+            <div className="appointments-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Manage Appointments</h2>
+                  <p>Schedule and track therapy sessions with patients</p>
+                </div>
+                <button className="btn-primary" onClick={handleAddAppointment}>
+                  <span>📅</span> New Appointment
+                </button>
+              </div>
+
+              {/* Unassigned Appointments Section */}
+              {unassignedAppointments.length > 0 && (
+                <div className="unassigned-appointments-container">
+                  <div className="unassigned-header">
+                    <div className="header-content">
+                      <h3>
+                        <span className="badge-count">{unassignedAppointments.length}</span>
+                        Pending Appointment Request{unassignedAppointments.length !== 1 ? 's' : ''}
+                      </h3>
+                      <p>These appointment requests need your approval. Assign yourself to approve and handle the appointment.</p>
+                    </div>
+                    <button 
+                      className="btn-toggle"
+                      onClick={() => setShowUnassignedSection(!showUnassignedSection)}
+                    >
+                      {showUnassignedSection ? '▼ Hide' : '▶ Show'}
+                    </button>
+                  </div>
+
+                  {showUnassignedSection && (
+                    <div className="unassigned-list">
+                      {loadingUnassigned ? (
+                        <div className="loading-message">Loading pending appointments...</div>
+                      ) : (
+                        <div className="unassigned-grid">
+                          {unassignedAppointments.map((appointment) => (
+                            <div key={appointment._id} className="unassigned-card">
+                              <div className="unassigned-card-header">
+                                <div className="therapy-badge-large" data-type={appointment.therapy_type}>
+                                  {appointment.therapy_type === 'articulation' && '🗣️'}
+                                  {appointment.therapy_type === 'language' && '💬'}
+                                  {appointment.therapy_type === 'fluency' && '🎯'}
+                                  {appointment.therapy_type === 'physical' && '🏃'}
+                                  <span>{appointment.therapy_type.charAt(0).toUpperCase() + appointment.therapy_type.slice(1)}</span>
+                                </div>
+                                <span className="pending-badge">Pending</span>
+                              </div>
+
+                              <div className="unassigned-card-body">
+                                <div className="patient-info-large">
+                                  <div className="patient-avatar-large">
+                                    {appointment.patient_name?.charAt(0) || 'P'}
+                                  </div>
+                                  <div>
+                                    <h4>{appointment.patient_name || 'Unknown Patient'}</h4>
+                                    <p className="patient-email">{appointment.patient_email || ''}</p>
+                                  </div>
+                                </div>
+
+                                <div className="appointment-info-grid">
+                                  <div className="info-item">
+                                    <span className="icon">📅</span>
+                                    <div>
+                                      <label>Date</label>
+                                      <span>{new Date(appointment.appointment_date).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })}</span>
+                                    </div>
+                                  </div>
+                                  <div className="info-item">
+                                    <span className="icon">🕒</span>
+                                    <div>
+                                      <label>Time</label>
+                                      <span>{new Date(appointment.appointment_date).toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}</span>
+                                    </div>
+                                  </div>
+                                  <div className="info-item">
+                                    <span className="icon">⏱️</span>
+                                    <div>
+                                      <label>Duration</label>
+                                      <span>{appointment.duration || 60} min</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {appointment.notes && (
+                                  <div className="notes-section">
+                                    <label>Notes:</label>
+                                    <p>{appointment.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="unassigned-card-footer">
+                                <button 
+                                  className="btn-assign-me"
+                                  onClick={() => handleAssignToMe(appointment._id)}
+                                >
+                                  Approve & Assign to Me
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* My Appointments Section Header */}
+              {unassignedAppointments.length > 0 && (
+                <div className="section-divider">
+                  <h3>My Confirmed Appointments</h3>
+                  <p>Appointments you've approved and are handling</p>
+                </div>
+              )}
+
+              {/* Filters */}
+              <div className="appointments-filters">
+                <div className="filter-group">
+                  <label>Date</label>
+                  <input
+                    type="date"
+                    value={appointmentFilters.date}
+                    onChange={(e) => {
+                      setAppointmentFilters({ ...appointmentFilters, date: e.target.value });
+                      loadAppointments();
+                    }}
+                  />
+                </div>
+                <div className="filter-group">
+                  <label>Status</label>
+                  <select
+                    value={appointmentFilters.status}
+                    onChange={(e) => {
+                      setAppointmentFilters({ ...appointmentFilters, status: e.target.value });
+                      loadAppointments();
+                    }}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="no-show">No Show</option>
+                  </select>
+                </div>
+                <div className="filter-group">
+                  <label>Therapy Type</label>
+                  <select
+                    value={appointmentFilters.therapy_type}
+                    onChange={(e) => {
+                      setAppointmentFilters({ ...appointmentFilters, therapy_type: e.target.value });
+                      loadAppointments();
+                    }}
+                  >
+                    <option value="">All Types</option>
+                    <option value="articulation">Articulation</option>
+                    <option value="language">Language</option>
+                    <option value="fluency">Fluency</option>
+                    <option value="physical">Physical</option>
+                  </select>
+                </div>
+                <button 
+                  className="btn-secondary"
+                  onClick={() => {
+                    setAppointmentFilters({ date: '', status: '', therapy_type: '' });
+                    loadAppointments();
+                  }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              {loadingAppointments ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading appointments...</p>
+                </div>
+              ) : appointments.length > 0 ? (
+                <div className="datatable-container">
+                  <table className="appointments-datatable">
+                    <thead>
+                      <tr>
+                        <th>Patient</th>
+                        <th>Therapy Type</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const indexOfLastEntry = currentAppointmentPage * appointmentEntriesPerPage;
+                        const indexOfFirstEntry = indexOfLastEntry - appointmentEntriesPerPage;
+                        const currentEntries = appointments.slice(indexOfFirstEntry, indexOfLastEntry);
+                        return currentEntries.map((appointment) => (
+                        <tr key={appointment._id} className={`appointment-row status-${appointment.status}`}>
+                          <td className="patient-cell">
+                            <div className="patient-info-inline">
+                              <div className="patient-avatar-small">
+                                {appointment.patient_name?.charAt(0) || 'P'}
+                              </div>
+                              <div className="patient-details">
+                                <div className="patient-name">{appointment.patient_name || 'Unknown Patient'}</div>
+                                <div className="patient-email">{appointment.patient_email || ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="therapy-type-badge" data-type={appointment.therapy_type}>
+                              {appointment.therapy_type === 'articulation' && '🗣️'}
+                              {appointment.therapy_type === 'language' && '💬'}
+                              {appointment.therapy_type === 'fluency' && '🎯'}
+                              {appointment.therapy_type === 'physical' && '🏃'}
+                              <span>{appointment.therapy_type.charAt(0).toUpperCase() + appointment.therapy_type.slice(1)}</span>
+                            </div>
+                          </td>
+                          <td className="date-cell">
+                            {new Date(appointment.appointment_date).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric', 
+                              year: 'numeric' 
+                            })}
+                          </td>
+                          <td className="time-cell">
+                            {new Date(appointment.appointment_date).toLocaleTimeString('en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </td>
+                          <td className="duration-cell">{appointment.duration} min</td>
+                          <td>
+                            <span className={`status-badge status-${appointment.status}`}>
+                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="notes-cell">
+                            {appointment.notes ? (
+                              <div className="notes-preview" title={appointment.notes}>
+                                {appointment.notes.length > 30 ? appointment.notes.substring(0, 30) + '...' : appointment.notes}
+                              </div>
+                            ) : (
+                              <span className="no-notes">—</span>
+                            )}
+                          </td>
+                          <td className="actions-cell">
+                            <div className="action-buttons">
+                              <button 
+                                className="btn-icon-small btn-view"
+                                onClick={() => handleViewAppointment(appointment)}
+                                title="View Details"
+                              >
+                                View
+                              </button>
+                              <button 
+                                className="btn-icon-small btn-edit"
+                                onClick={() => handleEditAppointment(appointment)}
+                                title="Edit Appointment"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                      })()}
+                    </tbody>
+                  </table>
+
+                  {/* Pagination Footer */}
+                  {(() => {
+                    const totalPages = Math.ceil(appointments.length / appointmentEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    
+                    const indexOfLastEntry = currentAppointmentPage * appointmentEntriesPerPage;
+                    const indexOfFirstEntry = indexOfLastEntry - appointmentEntriesPerPage + 1;
+                    const actualLastEntry = Math.min(indexOfLastEntry, appointments.length);
+                    
+                    return (
+                      <div className="pagination-footer">
+                        <div className="pagination-info">
+                          Showing {indexOfFirstEntry} to {actualLastEntry} of {appointments.length} entries
+                        </div>
+                        <div className="pagination-buttons">
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(1)}
+                            disabled={currentAppointmentPage === 1}
+                          >
+                            «
+                          </button>
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentAppointmentPage === 1}
+                          >
+                            ‹
+                          </button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentAppointmentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentAppointmentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentAppointmentPage - 2 + i;
+                            }
+                            return (
+                              <button
+                                key={pageNum}
+                                className={`pagination-btn ${currentAppointmentPage === pageNum ? 'active' : ''}`}
+                                onClick={() => setCurrentAppointmentPage(pageNum)}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentAppointmentPage === totalPages}
+                          >
+                            ›
+                          </button>
+                          <button 
+                            className="pagination-btn" 
+                            onClick={() => setCurrentAppointmentPage(totalPages)}
+                            disabled={currentAppointmentPage === totalPages}
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">📅</span>
+                    <h3>No Appointments Found</h3>
+                    <p>No appointments match your current filters. Try adjusting the filters or create a new appointment.</p>
+                    <button className="btn-primary" onClick={handleAddAppointment}>
+                      <span>📅</span> Schedule New Appointment
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Appointment Modal */}
+              {showAppointmentModal && (
+                <div className="modal-overlay" onClick={() => setShowAppointmentModal(false)}>
+                  <div className="modal-content appointment-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h3>{editingAppointment ? 'Edit Appointment' : 'New Appointment'}</h3>
+                      <button className="modal-close" onClick={() => setShowAppointmentModal(false)}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>Patient <span className="required">*</span></label>
+                        <div className="autocomplete-container">
+                          <input
+                            type="text"
+                            value={patientSearchQuery}
+                            onChange={handlePatientSearchChange}
+                            onFocus={() => {
+                              if (patientSearchResults.length > 0) {
+                                setShowPatientDropdown(true);
+                              }
+                            }}
+                            placeholder="Search by name or email..."
+                            disabled={editingAppointment}
+                            className={selectedPatient ? 'has-selection' : ''}
+                          />
+                          {searchingPatients && (
+                            <div className="autocomplete-loading">
+                              <div className="spinner-small"></div>
+                            </div>
+                          )}
+                          {showPatientDropdown && patientSearchResults.length > 0 && (
+                            <div className="autocomplete-dropdown">
+                              {patientSearchResults.map((patient) => (
+                                <div
+                                  key={patient._id}
+                                  className="autocomplete-item"
+                                  onClick={() => handleSelectPatient(patient)}
+                                >
+                                  <div className="autocomplete-item-name">{patient.fullName}</div>
+                                  <div className="autocomplete-item-details">
+                                    {patient.email} • Age: {patient.age} • {patient.therapyType}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {showPatientDropdown && patientSearchQuery.trim().length >= 2 && patientSearchResults.length === 0 && !searchingPatients && (
+                            <div className="autocomplete-dropdown">
+                              <div className="autocomplete-empty">
+                                No patients found matching "{patientSearchQuery}"
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {selectedPatient && (
+                          <div className="selected-patient-info">
+                            ✓ Selected: <strong>{selectedPatient.fullName}</strong> ({selectedPatient.email})
+                          </div>
+                        )}
+                        <small className="form-hint">
+                          {editingAppointment 
+                            ? 'Patient cannot be changed for existing appointments' 
+                            : 'Type at least 2 characters to search for patients'}
+                        </small>
+                      </div>
+
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Therapy Type <span className="required">*</span></label>
+                          <select
+                            value={newAppointment.therapy_type}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, therapy_type: e.target.value })}
+                          >
+                            <option value="articulation">🗣️ Articulation</option>
+                            <option value="language">💬 Language</option>
+                            <option value="fluency">🎯 Fluency</option>
+                            <option value="physical">🏃 Physical</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label>Duration (minutes)</label>
+                          <select
+                            value={newAppointment.duration}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, duration: parseInt(e.target.value) })}
+                          >
+                            <option value="30">30 minutes</option>
+                            <option value="60">60 minutes</option>
+                            <option value="90">90 minutes</option>
+                            <option value="120">120 minutes</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Date & Time <span className="required">*</span></label>
+                          <input
+                            type="datetime-local"
+                            value={newAppointment.appointment_date ? new Date(newAppointment.appointment_date).toISOString().slice(0, 16) : ''}
+                            onChange={(e) => setNewAppointment({ ...newAppointment, appointment_date: e.target.value })}
+                          />
+                        </div>
+
+                        {editingAppointment && (
+                          <div className="form-group">
+                            <label>Status <span className="required">*</span></label>
+                            <select
+                              value={newAppointment.status || 'scheduled'}
+                              onChange={(e) => setNewAppointment({ ...newAppointment, status: e.target.value })}
+                              className="status-select"
+                            >
+                              <option value="scheduled">📅 Scheduled</option>
+                              <option value="confirmed">✅ Confirmed</option>
+                              <option value="completed">✔️ Completed</option>
+                              <option value="cancelled">❌ Cancelled</option>
+                              <option value="no-show">⚠️ No Show</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="form-group">
+                        <label>Notes</label>
+                        <textarea
+                          value={newAppointment.notes}
+                          onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
+                          placeholder="Add any additional notes or special requirements..."
+                          rows="4"
+                        />
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn-secondary" onClick={() => setShowAppointmentModal(false)}>
+                        Cancel
+                      </button>
+                      <button className="btn-primary" onClick={handleSaveAppointment}>
+                        {editingAppointment ? 'Update Appointment' : 'Create Appointment'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Appointment Details Modal */}
+              {showAppointmentDetails && selectedAppointment && (
+                <div className="modal-overlay" onClick={() => setShowAppointmentDetails(false)}>
+                  <div className="modal-content appointment-details-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <div className="modal-header-content">
+                        <h3>Appointment Details</h3>
+                        <span className={`status-badge status-${selectedAppointment.status}`}>
+                          {selectedAppointment.status.charAt(0).toUpperCase() + selectedAppointment.status.slice(1)}
+                        </span>
+                      </div>
+                      <button className="modal-close" onClick={() => setShowAppointmentDetails(false)}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      {/* Patient Information Section */}
+                      <div className="details-section">
+                        <h4 className="section-heading">Patient Information</h4>
+                        <div className="details-grid">
+                          <div className="detail-item">
+                            <div className="detail-label">Patient Name</div>
+                            <div className="detail-value">
+                              <div className="patient-avatar-inline">
+                                {selectedAppointment.patient_name?.charAt(0) || 'P'}
+                              </div>
+                              {selectedAppointment.patient_name}
+                            </div>
+                          </div>
+                          {selectedAppointment.patient_email && (
+                            <div className="detail-item">
+                              <div className="detail-label">Email</div>
+                              <div className="detail-value">{selectedAppointment.patient_email}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Appointment Information Section */}
+                      <div className="details-section">
+                        <h4 className="section-heading">Appointment Details</h4>
+                        <div className="details-grid">
+                          <div className="detail-item">
+                            <div className="detail-label">Therapy Type</div>
+                            <div className="detail-value">
+                              <span className="therapy-type-badge" data-type={selectedAppointment.therapy_type}>
+                                {selectedAppointment.therapy_type === 'articulation' && '🗣️ '}
+                                {selectedAppointment.therapy_type === 'language' && '💬 '}
+                                {selectedAppointment.therapy_type === 'fluency' && '🎯 '}
+                                {selectedAppointment.therapy_type === 'physical' && '🏃 '}
+                                {selectedAppointment.therapy_type.charAt(0).toUpperCase() + selectedAppointment.therapy_type.slice(1)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="detail-item">
+                            <div className="detail-label">Duration</div>
+                            <div className="detail-value">
+                              <span className="duration-badge">{selectedAppointment.duration} minutes</span>
+                            </div>
+                          </div>
+                          <div className="detail-item">
+                            <div className="detail-label">Date</div>
+                            <div className="detail-value date-value">
+                              {new Date(selectedAppointment.appointment_date).toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                month: 'long', 
+                                day: 'numeric', 
+                                year: 'numeric' 
+                              })}
+                            </div>
+                          </div>
+                          <div className="detail-item">
+                            <div className="detail-label">Time</div>
+                            <div className="detail-value time-value">
+                              {new Date(selectedAppointment.appointment_date).toLocaleTimeString('en-US', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Additional Information Section */}
+                      {(selectedAppointment.notes || selectedAppointment.session_summary || selectedAppointment.cancellation_reason) && (
+                        <div className="details-section">
+                          <h4 className="section-heading">Additional Information</h4>
+                          {selectedAppointment.notes && (
+                            <div className="detail-block">
+                              <div className="detail-label">Notes</div>
+                              <div className="detail-text">{selectedAppointment.notes}</div>
+                            </div>
+                          )}
+                          {selectedAppointment.session_summary && (
+                            <div className="detail-block">
+                              <div className="detail-label">Session Summary</div>
+                              <div className="detail-text">{selectedAppointment.session_summary}</div>
+                            </div>
+                          )}
+                          {selectedAppointment.cancellation_reason && (
+                            <div className="detail-block">
+                              <div className="detail-label">Cancellation Reason</div>
+                              <div className="detail-text cancellation-text">{selectedAppointment.cancellation_reason}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn-secondary" onClick={() => setShowAppointmentDetails(false)}>
+                        Close
+                      </button>
+                      <button className="btn-primary" onClick={() => {
+                        setShowAppointmentDetails(false);
+                        handleEditAppointment(selectedAppointment);
+                      }}>
+                        Edit Appointment
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <div className="reports-section">
+              {loadingReports ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading reports...</p>
+                </div>
+              ) : reportsData ? (
+                <div className="reports-container">
+                  {/* Age Bracket Analysis */}
+                  <div className="report-card">
+                    <div className="report-card-header">
+                      <h3 className="report-card-title">
+                        <span className="report-icon">👥</span>
+                        Age Distribution
+                      </h3>
+                      <p className="report-card-subtitle">Patient distribution across age brackets</p>
+                    </div>
+                    <div className="report-card-body">
+                      {reportsData.ageBrackets && reportsData.ageBrackets.length > 0 ? (
+                        <>
+                          <div className="age-brackets-grid">
+                            {reportsData.ageBrackets.map((bracket, index) => (
+                              <div 
+                                key={index} 
+                                className={`age-bracket-item ${bracket.isHighest ? 'highest' : ''}`}
+                              >
+                                <div className="bracket-label">{bracket.range}</div>
+                                <div className="bracket-count">{bracket.count}</div>
+                                <div className="bracket-percentage">{bracket.percentage}%</div>
+                                {bracket.isHighest && (
+                                  <div className="highest-badge">Highest</div>
+                                )}
+                                <div className="bracket-bar">
+                                  <div 
+                                    className="bracket-bar-fill" 
+                                    style={{ width: `${bracket.percentage}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="report-summary">
+                            <div className="summary-item highlight">
+                              <span className="summary-icon">🎯</span>
+                              <div className="summary-content">
+                                <span className="summary-label">Highest Age Bracket:</span>
+                                <span className="summary-value">{reportsData.highestAgeBracket?.range || 'N/A'}</span>
+                              </div>
+                              <div className="summary-count">{reportsData.highestAgeBracket?.count || 0} patients</div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="no-data">
+                          <div className="no-data-icon">📊</div>
+                          <p>No age data available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Gender Distribution */}
+                  <div className="report-card">
+                    <div className="report-card-header">
+                      <h3 className="report-card-title">
+                        <span className="report-icon">⚧️</span>
+                        Gender Distribution
+                      </h3>
+                      <p className="report-card-subtitle">Patient distribution by gender</p>
+                    </div>
+                    <div className="report-card-body">
+                      {reportsData.genderDistribution && reportsData.genderDistribution.length > 0 ? (
+                        <>
+                          <div className="gender-distribution-grid">
+                            {reportsData.genderDistribution.map((gender, index) => (
+                              <div key={index} className="gender-item">
+                                <div className="gender-icon-wrapper">
+                                  <span className="gender-emoji">
+                                    {gender.gender === 'male' ? '👨' : 
+                                     gender.gender === 'female' ? '👩' : 
+                                     gender.gender === 'other' ? '🧑' : '❓'}
+                                  </span>
+                                </div>
+                                <div className="gender-info">
+                                  <div className="gender-label">
+                                    {gender.gender.charAt(0).toUpperCase() + gender.gender.slice(1)}
+                                  </div>
+                                  <div className="gender-stats">
+                                    <span className="gender-count">{gender.count} patients</span>
+                                    <span className="gender-percentage">{gender.percentage}%</span>
+                                  </div>
+                                  <div className="gender-bar">
+                                    <div 
+                                      className={`gender-bar-fill ${gender.gender}`}
+                                      style={{ width: `${gender.percentage}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="report-summary">
+                            <div className="summary-stats-row">
+                              <div className="summary-stat">
+                                <span className="stat-label">Total Patients</span>
+                                <span className="stat-value">{reportsData.totalPatients || 0}</span>
+                              </div>
+                              <div className="summary-stat">
+                                <span className="stat-label">Gender Categories</span>
+                                <span className="stat-value">{reportsData.genderDistribution.length}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="no-data">
+                          <div className="no-data-icon">⚧️</div>
+                          <p>No gender data available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="no-data-large">
+                  <div className="no-data-icon">📊</div>
+                  <p className="no-data-text">No reports data available</p>
+                  <p className="no-data-hint">Reports will appear here once patient data is available</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'diagnostics' && (
+            <div className="diagnostics-section" id="diagnostics-print-section">
+              {/* Patient Search */}
+              <div className="diag-search-bar">
+                <div className="diag-search-wrapper">
+                  <span className="diag-search-icon">🔍</span>
+                  <input
+                    type="text"
+                    className="diag-search-input"
+                    placeholder="Search patient by name..."
+                    value={diagSearchQuery}
+                    onChange={(e) => {
+                      setDiagSearchQuery(e.target.value);
+                      searchDiagPatients(e.target.value);
+                    }}
+                    onFocus={() => { if (diagSearchResults.length > 0) setShowDiagPatientDropdown(true); }}
+                  />
+                  {searchingDiagPatients && <span className="diag-search-spinner">⏳</span>}
+                  {showDiagPatientDropdown && diagSearchResults.length > 0 && (
+                    <div className="diag-patient-dropdown">
+                      {diagSearchResults.map((p) => (
+                        <button
+                          key={p._id || p.id}
+                          className="diag-patient-option"
+                          onClick={() => selectDiagPatient(p)}
+                        >
+                          <span className="diag-patient-name">{p.firstName} {p.lastName}</span>
+                          <span className="diag-patient-email">{p.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {selectedDiagPatient && (
+                  <div className="diag-action-buttons">
+                    <button className="diag-add-btn" onClick={() => setShowDiagModal(true)}>
+                      + Add Facility Diagnostic
+                    </button>
+                    <button className="diag-print-btn" onClick={handlePrintReport} title="Print Report">
+                      🖨️ Print
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* No patient selected */}
+              {!selectedDiagPatient && (
+                <div className="no-data-large">
+                  <div className="no-data-icon">🔬</div>
+                  <p className="no-data-text">Select a patient to view diagnostic comparison</p>
+                  <p className="no-data-hint">Use the search bar above to find a patient, then view their facility vs. at-home results</p>
+                </div>
+              )}
+
+              {/* Loading Skeleton */}
+              {selectedDiagPatient && loadingDiagComparison && (
+                <div className="diag-skeleton-container">
+                  <div className="diag-skeleton-header">
+                    <div className="skeleton-line skeleton-title"></div>
+                    <div className="skeleton-line skeleton-subtitle"></div>
+                  </div>
+                  <div className="diag-skeleton-table">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <div key={i} className="skeleton-row">
+                        <div className="skeleton-line skeleton-cell"></div>
+                        <div className="skeleton-line skeleton-cell"></div>
+                        <div className="skeleton-line skeleton-cell"></div>
+                        <div className="skeleton-line skeleton-cell"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Comparison Results */}
+              {selectedDiagPatient && !loadingDiagComparison && diagComparisonData && (
+                <>
+                  {/* Info Header */}
+                  <div className="diag-info-header">
+                    <div className="diag-patient-info">
+                      <h3>{diagComparisonData.patient_name || `${selectedDiagPatient.firstName} ${selectedDiagPatient.lastName}`}</h3>
+                      {diagComparisonData.has_facility_data && (
+                        <div className="diag-meta">
+                          <span className="diag-meta-item">
+                            📅 Assessment: {new Date(diagComparisonData.assessment_date).toLocaleDateString()}
+                          </span>
+                          <span className="diag-meta-item">
+                            📋 Type: {diagComparisonData.assessment_type?.charAt(0).toUpperCase() + diagComparisonData.assessment_type?.slice(1)}
+                          </span>
+                          {diagComparisonData.assessor_name && (
+                            <span className="diag-meta-item">
+                              👤 Assessed by: {diagComparisonData.assessor_name}
+                            </span>
+                          )}
+                          {diagComparisonData.severity_level && (
+                            <span className={`diag-severity diag-severity-${diagComparisonData.severity_level}`}>
+                              {diagComparisonData.severity_level.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* Assessment Selector Dropdown */}
+                    {diagPatientDiagnostics.length > 1 && (
+                      <div className="diag-assessment-selector">
+                        <label className="diag-selector-label">Compare with:</label>
+                        <select
+                          className="diag-selector-dropdown"
+                          value={selectedDiagnosticId || ''}
+                          onChange={(e) => handleSelectAssessment(e.target.value || null)}
+                        >
+                          <option value="">Latest Assessment</option>
+                          {diagPatientDiagnostics.map(d => (
+                            <option key={d._id} value={d._id}>
+                              {new Date(d.assessment_date).toLocaleDateString()} — {d.assessment_type?.charAt(0).toUpperCase() + d.assessment_type?.slice(1)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {!diagComparisonData.has_facility_data ? (
+                    <div className="no-data-large">
+                      <div className="no-data-icon">📋</div>
+                      <p className="no-data-text">No facility diagnostic found for this patient</p>
+                      <p className="no-data-hint">Click "Add Facility Diagnostic" above to enter assessment results</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Summary Insights Card */}
+                      {diagComparisonData.summary_insights && Object.keys(diagComparisonData.summary_insights).length > 0 && (
+                        <div className="diag-insights-card">
+                          <div className="diag-insights-header">
+                            <h3 className="diag-insights-title">
+                              <span className="report-icon">💡</span>
+                              Summary Insights
+                            </h3>
+                          </div>
+                          <div className="diag-insights-body">
+                            <div className="diag-insights-grid">
+                              <div className="diag-insight-stat">
+                                <span className="diag-insight-value" style={{ color: diagComparisonData.summary_insights.overall_avg_delta >= 0 ? '#16a34a' : '#dc2626' }}>
+                                  {diagComparisonData.summary_insights.overall_avg_delta >= 0 ? '+' : ''}{diagComparisonData.summary_insights.overall_avg_delta}%
+                                </span>
+                                <span className="diag-insight-label">Overall Avg Change</span>
+                              </div>
+                              <div className="diag-insight-stat">
+                                <span className="diag-insight-value diag-insight-improving">
+                                  {diagComparisonData.summary_insights.improving_count}
+                                </span>
+                                <span className="diag-insight-label">Improving</span>
+                              </div>
+                              <div className="diag-insight-stat">
+                                <span className="diag-insight-value diag-insight-declining">
+                                  {diagComparisonData.summary_insights.declining_count}
+                                </span>
+                                <span className="diag-insight-label">Declining</span>
+                              </div>
+                              <div className="diag-insight-stat">
+                                <span className="diag-insight-value diag-insight-stable">
+                                  {diagComparisonData.summary_insights.stable_count}
+                                </span>
+                                <span className="diag-insight-label">Stable</span>
+                              </div>
+                            </div>
+                            <div className="diag-insights-highlights">
+                              {diagComparisonData.summary_insights.strongest_area && (
+                                <div className="diag-highlight diag-highlight-best">
+                                  <span className="diag-highlight-icon">🌟</span>
+                                  <span>Most Improved: <strong>{diagComparisonData.summary_insights.strongest_area.metric}</strong> ({diagComparisonData.summary_insights.strongest_area.delta >= 0 ? '+' : ''}{diagComparisonData.summary_insights.strongest_area.delta}%)</span>
+                                </div>
+                              )}
+                              {diagComparisonData.summary_insights.weakest_area && diagComparisonData.summary_insights.weakest_area.delta < 0 && (
+                                <div className="diag-highlight diag-highlight-worst">
+                                  <span className="diag-highlight-icon">⚠️</span>
+                                  <span>Needs Attention: <strong>{diagComparisonData.summary_insights.weakest_area.metric}</strong> ({diagComparisonData.summary_insights.weakest_area.delta}%)</span>
+                                </div>
+                              )}
+                              {/* Discharge readiness check */}
+                              {(() => {
+                                const allScores = [];
+                                Object.values(diagComparisonData.home_scores?.articulation || {}).forEach(v => { if (v != null) allScores.push(v); });
+                                if (diagComparisonData.home_scores?.fluency != null) allScores.push(diagComparisonData.home_scores.fluency);
+                                if (diagComparisonData.home_scores?.receptive != null) allScores.push(diagComparisonData.home_scores.receptive);
+                                if (diagComparisonData.home_scores?.expressive != null) allScores.push(diagComparisonData.home_scores.expressive);
+                                const allAbove85 = allScores.length > 0 && allScores.every(s => s >= 85);
+                                const allDeltasPositive = diagComparisonData.summary_insights.declining_count === 0 && diagComparisonData.summary_insights.improving_count > 0;
+                                if (allAbove85 && allDeltasPositive) {
+                                  return (
+                                    <div className="diag-highlight diag-highlight-discharge">
+                                      <span className="diag-highlight-icon">✅</span>
+                                      <span>Patient may be ready for <strong>discharge assessment</strong> — all at-home scores above 85% with positive trends</span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Comparison Table */}
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">📊</span>
+                            Facility vs. At-Home Comparison
+                          </h3>
+                          <p className="report-card-subtitle">Side-by-side view of diagnostic results and current home performance</p>
+                        </div>
+                        <div className="report-card-body">
+                          <div className="diag-table-wrapper">
+                          <table className="diag-comparison-table">
+                            <thead>
+                              <tr>
+                                <th>Metric</th>
+                                <th>Facility Score</th>
+                                <th>Level</th>
+                                <th>At-Home Score</th>
+                                <th>Level</th>
+                                <th>Δ Change</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {/* Articulation Sounds */}
+                              {['r', 's', 'l', 'th', 'k'].map(sound => {
+                                const facilityVal = diagComparisonData.facility_scores?.articulation?.[sound];
+                                const homeVal = diagComparisonData.home_scores?.articulation?.[sound];
+                                const delta = diagComparisonData.deltas?.articulation?.[sound];
+                                const d = getDeltaDisplay(delta);
+                                const fBand = getScoreBand(facilityVal);
+                                const hBand = getScoreBand(homeVal);
+                                const alert = getAlertBadge(delta);
+                                if (facilityVal == null && homeVal == null) return null;
+                                return (
+                                  <tr key={`art-${sound}`}>
+                                    <td className="metric-name" title={`Measures the patient's ability to correctly produce the /${sound.toUpperCase()}/ phoneme in various word positions`}>
+                                      <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
+                                      Articulation /{sound.toUpperCase()}/
+                                    </td>
+                                    <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                    <td className="score-cell">{homeVal != null ? `${homeVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                    <td className={`delta-cell ${d.className}`}>
+                                      <span className="delta-icon">{d.icon}</span> {d.text}
+                                    </td>
+                                    <td className="status-cell">
+                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+
+                              {/* Fluency */}
+                              {(diagComparisonData.facility_scores?.fluency != null || diagComparisonData.home_scores?.fluency != null) && (() => {
+                                const fVal = diagComparisonData.facility_scores?.fluency;
+                                const hVal = diagComparisonData.home_scores?.fluency;
+                                const delta = diagComparisonData.deltas?.fluency;
+                                const d = getDeltaDisplay(delta);
+                                const fBand = getScoreBand(fVal);
+                                const hBand = getScoreBand(hVal);
+                                const alert = getAlertBadge(delta);
+                                return (
+                                  <tr>
+                                    <td className="metric-name" title="Measures speech smoothness, rate, and rhythm without interruptions">
+                                      <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
+                                      Fluency
+                                    </td>
+                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                    <td className={`delta-cell ${d.className}`}>
+                                      <span className="delta-icon">{d.icon}</span> {d.text}
+                                    </td>
+                                    <td className="status-cell">
+                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+
+                              {/* Receptive */}
+                              {(diagComparisonData.facility_scores?.receptive != null || diagComparisonData.home_scores?.receptive != null) && (() => {
+                                const fVal = diagComparisonData.facility_scores?.receptive;
+                                const hVal = diagComparisonData.home_scores?.receptive;
+                                const delta = diagComparisonData.deltas?.receptive;
+                                const d = getDeltaDisplay(delta);
+                                const fBand = getScoreBand(fVal);
+                                const hBand = getScoreBand(hVal);
+                                const alert = getAlertBadge(delta);
+                                return (
+                                  <tr>
+                                    <td className="metric-name" title="Measures comprehension of spoken language, following directions, and understanding concepts">
+                                      <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
+                                      Receptive Language
+                                    </td>
+                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                    <td className={`delta-cell ${d.className}`}>
+                                      <span className="delta-icon">{d.icon}</span> {d.text}
+                                    </td>
+                                    <td className="status-cell">
+                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+
+                              {/* Expressive */}
+                              {(diagComparisonData.facility_scores?.expressive != null || diagComparisonData.home_scores?.expressive != null) && (() => {
+                                const fVal = diagComparisonData.facility_scores?.expressive;
+                                const hVal = diagComparisonData.home_scores?.expressive;
+                                const delta = diagComparisonData.deltas?.expressive;
+                                const d = getDeltaDisplay(delta);
+                                const fBand = getScoreBand(fVal);
+                                const hBand = getScoreBand(hVal);
+                                const alert = getAlertBadge(delta);
+                                return (
+                                  <tr>
+                                    <td className="metric-name" title="Measures ability to express thoughts, use vocabulary, and form sentences">
+                                      <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
+                                      Expressive Language
+                                    </td>
+                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                    <td className={`delta-cell ${d.className}`}>
+                                      <span className="delta-icon">{d.icon}</span> {d.text}
+                                    </td>
+                                    <td className="status-cell">
+                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+
+                              {/* Gait */}
+                              {(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null) && (() => {
+                                const fVal = diagComparisonData.facility_scores?.gait?.overall_gait;
+                                const hVal = diagComparisonData.home_scores?.gait?.overall_gait;
+                                const delta = diagComparisonData.deltas?.gait;
+                                const d = getDeltaDisplay(delta);
+                                const fBand = getScoreBand(fVal);
+                                const hBand = getScoreBand(hVal);
+                                const alert = getAlertBadge(delta);
+                                return (
+                                  <tr>
+                                    <td className="metric-name" title="Measures overall walking pattern including stability, symmetry, and step regularity">
+                                      <span className="metric-icon" style={{ backgroundColor: '#4CAF50' }}>🚶</span>
+                                      Gait (Overall)
+                                    </td>
+                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                    <td className={`delta-cell ${d.className}`}>
+                                      <span className="delta-icon">{d.icon}</span> {d.text}
+                                    </td>
+                                    <td className="status-cell">
+                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+                            </tbody>
+                          </table>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual Bar Chart */}
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">📈</span>
+                            Visual Comparison
+                          </h3>
+                          <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
+                        </div>
+                        <div className="report-card-body">
+                          <div className="diag-bar-chart">
+                            {[
+                              { label: 'Fluency', facility: diagComparisonData.facility_scores?.fluency, home: diagComparisonData.home_scores?.fluency },
+                              { label: 'Receptive', facility: diagComparisonData.facility_scores?.receptive, home: diagComparisonData.home_scores?.receptive },
+                              { label: 'Expressive', facility: diagComparisonData.facility_scores?.expressive, home: diagComparisonData.home_scores?.expressive },
+                              ...(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null
+                                ? [{ label: 'Gait', facility: diagComparisonData.facility_scores?.gait?.overall_gait, home: diagComparisonData.home_scores?.gait?.overall_gait }]
+                                : []),
+                              ...['r', 's', 'l', 'th', 'k']
+                                .filter(s => diagComparisonData.facility_scores?.articulation?.[s] != null || diagComparisonData.home_scores?.articulation?.[s] != null)
+                                .map(s => ({
+                                  label: `/${s.toUpperCase()}/`,
+                                  facility: diagComparisonData.facility_scores?.articulation?.[s],
+                                  home: diagComparisonData.home_scores?.articulation?.[s]
+                                }))
+                            ].filter(item => item.facility != null || item.home != null).map((item, idx) => (
+                              <div key={idx} className="diag-bar-row">
+                                <span className="diag-bar-label">{item.label}</span>
+                                <div className="diag-bar-tracks">
+                                  <div className="diag-bar-track">
+                                    <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
+                                      {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
+                                    </div>
+                                  </div>
+                                  <div className="diag-bar-track">
+                                    <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
+                                      {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="diag-bar-legend">
+                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
+                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Trend Chart (if multiple assessments) */}
+                      {diagComparisonHistory.length > 1 && (
+                        <div className="report-card">
+                          <div className="report-card-header">
+                            <h3 className="report-card-title">
+                              <span className="report-icon">📉</span>
+                              Score Trends Over Time
+                            </h3>
+                            <p className="report-card-subtitle">Facility assessment scores across {diagComparisonHistory.length} assessments</p>
+                            <button className="diag-trend-toggle" onClick={() => setShowTrendChart(!showTrendChart)}>
+                              {showTrendChart ? 'Hide Chart' : 'Show Chart'}
+                            </button>
+                          </div>
+                          {showTrendChart && (
+                            <div className="report-card-body">
+                              <div className="diag-trend-chart">
+                                {/* CSS-based line chart using positioned dots */}
+                                <div className="diag-trend-grid">
+                                  {/* Y-axis labels */}
+                                  <div className="diag-trend-yaxis">
+                                    {[100, 75, 50, 25, 0].map(v => (
+                                      <span key={v} className="diag-trend-ylabel">{v}%</span>
+                                    ))}
+                                  </div>
+                                  <div className="diag-trend-area">
+                                    {/* Grid lines */}
+                                    <div className="diag-trend-gridlines">
+                                      {[0, 25, 50, 75, 100].map(v => (
+                                        <div key={v} className="diag-trend-gridline" style={{ bottom: `${v}%` }}></div>
+                                      ))}
+                                    </div>
+                                    {/* Data points for each metric */}
+                                    {[
+                                      { key: 'fluency_score', label: 'Fluency', color: '#FF9800' },
+                                      { key: 'receptive_score', label: 'Receptive', color: '#2196F3' },
+                                      { key: 'expressive_score', label: 'Expressive', color: '#9C27B0' },
+                                    ].map(metric => (
+                                      <div key={metric.key} className="diag-trend-series">
+                                        {diagComparisonHistory.map((entry, idx) => {
+                                          const val = entry[metric.key];
+                                          if (val == null) return null;
+                                          const left = diagComparisonHistory.length > 1 ? (idx / (diagComparisonHistory.length - 1)) * 100 : 50;
+                                          return (
+                                            <div
+                                              key={idx}
+                                              className="diag-trend-dot"
+                                              style={{
+                                                left: `${left}%`,
+                                                bottom: `${val}%`,
+                                                backgroundColor: metric.color
+                                              }}
+                                              title={`${metric.label}: ${val}% (${new Date(entry.assessment_date).toLocaleDateString()})`}
+                                            >
+                                              <span className="diag-trend-dot-label">{val}</span>
+                                            </div>
+                                          );
+                                        })}
+                                        {/* Connecting lines via SVG */}
+                                        <svg className="diag-trend-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                          <polyline
+                                            fill="none"
+                                            stroke={metric.color}
+                                            strokeWidth="0.5"
+                                            strokeOpacity="0.6"
+                                            points={diagComparisonHistory
+                                              .map((entry, idx) => {
+                                                const val = entry[metric.key];
+                                                if (val == null) return null;
+                                                const x = diagComparisonHistory.length > 1 ? (idx / (diagComparisonHistory.length - 1)) * 100 : 50;
+                                                return `${x},${100 - val}`;
+                                              })
+                                              .filter(Boolean)
+                                              .join(' ')}
+                                          />
+                                        </svg>
+                                      </div>
+                                    ))}
+                                    {/* X-axis labels */}
+                                    <div className="diag-trend-xaxis">
+                                      {diagComparisonHistory.map((entry, idx) => (
+                                        <span
+                                          key={idx}
+                                          className="diag-trend-xlabel"
+                                          style={{ left: `${diagComparisonHistory.length > 1 ? (idx / (diagComparisonHistory.length - 1)) * 100 : 50}%` }}
+                                        >
+                                          {new Date(entry.assessment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="diag-trend-legend">
+                                  <span className="diag-legend-item"><span className="diag-legend-dot" style={{ background: '#FF9800' }}></span> Fluency</span>
+                                  <span className="diag-legend-item"><span className="diag-legend-dot" style={{ background: '#2196F3' }}></span> Receptive</span>
+                                  <span className="diag-legend-item"><span className="diag-legend-dot" style={{ background: '#9C27B0' }}></span> Expressive</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Recommended Focus Areas */}
+                      {diagComparisonData.recommended_focus && diagComparisonData.recommended_focus.length > 0 && (
+                        <div className="report-card diag-focus-card">
+                          <div className="report-card-header">
+                            <h3 className="report-card-title">
+                              <span className="report-icon">🎯</span>
+                              Recommended Focus Areas
+                            </h3>
+                          </div>
+                          <div className="report-card-body">
+                            <div className="diag-focus-list">
+                              {diagComparisonData.recommended_focus.map((focus, idx) => (
+                                <div key={idx} className="diag-focus-item">
+                                  <span className="diag-focus-bullet">•</span>
+                                  <span>{focus}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Therapist Notes */}
+                      {diagComparisonData.notes && (
+                        <div className="report-card">
+                          <div className="report-card-header">
+                            <h3 className="report-card-title">
+                              <span className="report-icon">📝</span>
+                              Therapist Notes
+                            </h3>
+                          </div>
+                          <div className="report-card-body">
+                            <p className="diag-notes-text">{diagComparisonData.notes}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Diagnostic History */}
+                      {diagPatientDiagnostics.length > 0 && (
+                        <div className="report-card">
+                          <div className="report-card-header">
+                            <h3 className="report-card-title">
+                              <span className="report-icon">📋</span>
+                              Assessment History
+                            </h3>
+                            <p className="report-card-subtitle">{diagPatientDiagnostics.length} assessment(s) on file</p>
+                          </div>
+                          <div className="report-card-body">
+                            <div className="diag-history-list">
+                              {diagPatientDiagnostics.map((diag) => (
+                                <div key={diag._id} className="diag-history-item">
+                                  <div className="diag-history-info">
+                                    <span className="diag-history-date">{new Date(diag.assessment_date).toLocaleDateString()}</span>
+                                    <span className={`diag-history-type diag-type-${diag.assessment_type}`}>
+                                      {diag.assessment_type?.charAt(0).toUpperCase() + diag.assessment_type?.slice(1)}
+                                    </span>
+                                    <span className="diag-history-assessor">by {diag.assessor_name}</span>
+                                    {diag.severity_level && (
+                                      <span className={`diag-severity diag-severity-${diag.severity_level}`} style={{ fontSize: '0.7rem', padding: '1px 8px' }}>
+                                        {diag.severity_level.toUpperCase()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button
+                                    className="diag-history-delete"
+                                    onClick={() => setShowDeleteConfirmModal(diag)}
+                                    title="Delete this diagnostic"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Delete Confirmation Modal */}
+              {showDeleteConfirmModal && (
+                <div className="modal-overlay" onClick={() => setShowDeleteConfirmModal(null)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+                    <div className="modal-header">
+                      <h2>Confirm Deletion</h2>
+                      <button className="modal-close" onClick={() => setShowDeleteConfirmModal(null)}>×</button>
+                    </div>
+                    <div className="modal-body" style={{ textAlign: 'center', padding: '2rem' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+                      <p style={{ fontSize: '1.05rem', color: '#374151', marginBottom: '0.5rem' }}>
+                        Are you sure you want to delete this diagnostic?
+                      </p>
+                      <p style={{ fontSize: '0.9rem', color: '#6b7280' }}>
+                        Assessment from <strong>{new Date(showDeleteConfirmModal.assessment_date).toLocaleDateString()}</strong>
+                        {' '}({showDeleteConfirmModal.assessment_type})
+                      </p>
+                      <p style={{ fontSize: '0.85rem', color: '#dc2626', marginTop: '0.75rem' }}>
+                        This action cannot be undone.
+                      </p>
+                    </div>
+                    <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem' }}>
+                      <button className="secondary-btn" onClick={() => setShowDeleteConfirmModal(null)}>Cancel</button>
+                      <button
+                        className="primary-btn"
+                        style={{ backgroundColor: '#dc2626' }}
+                        onClick={() => handleDeleteDiagnostic(showDeleteConfirmModal._id)}
+                      >
+                        Delete Permanently
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -2777,6 +5072,310 @@ function TherapistDashboard({ onLogout }) {
             <div className="modal-footer">
               <button className="secondary-btn" onClick={() => setEditingArticulationExercise(null)}>Cancel</button>
               <button className="primary-btn" onClick={handleUpdateArticulationExercise}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Story Modal */}
+      {showStoryModal && (
+        <div className="modal-overlay" onClick={() => setShowStoryModal(false)}>
+          <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingStory ? 'Edit Success Story' : 'Add New Success Story'}</h2>
+              <button className="modal-close" onClick={() => setShowStoryModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Patient Name *</label>
+                <input 
+                  type="text" 
+                  value={newStory.patientName}
+                  onChange={(e) => setNewStory({ ...newStory, patientName: e.target.value })}
+                  placeholder="Enter patient's name"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Success Story *</label>
+                <textarea 
+                  value={newStory.story}
+                  onChange={(e) => setNewStory({ ...newStory, story: e.target.value })}
+                  placeholder="Share the patient's journey, challenges overcome, and achievements..."
+                  rows={8}
+                  required
+                  style={{ resize: 'vertical', minHeight: '150px' }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Upload Images</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '8px', width: '100%' }}
+                />
+                <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '8px', display: 'block' }}>
+                  Supported formats: PNG, JPG, JPEG, GIF, WebP. Max size: 5MB per image.
+                </small>
+              </div>
+
+              {/* Image Preview */}
+              {imagePreviewUrls.length > 0 && (
+                <div className="form-group">
+                  <label>Selected Images ({imagePreviewUrls.length})</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                    {imagePreviewUrls.map((url, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
+                        <img 
+                          src={url} 
+                          alt={`Preview ${index + 1}`} 
+                          style={{ width: '100%', height: '120px', objectFit: 'cover' }}
+                        />
+                        <button
+                          onClick={() => handleRemoveImage(index)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: '1'
+                          }}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Existing Images (when editing) */}
+              {editingStory && editingStory.images && editingStory.images.length > 0 && (
+                <div className="form-group">
+                  <label>Existing Images ({editingStory.images.length})</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                    {editingStory.images.map((imagePath, index) => (
+                      <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
+                        <img 
+                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`} 
+                          alt={`Existing ${index + 1}`} 
+                          style={{ width: '100%', height: '120px', objectFit: 'cover' }}
+                        />
+                        <button
+                          onClick={() => handleRemoveExistingImage(editingStory.id, imagePath)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: '1'
+                          }}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowStoryModal(false)}>Cancel</button>
+              <button 
+                className="primary-btn" 
+                onClick={editingStory ? handleUpdateStory : handleSaveStory}
+              >
+                {editingStory ? 'Update Story' : 'Add Story'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Facility Diagnostic Modal */}
+      {showDiagModal && (
+        <div className="modal-overlay" onClick={() => setShowDiagModal(false)}>
+          <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Facility Diagnostic</h2>
+              <button className="modal-close" onClick={() => setShowDiagModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p className="diag-modal-patient">Patient: <strong>{selectedDiagPatient?.firstName} {selectedDiagPatient?.lastName}</strong></p>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Assessment Date</label>
+                  <input
+                    type="date"
+                    value={newDiagnostic.assessment_date}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, assessment_date: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Assessment Type</label>
+                  <select
+                    value={newDiagnostic.assessment_type}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, assessment_type: e.target.value })}
+                  >
+                    <option value="initial">Initial</option>
+                    <option value="follow_up">Follow-Up</option>
+                    <option value="discharge">Discharge</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Severity Level</label>
+                  <select
+                    value={newDiagnostic.severity_level}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, severity_level: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    <option value="mild">Mild</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="severe">Severe</option>
+                  </select>
+                </div>
+              </div>
+
+              <h4 className="diag-section-label">Articulation Scores (0–100)</h4>
+              <div className="form-row">
+                {['r', 's', 'l', 'th', 'k'].map(sound => (
+                  <div className="form-group" key={sound}>
+                    <label>/{sound.toUpperCase()}/ Sound</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="—"
+                      value={newDiagnostic.articulation_scores[sound]}
+                      onChange={(e) => setNewDiagnostic({
+                        ...newDiagnostic,
+                        articulation_scores: { ...newDiagnostic.articulation_scores, [sound]: e.target.value }
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <h4 className="diag-section-label">Language & Fluency Scores (0–100)</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Fluency</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="—"
+                    value={newDiagnostic.fluency_score}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, fluency_score: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Receptive Language</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="—"
+                    value={newDiagnostic.receptive_score}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, receptive_score: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Expressive Language</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="—"
+                    value={newDiagnostic.expressive_score}
+                    onChange={(e) => setNewDiagnostic({ ...newDiagnostic, expressive_score: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <h4 className="diag-section-label">Gait Scores (0–100)</h4>
+              <div className="form-row">
+                {[
+                  { key: 'stability_score', label: 'Stability' },
+                  { key: 'gait_symmetry', label: 'Symmetry' },
+                  { key: 'step_regularity', label: 'Regularity' },
+                  { key: 'overall_gait', label: 'Overall Gait' }
+                ].map(({ key, label }) => (
+                  <div className="form-group" key={key}>
+                    <label>{label}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="—"
+                      value={newDiagnostic.gait_scores[key]}
+                      onChange={(e) => setNewDiagnostic({
+                        ...newDiagnostic,
+                        gait_scores: { ...newDiagnostic.gait_scores, [key]: e.target.value }
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="form-group">
+                <label>Clinical Notes</label>
+                <textarea
+                  rows="3"
+                  placeholder="Observations, recommendations, etc."
+                  value={newDiagnostic.notes}
+                  onChange={(e) => setNewDiagnostic({ ...newDiagnostic, notes: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Recommended Focus Areas</label>
+                <textarea
+                  rows="2"
+                  placeholder="Enter focus areas separated by commas (e.g., R sound in initial position, Fluency pacing)"
+                  value={(newDiagnostic.recommended_focus || []).join(', ')}
+                  onChange={(e) => setNewDiagnostic({
+                    ...newDiagnostic,
+                    recommended_focus: e.target.value.split(',').map(s => s.trim()).filter(s => s)
+                  })}
+                />
+                <small style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
+                  Separate multiple focus areas with commas
+                </small>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowDiagModal(false)}>Cancel</button>
+              <button className="primary-btn" onClick={handleSaveDiagnostic} disabled={savingDiagnostic}>
+                {savingDiagnostic ? 'Saving...' : 'Save Diagnostic'}
+              </button>
             </div>
           </div>
         </div>

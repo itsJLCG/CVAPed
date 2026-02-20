@@ -339,6 +339,47 @@ Table gaitprogresses {
 }
 
 // ========================================
+// DIAGNOSTIC COMPARISON
+// ========================================
+
+Table facility_diagnostics {
+  _id ObjectId [pk]
+  user_id varchar [not null, note: 'Patient being assessed']
+  assessed_by varchar [not null, note: 'Therapist user_id who conducted the facility assessment']
+  assessment_date timestamp [not null, note: 'Date the facility assessment was performed']
+  assessment_type varchar [note: 'Values: initial, follow-up, discharge']
+  severity_level varchar [note: 'Values: mild, moderate, severe']
+  
+  // Articulation scores per target sound (0-100)
+  articulation_scores object [note: '{r: float, s: float, l: float, th: float, k: float} — per-sound scores 0-100']
+  
+  // Fluency score (0-100)
+  fluency_score float [note: 'Overall fluency assessment 0-100']
+  
+  // Language scores (0-100)
+  receptive_score float [note: 'Receptive language assessment 0-100']
+  expressive_score float [note: 'Expressive language assessment 0-100']
+  
+  // Gait / physical therapy scores (0-100)
+  gait_scores object [note: '{stability: float, symmetry: float, regularity: float, overall: float} — 0-100']
+  
+  // Clinical documentation
+  notes text [note: 'Therapist clinical notes and observations']
+  recommended_focus array [note: 'Array of therapy areas therapist recommends focusing on']
+  
+  created_at timestamp
+  updated_at timestamp
+  
+  indexes {
+    user_id
+    assessed_by
+    (user_id, assessment_date)
+  }
+  
+  Note: 'Facility-based diagnostic assessments entered by therapists, used for comparison against at-home system scores'
+}
+
+// ========================================
 // RELATIONSHIPS (References in MongoDB)
 // ========================================
 
@@ -350,6 +391,8 @@ Ref: language_progress.user_id > users._id [delete: cascade]
 Ref: language_trials.user_id > users._id [delete: cascade]
 Ref: exerciseplans.user_id > users._id [delete: cascade]
 Ref: gaitprogresses.user_id > users._id [delete: cascade]
+Ref: facility_diagnostics.user_id > users._id [delete: cascade]
+Ref: facility_diagnostics.assessed_by > users._id
 
 // ========================================
 // NOTES AND DOCUMENTATION
@@ -359,7 +402,7 @@ Note CollectionSummary {
   '''
   # CVACare MongoDB Collections Summary
   
-  ## Total Collections: 14 (13 active + 1 backup)
+  ## Total Collections: 15 (14 active + 1 backup)
   
   ### User Management (1)
   - users: Core user accounts with role-based access (patients, therapists, admins)
@@ -384,6 +427,9 @@ Note CollectionSummary {
   - exerciseplans: Customized therapy plans created by therapists
   - gaitprogresses: Gait analysis, mobility metrics, and rehabilitation progress
   
+  ### Diagnostic Comparison (1)
+  - facility_diagnostics: Facility-based assessments by therapists for comparison against at-home scores
+  
   ### Backup Collections (1)
   - language_exercises_backup: Backup copy of language exercises (not visualized in ERD)
   
@@ -397,6 +443,7 @@ Note CollectionSummary {
   - Real-time progress monitoring and analytics dashboard
   - Multi-modal therapy exercises: articulation, fluency, receptive, expressive
   - Gait analysis and mobility tracking for physical rehabilitation
+  - Facility vs at-home diagnostic comparison for therapist review
   
   ## Data Relationships
   All therapy-related collections reference users via user_id with cascade delete

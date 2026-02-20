@@ -9,10 +9,11 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import SafeAreaWrapper from './SafeAreaWrapper';
 import api from '../services/api';
 
 const { width, height } = Dimensions.get('window');
@@ -333,67 +334,60 @@ const PrescriptiveScreen = ({ onBack }) => {
 
   if (loading && !prescriptiveData) {
     return (
-      <SafeAreaWrapper>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="#2C3E50" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Therapy Plan</Text>
-          </View>
-          
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3498DB" />
-            <Text style={styles.loadingText}>Analyzing your therapy data...</Text>
-          </View>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft} />
+          <Text style={styles.headerTitle}>Therapy Plan</Text>
+          <View style={styles.headerRight} />
         </View>
-      </SafeAreaWrapper>
+        
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3498DB" />
+          <Text style={styles.loadingText}>Analyzing your therapy data...</Text>
+        </View>
+      </View>
     );
   }
 
   if (error && !prescriptiveData) {
     return (
-      <SafeAreaWrapper>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="#2C3E50" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Therapy Plan</Text>
-          </View>
-          
-          <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle" size={64} color="#E74C3C" />
-            <Text style={styles.errorTitle}>Unable to Load Analysis</Text>
-            <Text style={styles.errorMessage}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadPrescriptiveAnalysis}>
-              <Text style={styles.retryButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft} />
+          <Text style={styles.headerTitle}>Therapy Plan</Text>
+          <View style={styles.headerRight} />
         </View>
-      </SafeAreaWrapper>
+        
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={64} color="#E74C3C" />
+          <Text style={styles.errorTitle}>Unable to Load Analysis</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadPrescriptiveAnalysis}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   }
 
   return (
-    <SafeAreaWrapper>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#2C3E50" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Therapy Plan</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerLeft} />
+        <Text style={styles.headerTitle}>Therapy Plan</Text>
+        <View style={styles.headerRight}>
           <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-            <Ionicons name="refresh" size={24} color="#3498DB" />
+            <Ionicons name="refresh" size={24} color="#C9302C" />
           </TouchableOpacity>
         </View>
+      </View>
 
-        <ScrollView 
-          style={styles.scrollView}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        >
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
           {prescriptiveData && (
             <>
               {/* Priorities Section */}
@@ -440,35 +434,46 @@ const PrescriptiveScreen = ({ onBack }) => {
           )}
         </ScrollView>
       </View>
-    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#F5F5F5',
+    marginTop: Platform.OS === 'android' ? -StatusBar.currentHeight : 0,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFF',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 15 : 15,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
-  backButton: {
-    padding: 8,
-  },
-  refreshButton: {
-    padding: 8,
+  headerLeft: {
+    width: 34,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: 'bold',
     color: '#333',
+    textAlign: 'center',
+  },
+  headerRight: {
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    padding: 0,
+  },
+  backButton: {
+    padding: 8,
   },
   scrollView: {
     flex: 1,
@@ -482,7 +487,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 15,
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#666',
   },
   errorContainer: {
     flex: 1,

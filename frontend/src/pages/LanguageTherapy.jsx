@@ -16,6 +16,11 @@ const languageExercises = {
     name: 'Expressive Language',
     description: 'Enhance verbal communication and speaking abilities',
     color: '#8b5cf6'
+  },
+  fluency: {
+    name: 'Fluency Therapy',
+    description: 'Improve speech flow and reduce stuttering',
+    color: '#e8b04e'
   }
 };
 
@@ -133,6 +138,12 @@ function LanguageTherapy({ onLogout }) {
   }, []);
 
   const selectTherapyMode = async (mode) => {
+    // If fluency is selected, navigate to fluency therapy page
+    if (mode === 'fluency') {
+      navigate('/fluency-therapy');
+      return;
+    }
+    
     setTherapyMode(mode);
     setExerciseResults([]);
     setShowResults(false);
@@ -664,6 +675,26 @@ function LanguageTherapy({ onLogout }) {
                     : expressiveExercises.length === 0 
                       ? 'No Exercises Available' 
                       : 'Start Speaking Training'}
+                </button>
+              </div>
+
+              <div className="language-mode-card" onClick={() => selectTherapyMode('fluency')}>
+                <div className="mode-icon" style={{ backgroundColor: languageExercises.fluency.color }}>
+                  ⚡
+                </div>
+                <h2 className="mode-title">{languageExercises.fluency.name}</h2>
+                <p className="mode-description">{languageExercises.fluency.description}</p>
+                <div className="mode-features">
+                  <div className="feature-item">Speech Rate Monitoring</div>
+                  <div className="feature-item">Real-time Fluency Feedback</div>
+                  <div className="feature-item">Stuttering Pattern Analysis</div>
+                  <div className="feature-item">Speech Flow Improvement</div>
+                </div>
+                <button 
+                  className="mode-btn" 
+                  style={{ backgroundColor: languageExercises.fluency.color }}
+                >
+                  Start Fluency Training
                 </button>
               </div>
             </div>

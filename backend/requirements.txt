@@ -19,3 +19,4 @@ xgboost
 scikit-learn
 matplotlib==3.8.2
 zeroconf  # For mDNS hostname resolution (ESP32 support)
+cloudinary==1.40.0

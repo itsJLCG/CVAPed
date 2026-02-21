@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The CVAPed codebase has **0 critical**, **1 remaining high-severity issue** (internal error details leaked), and 3 resolved high-severity issues (rate limiting, ErrorBoundary, useEffect memory leaks). The frontend has widespread accessibility gaps and relies heavily on native `alert()` calls instead of the already-installed toast library. The most critical security issues (JWT bypass, CORS, secret key, Firebase credentials) have been resolved.
+The CVAPed codebase has **0 critical** and **0 high-severity issues**. All previously identified high-severity issues have been resolved. The frontend has widespread accessibility gaps and relies heavily on native `alert()` calls instead of the already-installed toast library. The most critical security issues (JWT bypass, CORS, secret key, Firebase credentials) have been resolved.
 
 | Severity | Count | Status |
 |----------|-------|--------|
@@ -17,9 +17,7 @@ The CVAPed codebase has **0 critical**, **1 remaining high-severity issue** (int
 | LOW | 5 | ❌ Unresolved |
 | **Total** | **19** | |
 
-
-
-
+---
 
 ## Medium Issues
 
@@ -196,22 +194,18 @@ The CVAPed codebase has **0 critical**, **1 remaining high-severity issue** (int
 
 ## Fix Priority Order
 
-1. 🔴 **[HIGH]** Stop leaking `str(e)` in error responses
-2. 🟢 **[HIGH]** Add rate limiting to `/api/login` and `/api/register` — ✅ Done
-3. 🟢 **[HIGH]** Add React `ErrorBoundary` — ✅ Done
-4. 🟢 **[HIGH]** Fix `useEffect` cleanup functions — ✅ Done
-5. 🟡 **[MEDIUM]** Replace 73 `alert()` calls with toast notifications
-6. 🟡 **[MEDIUM]** Fix form label associations (`htmlFor`)
-7. 🟡 **[MEDIUM]** Add `aria-label` to icon-only buttons
-8. 🟡 **[MEDIUM]** Make clickable `<div>` elements keyboard accessible
-9. 🟡 **[MEDIUM]** Add ARIA live regions for dynamic content
-10. 🟡 **[MEDIUM]** Fix bare `except:` clauses
-11. 🟡 **[MEDIUM]** Add loading UI for all async states
-12. 🟡 **[MEDIUM]** Implement TODO items (FluencyTherapy assessment results)
-13. 🟡 **[MEDIUM]** Audit `.map()` calls for missing `key` props
-14. 🟢 **[LOW]** Replace `print()` with structured `logging`
-15. 🟢 **[LOW]** Remove/gate `console.log` calls
-16. 🟢 **[LOW]** Validate MIME types on file upload
-17. 🟢 **[LOW]** Move inline styles to CSS classes
-18. 🟢 **[LOW]** Add keyboard event handlers
-19. 🟢 **[LOW]** Guard seed script against production use
+1. 🟡 **[MEDIUM]** Replace 73 `alert()` calls with toast notifications
+2. 🟡 **[MEDIUM]** Fix form label associations (`htmlFor`)
+3. 🟡 **[MEDIUM]** Add `aria-label` to icon-only buttons
+4. 🟡 **[MEDIUM]** Make clickable `<div>` elements keyboard accessible
+5. 🟡 **[MEDIUM]** Add ARIA live regions for dynamic content
+6. 🟡 **[MEDIUM]** Fix bare `except:` clauses
+7. 🟡 **[MEDIUM]** Add loading UI for all async states
+8. 🟡 **[MEDIUM]** Implement TODO items (FluencyTherapy assessment results)
+9. 🟡 **[MEDIUM]** Audit `.map()` calls for missing `key` props
+10. 🟢 **[LOW]** Replace `print()` with structured `logging`
+11. 🟢 **[LOW]** Remove/gate `console.log` calls
+12. 🟢 **[LOW]** Validate MIME types on file upload
+13. 🟢 **[LOW]** Move inline styles to CSS classes
+14. 🟢 **[LOW]** Add keyboard event handlers
+15. 🟢 **[LOW]** Guard seed script against production use

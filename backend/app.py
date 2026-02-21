@@ -1704,6 +1704,16 @@ def get_therapist_appointments(current_user):
         # Fetch appointments
         appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
         
+        # Auto-update past appointments to 'no-show' if they are still 'scheduled' or 'confirmed'
+        now = datetime.now()
+        for appt in appointments:
+            if appt.get('status') in ['scheduled', 'confirmed'] and appt.get('appointment_date') and appt['appointment_date'] < now:
+                appt['status'] = 'no-show'
+                appointments_collection.update_one(
+                    {'_id': appt['_id']},
+                    {'$set': {'status': 'no-show', 'updated_at': now}}
+                )
+        
         # Convert ObjectId to string and format dates
         for appt in appointments:
             appt['_id'] = str(appt['_id'])
@@ -1822,6 +1832,17 @@ def create_therapist_appointment(current_user):
             appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
         except ValueError:
             return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+            
+        # Validate allowed scheduling days (Monday, Wednesday, Friday)
+        day_of_week = appointment_date.weekday() # 0 = Monday, 2 = Wednesday, 4 = Friday
+        if day_of_week not in [0, 2, 4]:
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled on Monday, Wednesday, or Friday.'}), 400
+            
+        # Validate allowed scheduling time (8:00 AM to 5:00 PM)
+        hour = appointment_date.hour
+        minute = appointment_date.minute
+        if hour < 8 or hour > 17 or (hour == 17 and minute > 0):
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled between 8:00 AM and 5:00 PM.'}), 400
         
         # Create appointment document
         appointment = {
@@ -1894,7 +1915,20 @@ def update_therapist_appointment(current_user, appointment_id):
         # Update allowed fields
         if 'appointment_date' in data:
             try:
-                update_doc['appointment_date'] = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+                appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+                
+                # Validate allowed scheduling days (Monday, Wednesday, Friday)
+                day_of_week = appointment_date.weekday() # 0 = Monday, 2 = Wednesday, 4 = Friday
+                if day_of_week not in [0, 2, 4]:
+                    return jsonify({'success': False, 'message': 'Appointments can only be scheduled on Monday, Wednesday, or Friday.'}), 400
+                    
+                # Validate allowed scheduling time (8:00 AM to 5:00 PM)
+                hour = appointment_date.hour
+                minute = appointment_date.minute
+                if hour < 8 or hour > 17 or (hour == 17 and minute > 0):
+                    return jsonify({'success': False, 'message': 'Appointments can only be scheduled between 8:00 AM and 5:00 PM.'}), 400
+                    
+                update_doc['appointment_date'] = appointment_date
             except ValueError:
                 return jsonify({'success': False, 'message': 'Invalid date format'}), 400
         
@@ -1999,6 +2033,7 @@ def delete_therapist_appointment(current_user, appointment_id):
 def get_patient_appointments(current_user):
     """Get all appointments for the logged-in patient"""
     try:
+        from datetime import datetime
         patient_id = str(current_user['_id'])
         
         # Get query parameters
@@ -2012,8 +2047,17 @@ def get_patient_appointments(current_user):
         # Fetch appointments
         appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
         
+        # Auto-update past appointments to 'no-show' if they are still 'scheduled' or 'confirmed'
+        now = datetime.now()
+        for appt in appointments:
+            if appt.get('status') in ['scheduled', 'confirmed'] and appt.get('appointment_date') and appt['appointment_date'] < now:
+                appt['status'] = 'no-show'
+                appointments_collection.update_one(
+                    {'_id': appt['_id']},
+                    {'$set': {'status': 'no-show', 'updated_at': now}}
+                )
+        
         # Convert ObjectId to string and format dates
-        from datetime import datetime
         for appt in appointments:
             appt['_id'] = str(appt['_id'])
             appt['patient_id'] = str(appt['patient_id'])
@@ -2067,6 +2111,17 @@ def book_patient_appointment(current_user):
             appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
         except ValueError:
             return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+            
+        # Validate allowed scheduling days (Monday, Wednesday, Friday)
+        day_of_week = appointment_date.weekday() # 0 = Monday, 2 = Wednesday, 4 = Friday
+        if day_of_week not in [0, 2, 4]:
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled on Monday, Wednesday, or Friday.'}), 400
+            
+        # Validate allowed scheduling time (8:00 AM to 5:00 PM)
+        hour = appointment_date.hour
+        minute = appointment_date.minute
+        if hour < 8 or hour > 17 or (hour == 17 and minute > 0):
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled between 8:00 AM and 5:00 PM.'}), 400
         
         # Create appointment document (therapist assignment is optional)
         appointment = {

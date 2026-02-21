@@ -1048,7 +1048,18 @@ function TherapistDashboard({ onLogout }) {
     try {
       const response = await appointmentService.therapist.getAppointments(appointmentFilters);
       if (!cancelled && response.success) {
-        setAppointments(response.appointments || []);
+        // Sort appointments: Cancelled and No Show at the bottom
+        const sortedAppointments = (response.appointments || []).sort((a, b) => {
+          const isABottom = a.status === 'cancelled' || a.status === 'no-show';
+          const isBBottom = b.status === 'cancelled' || b.status === 'no-show';
+          
+          if (isABottom && !isBBottom) return 1;
+          if (!isABottom && isBBottom) return -1;
+          
+          // If both are in the same group, sort by date (newest first)
+          return new Date(b.appointment_date) - new Date(a.appointment_date);
+        });
+        setAppointments(sortedAppointments);
       }
     } catch (e) {
       console.error('Failed to load appointments', e);
@@ -1126,6 +1137,25 @@ function TherapistDashboard({ onLogout }) {
       }
       if (!newAppointment.appointment_date) {
         alert('Please select date and time');
+        return;
+      }
+
+      // Validate date and time
+      const selectedDate = new Date(newAppointment.appointment_date);
+      const dayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      
+      // Check if day is Monday (1), Wednesday (3), or Friday (5)
+      if (dayOfWeek !== 1 && dayOfWeek !== 3 && dayOfWeek !== 5) {
+        alert('Appointments can only be scheduled on Monday, Wednesday, or Friday.');
+        return;
+      }
+
+      // Check if time is between 8:00 AM and 5:00 PM
+      const hours = selectedDate.getHours();
+      const minutes = selectedDate.getMinutes();
+      
+      if (hours < 8 || hours > 17 || (hours === 17 && minutes > 0)) {
+        alert('Appointments can only be scheduled between 8:00 AM and 5:00 PM.');
         return;
       }
 

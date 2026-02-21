@@ -18,22 +18,23 @@ function Appointments({ onLogout }) {
   const [filter, setFilter] = useState('all'); // all, upcoming, past
 
   useEffect(() => {
-    loadAppointments();
-  }, []);
-
-  const loadAppointments = async () => {
-    setLoading(true);
-    try {
-      const response = await appointmentService.patient.getAppointments();
-      if (response.success) {
-        setAppointments(response.appointments || []);
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true);
+      try {
+        const response = await appointmentService.patient.getAppointments();
+        if (!cancelled && response.success) {
+          setAppointments(response.appointments || []);
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Error loading appointments:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (error) {
-      console.error('Error loading appointments:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    run();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleBookAppointment = async () => {
     try {

@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 Receptive Language Therapy CRUD Operations
 Separate module for managing receptive language exercises (Vocabulary, Directions, Comprehension)
@@ -383,11 +385,10 @@ def seed_default_exercises(current_user):
         }), 201
         
     except Exception as e:
-        print(f"Error seeding receptive exercises: {str(e)}")
+        logger.error(f"Error seeding receptive exercises: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to seed exercises',
-            'error': str(e)
+            'message': 'Failed to seed exercises'
         }), 500
 
 
@@ -417,11 +418,10 @@ def get_all_exercises(current_user):
         }), 200
         
     except Exception as e:
-        print(f"Error fetching receptive exercises: {str(e)}")
+        logger.error(f"Error fetching receptive exercises: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch exercises',
-            'error': str(e)
+            'message': 'Failed to fetch exercises'
         }), 500
 
 
@@ -466,11 +466,10 @@ def get_active_exercises(current_user):
         }), 200
         
     except Exception as e:
-        print(f"Error fetching active receptive exercises: {str(e)}")
+        logger.error(f"Error fetching active receptive exercises: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch active exercises',
-            'error': str(e)
+            'message': 'Failed to fetch active exercises'
         }), 500
 
 
@@ -498,11 +497,10 @@ def get_available_orders_endpoint(current_user):
         }), 200
         
     except Exception as e:
-        print(f"Error getting available orders: {str(e)}")
+        logger.error(f"Error getting available orders: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get available orders',
-            'error': str(e)
+            'message': 'Failed to get available orders'
         }), 500
 
 # ============= CREATE EXERCISE =============
@@ -570,11 +568,10 @@ def create_exercise(current_user):
         }), 201
         
     except Exception as e:
-        print(f"Error creating receptive exercise: {str(e)}")
+        logger.error(f"Error creating receptive exercise: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to create exercise',
-            'error': str(e)
+            'message': 'Failed to create exercise'
         }), 500
 
 
@@ -634,11 +631,10 @@ def update_exercise(current_user, exercise_id):
         }), 200
         
     except Exception as e:
-        print(f"Error updating receptive exercise: {str(e)}")
+        logger.error(f"Error updating receptive exercise: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to update exercise',
-            'error': str(e)
+            'message': 'Failed to update exercise'
         }), 500
 
 
@@ -672,11 +668,10 @@ def delete_exercise(current_user, exercise_id):
         }), 200
         
     except Exception as e:
-        print(f"Error deleting receptive exercise: {str(e)}")
+        logger.error(f"Error deleting receptive exercise: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to delete exercise',
-            'error': str(e)
+            'message': 'Failed to delete exercise'
         }), 500
 
 
@@ -718,11 +713,10 @@ def toggle_active(current_user, exercise_id):
         }), 200
         
     except Exception as e:
-        print(f"Error toggling receptive exercise status: {str(e)}")
+        logger.error(f"Error toggling receptive exercise status: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to toggle exercise status',
-            'error': str(e)
+            'message': 'Failed to toggle exercise status'
         }), 500
 
 
@@ -742,9 +736,8 @@ def delete_all_exercises(current_user):
         }), 200
         
     except Exception as e:
-        print(f"Error deleting all receptive exercises: {str(e)}")
+        logger.error(f"Error deleting all receptive exercises: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to delete exercises',
-            'error': str(e)
+            'message': 'Failed to delete exercises'
         }), 500

@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 Language Therapy CRUD Operations
 Separate module for managing language therapy exercises (Receptive & Expressive)
@@ -317,9 +319,9 @@ def seed_default_exercises(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error seeding exercises: {str(e)}")
+        logger.error(f"Error seeding exercises: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to seed exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to seed exercises'}), 500
 
 
 # ============= GET ALL EXERCISES (THERAPIST) =============
@@ -351,9 +353,9 @@ def get_all_exercises(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error fetching exercises: {str(e)}")
+        logger.error(f"Error fetching exercises: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch exercises'}), 500
 
 
 # ============= GET ACTIVE EXERCISES (PATIENT) =============
@@ -411,9 +413,9 @@ def get_active_exercises(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error fetching active exercises: {str(e)}")
+        logger.error(f"Error fetching active exercises: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch exercises'}), 500
 
 
 # ============= CREATE EXERCISE (THERAPIST) =============
@@ -468,9 +470,9 @@ def create_exercise(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error creating exercise: {str(e)}")
+        logger.error(f"Error creating exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to create exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to create exercise'}), 500
 
 
 # ============= UPDATE EXERCISE (THERAPIST) =============
@@ -508,9 +510,9 @@ def update_exercise(current_user, exercise_id):
         
     except Exception as e:
         import traceback
-        print(f"Error updating exercise: {str(e)}")
+        logger.error(f"Error updating exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to update exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to update exercise'}), 500
 
 
 # ============= DELETE EXERCISE (THERAPIST) =============
@@ -533,9 +535,9 @@ def delete_exercise(current_user, exercise_id):
         
     except Exception as e:
         import traceback
-        print(f"Error deleting exercise: {str(e)}")
+        logger.error(f"Error deleting exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to delete exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete exercise'}), 500
 
 
 # ============= TOGGLE ACTIVE STATUS (THERAPIST) =============
@@ -567,6 +569,6 @@ def toggle_active(current_user, exercise_id):
         
     except Exception as e:
         import traceback
-        print(f"Error toggling active status: {str(e)}")
+        logger.error(f"Error toggling active status: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to toggle status', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to toggle status'}), 500

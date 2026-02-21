@@ -203,9 +203,11 @@ function TherapistDashboard({ onLogout }) {
 
   // Load stats when overview tab is active or filter changes
   useEffect(() => {
+    let cancelled = false;
     if (activeTab === 'overview' && user) {
       loadOverviewStats();
     }
+    return () => { cancelled = true; };
   }, [activeTab, user, selectedDays]);
 
   // Load exercises from database and group by level
@@ -669,38 +671,49 @@ function TherapistDashboard({ onLogout }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const stored = authService.getStoredUser();
     setUser(stored);
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     // Load available orders when creating new exercise and sound/level changes
     if (showArticulationModal) {
       loadAvailableOrders(newArticulationExercise.sound_id, newArticulationExercise.level);
     }
+    return () => { cancelled = true; };
   }, [showArticulationModal, newArticulationExercise.sound_id, newArticulationExercise.level]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load available orders when creating new fluency exercise and level changes
     if (showExerciseModal) {
       loadAvailableFluencyOrders(newExercise.level);
     }
+    return () => { cancelled = true; };
   }, [showExerciseModal, newExercise.level]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load available orders when creating new language exercise and level changes
     if (showLanguageModal && activeSub === 'receptive') {
       loadAvailableLanguageOrders(newLanguageExercise.level);
     }
+    return () => { cancelled = true; };
   }, [showLanguageModal, newLanguageExercise.level, activeSub]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load default overview stats via admin stats
     if (activeTab !== 'overview') return;
     loadOverview();
+    return () => { cancelled = true; };
   }, [activeTab]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load therapy data when switching tabs
     if (activeTab === 'articulation') {
       loadArticulation(); // Load patient session data
@@ -725,9 +738,11 @@ function TherapistDashboard({ onLogout }) {
     if (activeTab === 'diagnostics') {
       // Keep selectedDiagPatient if already set; otherwise no auto-load
     }
+    return () => { cancelled = true; };
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
+    let cancelled = false;
     try {
       // Therapists don't have access to admin stats
       // Show a simple welcome message instead
@@ -737,10 +752,13 @@ function TherapistDashboard({ onLogout }) {
       ]);
     } catch (e) {
       console.error('Failed to load overview', e);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadArticulation = async () => {
+    let cancelled = false;
     try {
       // Therapists don't have access to patient data
       // This is for managing exercises only
@@ -750,10 +768,13 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load articulation', e);
       setTherapyData([]);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadLanguage = async (mode) => {
+    let cancelled = false;
     try {
       // Therapists don't have access to patient data
       setTherapyData([
@@ -762,10 +783,13 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load language', e);
       setTherapyData([]);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadFluency = async () => {
+    let cancelled = false;
     try {
       // Therapists don't have access to patient session data
       // They can only manage exercises via the Therapy Levels tab
@@ -773,21 +797,24 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load fluency', e);
       setTherapyData([]);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadPhysical = async () => {
+    let cancelled = false;
     setLoadingPhysical(true);
     try {
       const response = await therapistService.getPhysicalPatients();
-      if (response.success) {
+      if (!cancelled && response.success) {
         setGaitAnalyses(response.data || []);
       }
     } catch (e) {
       console.error('Failed to load gait analyses', e);
       setGaitAnalyses([]);
     } finally {
-      setLoadingPhysical(false);
+      if (!cancelled) setLoadingPhysical(false);
     }
   };
 
@@ -817,20 +844,21 @@ function TherapistDashboard({ onLogout }) {
 
   // Success Stories Functions
   const loadSuccessStories = async () => {
-    console.log('🔍 Loading success stories...');
+    let cancelled = false;
+    console.log('✨ Loading success stories...');
     setLoadingStories(true);
     try {
       const response = await successStoryService.getAll();
-      console.log('📦 Success stories response:', response);
-      if (response.success) {
+      console.log('Success stories response:', response);
+      if (!cancelled && response.success) {
         setSuccessStories(response.data || []);
-        console.log('✅ Success stories loaded:', response.data?.length || 0);
+        console.log('Success stories loaded:', response.data?.length || 0);
       }
     } catch (e) {
-      console.error('❌ Failed to load success stories', e);
+      console.error('Failed to load success stories', e);
       setSuccessStories([]);
     } finally {
-      setLoadingStories(false);
+      if (!cancelled) setLoadingStories(false);
     }
   };
 
@@ -998,47 +1026,50 @@ function TherapistDashboard({ onLogout }) {
 
   // Reports Functions
   const loadReports = async () => {
+    let cancelled = false;
     setLoadingReports(true);
     try {
       const response = await therapistService.getReports();
-      if (response.success) {
+      if (!cancelled && response.success) {
         setReportsData(response.data || null);
       }
     } catch (e) {
       console.error('Failed to load reports', e);
       setReportsData(null);
     } finally {
-      setLoadingReports(false);
+      if (!cancelled) setLoadingReports(false);
     }
   };
 
   // Appointments Functions
   const loadAppointments = async () => {
+    let cancelled = false;
     setLoadingAppointments(true);
     try {
       const response = await appointmentService.therapist.getAppointments(appointmentFilters);
-      if (response.success) {
+      if (!cancelled && response.success) {
         setAppointments(response.appointments || []);
       }
     } catch (e) {
       console.error('Failed to load appointments', e);
       setAppointments([]);
     } finally {
-      setLoadingAppointments(false);
+      if (!cancelled) setLoadingAppointments(false);
     }
   };
 
   const loadUnassignedAppointments = async () => {
+    let cancelled = false;
     setLoadingUnassigned(true);
     try {
       const response = await appointmentService.therapist.getUnassignedAppointments();
-      if (response.success) {
+      if (!cancelled && response.success) {
         setUnassignedAppointments(response.appointments || []);
       }
     } catch (error) {
       console.error('Error loading unassigned appointments:', error);
     } finally {
-      setLoadingUnassigned(false);
+      if (!cancelled) setLoadingUnassigned(false);
     }
   };
 

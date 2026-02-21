@@ -27,10 +27,13 @@ function AdminDashboard({ onLogout }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     checkAuth();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     console.log('Effect triggered - user:', user, 'activeTab:', activeTab);
     if (user) {
       if (activeTab === 'overview') {
@@ -41,6 +44,7 @@ function AdminDashboard({ onLogout }) {
         loadUsers();
       }
     }
+    return () => { cancelled = true; };
   }, [activeTab, user, currentPage, perPage]);
 
   const checkAuth = async () => {
@@ -62,35 +66,41 @@ function AdminDashboard({ onLogout }) {
   };
 
   const loadStats = async () => {
+    let cancelled = false;
     try {
       setLoading(true);
       console.log('Calling adminService.getStats()...');
       const response = await adminService.getStats();
-      console.log('Stats response:', response);
-      setStats(response.stats || response.data?.stats || response);
+      if (!cancelled) {
+        console.log('Stats response:', response);
+        setStats(response.stats || response.data?.stats || response);
+      }
     } catch (error) {
       console.error('Error loading stats:', error);
       console.error('Error details:', error.response?.data);
     } finally {
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
   };
 
   const loadUsers = async () => {
+    let cancelled = false;
     try {
       setLoading(true);
       console.log('Calling adminService.getAllUsers()...');
       const response = await adminService.getAllUsers(currentPage, perPage, searchTerm);
-      console.log('Users response:', response);
-      console.log('Pagination object:', response.pagination);
-      setUsers(response.users || []);
-      setTotalPages(response.pagination?.total_pages || 1);
-      console.log('Set totalPages to:', response.pagination?.total_pages || 1);
+      if (!cancelled) {
+        console.log('Users response:', response);
+        console.log('Pagination object:', response.pagination);
+        setUsers(response.users || []);
+        setTotalPages(response.pagination?.total_pages || 1);
+        console.log('Set totalPages to:', response.pagination?.total_pages || 1);
+      }
     } catch (error) {
       console.error('Error loading users:', error);
       console.error('Error details:', error.response?.data);
     } finally {
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
   };
 

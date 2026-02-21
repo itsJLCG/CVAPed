@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from pymongo import MongoClient
 from bson import ObjectId
 import jwt
@@ -10,6 +12,9 @@ import os
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, auth
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import fluency CRUD blueprint
 from fluency_crud import fluency_bp, init_fluency_crud
@@ -37,8 +42,25 @@ cred = credentials.Certificate('cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.
 firebase_admin.initialize_app(cred)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key')
-CORS(app)
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set. Cannot start application.")
+
+app.config['SECRET_KEY'] = SECRET_KEY
+# Enable CORS
+CORS(app, origins=["http://localhost:3000", "https://your-production-frontend.com"])
+
+# Rate limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Print confirmation
+print("✅ CORS initialized for allowed origins")
+
 bcrypt = Bcrypt(app)
 
 # MongoDB connection
@@ -119,7 +141,8 @@ def token_required(f):
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401
         except Exception as e:
-            return jsonify({'message': 'Token is invalid!', 'error': str(e)}), 401
+            logger.warning(f"Invalid token: {e}")
+            return jsonify({'message': 'Token is invalid!'}), 401
         
         return f(current_user, *args, **kwargs)
     
@@ -138,6 +161,7 @@ def therapist_required(f):
     return decorated
 
 @app.route('/api/register', methods=['POST'])
+@limiter.limit("5 per minute")
 def register():
     try:
         data = request.get_json()
@@ -253,7 +277,7 @@ def register():
                 'id': str(result.inserted_id),
                 'email': email,
                 'firstName': first_name,
-                'lastName': last_name,
+                    'lastName': last_name,
                 'age': age_int,
                 'gender': gender,
                 'role': role,
@@ -263,9 +287,11 @@ def register():
         }), 201
         
     except Exception as e:
-        return jsonify({'message': 'Registration failed', 'error': str(e)}), 500
+        logger.error(f"Registration error: {e}", exc_info=True)
+        return jsonify({'message': 'Registration failed'}), 500
 
 @app.route('/api/login', methods=['POST'])
+@limiter.limit("5 per minute")
 def login():
     try:
         data = request.get_json()
@@ -308,9 +334,11 @@ def login():
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Login failed', 'error': str(e)}), 500
+        logger.error(f"Login error: {e}", exc_info=True)
+        return jsonify({'message': 'Login failed'}), 500
 
 @app.route('/api/auth/firebase', methods=['POST'])
+@limiter.limit("10 per minute")
 def firebase_auth():
     try:
         data = request.get_json()
@@ -346,9 +374,9 @@ def firebase_auth():
                 'code': 'auth/invalid-id-token'
             }), 401
         except Exception as e:
+            logger.error(f"Firebase token verification failed: {e}", exc_info=True)
             return jsonify({
                 'message': 'Firebase token verification failed. Please sign in again.',
-                'error': str(e),
                 'code': 'auth/token-verification-failed'
             }), 401
         
@@ -465,7 +493,8 @@ def firebase_auth():
         }), 201
         
     except Exception as e:
-        return jsonify({'message': 'Firebase authentication failed', 'error': str(e)}), 500
+        logger.error(f"Firebase auth error: {e}", exc_info=True)
+        return jsonify({'message': 'Firebase authentication failed'}), 500
 
 @app.route('/api/auth/complete-profile', methods=['POST'])
 @token_required
@@ -581,7 +610,7 @@ def complete_profile(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Profile completion failed', 'error': str(e)}), 500
+        return jsonify({'message': 'Profile completion failed'}), 500
 
 @app.route('/api/user', methods=['GET'])
 @token_required
@@ -597,7 +626,7 @@ def get_user(current_user):
             }
         }), 200
     except Exception as e:
-        return jsonify({'message': 'Failed to get user', 'error': str(e)}), 500
+        return jsonify({'message': 'Failed to get user'}), 500
 
 @app.route('/api/user/update', methods=['PUT'])
 @token_required
@@ -649,7 +678,7 @@ def update_user(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Failed to update profile', 'error': str(e)}), 500
+        return jsonify({'message': 'Failed to update profile'}), 500
 
 @app.route('/api/user/diagnostic-status', methods=['PUT'])
 @token_required
@@ -691,7 +720,7 @@ def update_diagnostic_status(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Failed to update diagnostic status', 'error': str(e)}), 500
+        return jsonify({'message': 'Failed to update diagnostic status'}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():
@@ -823,7 +852,7 @@ def get_health_logs(current_user):
         import traceback
         print(f"Error fetching health logs: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch health logs', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch health logs'}), 500
 
 @app.route('/api/health/summary', methods=['GET'])
 @token_required
@@ -916,7 +945,7 @@ def get_health_summary(current_user):
         import traceback
         print(f"Error fetching health summary: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch health summary', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch health summary'}), 500
 
 
 # ======================
@@ -943,12 +972,12 @@ def get_prescriptive_analysis(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error generating prescriptive analysis: {e}", exc_info=True)
         print(f"Error generating prescriptive analysis: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to generate prescriptive analysis',
-            'error': str(e)
+            'message': 'Failed to generate prescriptive analysis'
         }), 500
 
 # ======================
@@ -1046,12 +1075,12 @@ def get_all_predictions(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching predictions: {e}", exc_info=True)
         print(f"❌ Error fetching predictions: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch predictions',
-            'error': str(e)
+            'message': 'Failed to fetch predictions'
         }), 500
 
 @app.route('/api/predictions/articulation/<sound_id>', methods=['GET'])
@@ -1079,10 +1108,10 @@ def get_articulation_prediction(current_user, sound_id):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting articulation prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get articulation prediction',
-            'error': str(e)
+            'message': 'Failed to get articulation prediction'
         }), 500
 
 @app.route('/api/predictions/fluency', methods=['GET'])
@@ -1104,10 +1133,10 @@ def get_fluency_prediction(current_user):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting fluency prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get fluency prediction',
-            'error': str(e)
+            'message': 'Failed to get fluency prediction'
         }), 500
 
 @app.route('/api/predictions/language/<mode>', methods=['GET'])
@@ -1135,10 +1164,10 @@ def get_language_prediction(current_user, mode):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting language prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get language prediction',
-            'error': str(e)
+            'message': 'Failed to get language prediction'
         }), 500
 
 @app.route('/api/predictions/overall', methods=['GET'])
@@ -1160,10 +1189,10 @@ def get_overall_prediction(current_user):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting overall prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get overall prediction',
-            'error': str(e)
+            'message': 'Failed to get overall prediction'
         }), 500
 
 
@@ -1490,12 +1519,12 @@ def get_therapist_stats(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching therapist stats: {e}", exc_info=True)
         print(f"❌ Error fetching therapist stats: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch therapist statistics',
-            'error': str(e)
+            'message': 'Failed to fetch therapist statistics'
         }), 500
 
 
@@ -1629,12 +1658,12 @@ def get_therapist_reports(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching therapist reports: {e}", exc_info=True)
         print(f"❌ Error fetching therapist reports: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch therapist reports',
-            'error': str(e)
+            'message': 'Failed to fetch therapist reports'
         }), 500
 
 
@@ -1694,12 +1723,12 @@ def get_therapist_appointments(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching therapist appointments: {e}", exc_info=True)
         print(f"❌ Error fetching therapist appointments: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch appointments',
-            'error': str(e)
+            'message': 'Failed to fetch appointments'
         }), 500
 
 
@@ -1750,12 +1779,12 @@ def get_unassigned_appointments(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching unassigned appointments: {e}", exc_info=True)
         print(f"❌ Error fetching unassigned appointments: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch unassigned appointments',
-            'error': str(e)
+            'message': 'Failed to fetch unassigned appointments'
         }), 500
 
 
@@ -1830,12 +1859,12 @@ def create_therapist_appointment(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error creating appointment: {e}", exc_info=True)
         print(f"❌ Error creating appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to create appointment',
-            'error': str(e)
+            'message': 'Failed to create appointment'
         }), 500
 
 
@@ -1913,12 +1942,12 @@ def update_therapist_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error updating appointment: {e}", exc_info=True)
         print(f"❌ Error updating appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to update appointment',
-            'error': str(e)
+            'message': 'Failed to update appointment'
         }), 500
 
 
@@ -1956,12 +1985,12 @@ def delete_therapist_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error deleting appointment: {e}", exc_info=True)
         print(f"❌ Error deleting appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to cancel appointment',
-            'error': str(e)
+            'message': 'Failed to cancel appointment'
         }), 500
 
 
@@ -2003,12 +2032,12 @@ def get_patient_appointments(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching patient appointments: {e}", exc_info=True)
         print(f"❌ Error fetching patient appointments: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch appointments',
-            'error': str(e)
+            'message': 'Failed to fetch appointments'
         }), 500
 
 
@@ -2082,12 +2111,12 @@ def book_patient_appointment(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error booking appointment: {e}", exc_info=True)
         print(f"❌ Error booking appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to book appointment',
-            'error': str(e)
+            'message': 'Failed to book appointment'
         }), 500
 
 
@@ -2126,12 +2155,12 @@ def cancel_patient_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error cancelling appointment: {e}", exc_info=True)
         print(f"❌ Error cancelling appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to cancel appointment',
-            'error': str(e)
+            'message': 'Failed to cancel appointment'
         }), 500
 
 
@@ -2200,12 +2229,12 @@ def assign_therapist_to_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error assigning therapist: {e}", exc_info=True)
         print(f"❌ Error assigning therapist: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to assign therapist',
-            'error': str(e)
+            'message': 'Failed to assign therapist'
         }), 500
 
 
@@ -2238,12 +2267,12 @@ def get_available_therapists(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching available therapists: {e}", exc_info=True)
         print(f"❌ Error fetching available therapists: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch therapists',
-            'error': str(e)
+            'message': 'Failed to fetch therapists'
         }), 500
 
 
@@ -2301,12 +2330,12 @@ def search_patients(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error searching patients: {e}", exc_info=True)
         print(f"❌ Error searching patients: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to search patients',
-            'error': str(e)
+            'message': 'Failed to search patients'
         }), 500
 
 
@@ -2368,12 +2397,12 @@ def check_appointment_availability(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error checking availability: {e}", exc_info=True)
         print(f"❌ Error checking availability: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to check availability',
-            'error': str(e)
+            'message': 'Failed to check availability'
         }), 500
 
 
@@ -2445,10 +2474,11 @@ def assess_pronunciation_azure(audio_path, reference_text):
             }
             
     except Exception as e:
+        logger.error(f"Azure assessment error: {e}", exc_info=True)
         print(f"Azure assessment error: {str(e)}")
         return {
             'success': False,
-            'error': str(e)
+            'error': 'Assessment failed'
         }
 
 # Articulation Therapy Endpoints
@@ -2606,7 +2636,7 @@ def record_articulation(current_user):
         import traceback
         print(f"Error processing recording: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to process recording', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to process recording'}), 500
 
 @app.route('/api/articulation/exercises/<sound_id>/<int:level>', methods=['GET'])
 @token_required
@@ -2666,7 +2696,7 @@ def get_exercises(current_user, sound_id, level):
         }), 200
         
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to get exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get exercises'}), 500
 
 @app.route('/api/articulation/progress', methods=['POST'])
 @token_required
@@ -2751,7 +2781,7 @@ def save_progress(current_user):
         import traceback
         print(f"Error saving progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to save progress'}), 500
 
 @app.route('/api/articulation/progress/<sound_id>', methods=['GET'])
 @token_required
@@ -2814,7 +2844,7 @@ def get_progress(current_user, sound_id):
         import traceback
         print(f"Error getting progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get progress'}), 500
 
 @app.route('/api/articulation/progress/all', methods=['GET'])
 @token_required
@@ -2836,7 +2866,7 @@ def get_all_progress(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to get all progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get all progress'}), 500
 
 @app.route('/api/language/assess-expressive', methods=['POST'])
 @token_required
@@ -2992,7 +3022,7 @@ def assess_expressive_language(current_user):
         import traceback
         print(f"Error assessing expressive language: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Assessment failed', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Assessment failed'}), 500
 
 # Language Therapy Progress Endpoints
 @app.route('/api/language/progress', methods=['POST'])
@@ -3086,7 +3116,7 @@ def save_language_progress(current_user):
         import traceback
         print(f"Error saving language progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to save progress'}), 500
 
 @app.route('/api/language/progress/<mode>', methods=['GET'])
 @token_required
@@ -3148,7 +3178,7 @@ def get_language_progress(current_user, mode):
         import traceback
         print(f"Error getting language progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get progress'}), 500
 
 @app.route('/api/language/progress/all', methods=['GET'])
 @token_required
@@ -3170,7 +3200,7 @@ def get_all_language_progress(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to get all language progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get all language progress'}), 500
 
 # Fluency Therapy Collections
 fluency_progress_collection = db['fluency_progress']
@@ -3405,7 +3435,7 @@ def assess_fluency(current_user):
         import traceback
         print(f"Error assessing fluency: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Assessment failed', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Assessment failed'}), 500
 
 @app.route('/api/fluency/progress', methods=['POST'])
 @token_required
@@ -3486,7 +3516,7 @@ def save_fluency_progress(current_user):
         import traceback
         print(f"Error saving fluency progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to save progress'}), 500
 
 @app.route('/api/fluency/progress', methods=['GET'])
 @token_required
@@ -3549,7 +3579,7 @@ def get_fluency_progress(current_user):
         import traceback
         print(f"Error getting fluency progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get progress'}), 500
 
 # ========== ADMIN ENDPOINTS ==========
 
@@ -3688,7 +3718,7 @@ def get_admin_stats(current_user):
         import traceback
         print(f"Error getting admin stats: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get admin stats', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get admin stats'}), 500
 
 @app.route('/api/admin/users', methods=['GET'])
 @token_required
@@ -3750,7 +3780,7 @@ def get_all_users(current_user):
         import traceback
         print(f"Error getting users: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get users', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get users'}), 500
 
 @app.route('/api/admin/users/<user_id>', methods=['PUT'])
 @token_required
@@ -3794,7 +3824,7 @@ def admin_update_user(current_user, user_id):
         import traceback
         print(f"Error updating user: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to update user', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to update user'}), 500
 
 @app.route('/api/admin/users/<user_id>', methods=['DELETE'])
 @token_required
@@ -3827,7 +3857,7 @@ def admin_delete_user(current_user, user_id):
         import traceback
         print(f"Error deleting user: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to delete user', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete user'}), 500
 
 @app.route('/api/admin/therapies/articulation', methods=['GET'])
 @token_required
@@ -3867,7 +3897,7 @@ def get_articulation_therapy_data(current_user):
         import traceback
         print(f"Error fetching articulation data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 @app.route('/api/admin/therapies/language/<mode>', methods=['GET'])
 @token_required
@@ -3914,7 +3944,7 @@ def get_language_therapy_data(current_user, mode):
         import traceback
         print(f"Error fetching language data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 @app.route('/api/admin/therapies/fluency', methods=['GET'])
 @token_required
@@ -3954,7 +3984,7 @@ def get_fluency_therapy_data(current_user):
         import traceback
         print(f"Error fetching fluency data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 @app.route('/api/admin/therapies/physical', methods=['GET'])
 @token_required
@@ -4001,7 +4031,7 @@ def get_physical_therapy_data(current_user):
         import traceback
         print(f"Error fetching physical therapy data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 # ============================================================================
 # WEARABLE GAIT ANALYSIS ENDPOINTS
@@ -4134,11 +4164,11 @@ def hardware_gait_analyze(current_user):
         }), 200
         
     except Exception as e:
+        logger.error(f"GAIT ANALYSIS ERROR: {e}", exc_info=True)
         print(f"❌ GAIT ANALYSIS ERROR: {str(e)}")
         print("="*60 + "\n")
         return jsonify({
             'success': False,
-            'error': str(e),
             'message': 'Hardware gait analysis failed'
         }), 500
 
@@ -4165,9 +4195,10 @@ def hardware_gait_history(current_user):
         }), 200
         
     except Exception as e:
+        logger.error(f"Error fetching gait history: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'error': str(e)
+            'message': 'Failed to fetch gait history'
         }), 500
 
 
@@ -4249,12 +4280,12 @@ def get_physical_therapy_patients(current_user):
         
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching gait analyses: {e}", exc_info=True)
         print(f"Error fetching gait analyses: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch gait analyses',
-            'error': str(e)
+            'message': 'Failed to fetch gait analyses'
         }), 500
 
 # Serve uploaded files
@@ -4362,7 +4393,7 @@ def create_facility_diagnostic(current_user):
         import traceback
         print(f"❌ Error creating facility diagnostic: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to create facility diagnostic', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to create facility diagnostic'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<user_id>', methods=['GET'])
@@ -4418,7 +4449,7 @@ def get_facility_diagnostics(current_user, user_id):
         import traceback
         print(f"❌ Error fetching facility diagnostics: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch facility diagnostics', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch facility diagnostics'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['PUT'])
@@ -4466,7 +4497,7 @@ def update_facility_diagnostic(current_user, diagnostic_id):
         import traceback
         print(f"❌ Error updating facility diagnostic: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to update diagnostic', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to update diagnostic'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['DELETE'])
@@ -4489,7 +4520,7 @@ def delete_facility_diagnostic(current_user, diagnostic_id):
         }), 200
 
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to delete diagnostic', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete diagnostic'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<user_id>/comparison', methods=['GET'])
@@ -4676,7 +4707,7 @@ def get_diagnostic_comparison(current_user, user_id):
         import traceback
         print(f"❌ Error computing diagnostic comparison: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<user_id>/comparison-history', methods=['GET'])
@@ -4721,7 +4752,7 @@ def get_diagnostic_comparison_history(current_user, user_id):
         import traceback
         print(f"❌ Error fetching diagnostic history: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic history', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic history'}), 500
 
 
 @app.route('/api/diagnostic-comparison', methods=['GET'])
@@ -4899,7 +4930,7 @@ def get_patient_diagnostic_comparison(current_user):
         import traceback
         print(f"❌ Error fetching patient diagnostic comparison: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic comparison', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic comparison'}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

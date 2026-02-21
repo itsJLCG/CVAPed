@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/ToastContext';
 import { TherapyCategoryProvider } from './components/TherapyCategoryContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -94,6 +95,7 @@ function App() {
   };
 
   return (
+    <ErrorBoundary>
     <ToastProvider>
       <TherapyCategoryProvider>
         <Router>
@@ -242,6 +244,7 @@ function App() {
       </Router>
       </TherapyCategoryProvider>
     </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

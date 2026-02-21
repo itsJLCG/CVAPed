@@ -1,18 +1,19 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 Success Story CRUD Operations
 Handles creation, reading, updating, and deletion of success stories
 Images are uploaded to Cloudinary cloud storage.
 """
-
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from functools import wraps
 import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 from datetime import datetime
 from bson import ObjectId
 import os
 import cloudinary
 import cloudinary.uploader
-
 # Database will be initialized later
 success_stories_collection = None
 
@@ -54,7 +55,7 @@ def upload_to_cloudinary(file_storage):
         )
         return result.get('secure_url')
     except Exception as e:
-        print(f"❌ Cloudinary upload error: {str(e)}")
+        logger.error(f"❌ Cloudinary upload error: {{e}}", exc_info=True)
         raise
 
 
@@ -80,25 +81,25 @@ def delete_from_cloudinary(image_url):
             print(f"⚠️ Could not parse Cloudinary public_id from URL: {image_url}")
             return False
     except Exception as e:
-        print(f"⚠️ Error deleting from Cloudinary: {str(e)}")
+        logger.error(f"⚠️ Error deleting from Cloudinary: {{e}}", exc_info=True)
         return False
 
 # JWT Token verification decorator
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = None
-        if 'Authorization' in request.headers:
-            token = request.headers['Authorization'].replace('Bearer ', '')
-        
-        if not token:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
             return jsonify({'success': False, 'message': 'Token is missing'}), 401
         
+        token = auth_header.replace('Bearer ', '')
+        
         try:
-            # Decode token to get user info
-            data = jwt.decode(token, options={"verify_signature": False})
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
             current_user = data
-        except Exception as e:
+        except ExpiredSignatureError:
+            return jsonify({'success': False, 'message': 'Token has expired'}), 401
+        except InvalidTokenError:
             return jsonify({'success': False, 'message': 'Token is invalid'}), 401
         
         return f(current_user, *args, **kwargs)
@@ -132,10 +133,10 @@ def get_success_stories():
         }), 200
     
     except Exception as e:
-        print(f"Error fetching success stories: {str(e)}")
+        logger.error(f"Error fetching success stories: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to fetch success stories: {str(e)}'
+            'message': f'Failed to fetch success stories: {{e}}'
         }), 500
 
 @success_story_bp.route('/success-stories', methods=['POST'])
@@ -231,10 +232,10 @@ def create_success_story(current_user):
         }), 201
     
     except Exception as e:
-        print(f"Error creating success story: {str(e)}")
+        logger.error(f"Error creating success story: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to create success story: {str(e)}'
+            'message': f'Failed to create success story: {{e}}'
         }), 500
 
 @success_story_bp.route('/success-stories/<story_id>', methods=['PUT'])
@@ -337,10 +338,10 @@ def update_success_story(current_user, story_id):
         }), 200
     
     except Exception as e:
-        print(f"Error updating success story: {str(e)}")
+        logger.error(f"Error updating success story: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to update success story: {str(e)}'
+            'message': f'Failed to update success story: {{e}}'
         }), 500
 
 @success_story_bp.route('/success-stories/<story_id>', methods=['DELETE'])
@@ -380,10 +381,10 @@ def delete_success_story(current_user, story_id):
         }), 200
     
     except Exception as e:
-        print(f"Error deleting success story: {str(e)}")
+        logger.error(f"Error deleting success story: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to delete success story: {str(e)}'
+            'message': f'Failed to delete success story: {{e}}'
         }), 500
 
 @success_story_bp.route('/success-stories/<story_id>/remove-image', methods=['POST'])
@@ -440,8 +441,8 @@ def remove_image_from_story(current_user, story_id):
             }), 404
     
     except Exception as e:
-        print(f"Error removing image: {str(e)}")
+        logger.error(f"Error removing image: {{e}}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to remove image: {str(e)}'
+            'message': f'Failed to remove image: {{e}}'
         }), 500

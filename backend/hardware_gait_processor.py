@@ -9,7 +9,10 @@ from scipy import signal
 from scipy.fft import fft, fftfreq
 from datetime import datetime
 import uuid
+import logging
 from gait_problem_detector import GaitProblemDetector
+
+logger = logging.getLogger(__name__)
 
 
 class HardwareGaitProcessor:
@@ -203,9 +206,10 @@ class HardwareGaitProcessor:
             return result
             
         except Exception as e:
+            logger.error(f"Hardware gait analysis failed: {e}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e),
+                'error': 'Analysis failed',
                 'message': 'Hardware gait analysis failed'
             }
     

@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 Articulation Exercise CRUD Operations
 Handles Create, Read, Update, Delete operations for articulation exercises
@@ -721,8 +723,7 @@ def seed_default_exercises(current_user):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to seed exercises',
-            'error': str(e)
+            'message': 'Failed to seed exercises'
         }), 500
 
 # Get all exercises (for therapist dashboard)
@@ -772,8 +773,7 @@ def get_all_exercises(current_user):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to get exercises',
-            'error': str(e)
+            'message': 'Failed to get exercises'
         }), 500
 
 # Get active exercises for a specific sound (for patient side)
@@ -813,8 +813,7 @@ def get_active_exercises(current_user, sound_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to get active exercises',
-            'error': str(e)
+            'message': 'Failed to get active exercises'
         }), 500
 
 # Helper function to generate exercise ID
@@ -879,8 +878,7 @@ def get_available_orders_endpoint(current_user):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to get available orders',
-            'error': str(e)
+            'message': 'Failed to get available orders'
         }), 500
 
 # Create new exercise
@@ -946,8 +944,7 @@ def create_exercise(current_user):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to create exercise',
-            'error': str(e)
+            'message': 'Failed to create exercise'
         }), 500
 
 # Update exercise
@@ -998,8 +995,7 @@ def update_exercise(current_user, exercise_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to update exercise',
-            'error': str(e)
+            'message': 'Failed to update exercise'
         }), 500
 
 # Delete exercise
@@ -1025,8 +1021,7 @@ def delete_exercise(current_user, exercise_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to delete exercise',
-            'error': str(e)
+            'message': 'Failed to delete exercise'
         }), 500
 
 # Toggle exercise active status
@@ -1063,8 +1058,7 @@ def toggle_exercise_active(current_user, exercise_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to toggle exercise status',
-            'error': str(e)
+            'message': 'Failed to toggle exercise status'
         }), 500
 
 # Delete all exercises (for re-seeding)
@@ -1083,6 +1077,5 @@ def delete_all_exercises(current_user):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to delete exercises',
-            'error': str(e)
+            'message': 'Failed to delete exercises'
         }), 500

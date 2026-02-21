@@ -20,12 +20,15 @@ function HealthLogs({ onLogout }) {
   const [facilityComparison, setFacilityComparison] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     fetchHealthData();
     fetchPredictions();
     fetchFacilityComparison();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchHealthData = async () => {
+    let cancelled = false;
     try {
       setLoading(true);
       setError(null);
@@ -35,18 +38,25 @@ function HealthLogs({ onLogout }) {
         healthService.getSummary()
       ]);
 
-      setHealthLogs(logsData.logs || []);
-      setSummary(summaryData.summary || null);
+      if (!cancelled) {
+        setHealthLogs(logsData.logs || []);
+        setSummary(summaryData.summary || null);
+      }
     } catch (err) {
-      console.error('Error fetching health data:', err);
-      setError(err.response?.data?.message || 'Failed to load health data');
+      if (!cancelled) {
+        console.error('Error fetching health data:', err);
+        setError(err.response?.data?.message || 'Failed to load health data');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!cancelled) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   const fetchPredictions = async () => {
+    let cancelled = false;
     try {
       // Fetch all predictions in parallel
       const [
@@ -63,13 +73,17 @@ function HealthLogs({ onLogout }) {
         healthService.getOverallSpeechPrediction()
       ]);
 
-      if (articulationData) setPredictions(articulationData.predictions || {});
-      if (fluencyData) setFluencyPrediction(fluencyData);
-      if (receptiveData) setReceptivePrediction(receptiveData);
-      if (expressiveData) setExpressivePrediction(expressiveData);
-      if (overallData) setOverallSpeechPrediction(overallData);
+      if (!cancelled) {
+        if (articulationData) setPredictions(articulationData.predictions || {});
+        if (fluencyData) setFluencyPrediction(fluencyData);
+        if (receptiveData) setReceptivePrediction(receptiveData);
+        if (expressiveData) setExpressivePrediction(expressiveData);
+        if (overallData) setOverallSpeechPrediction(overallData);
+      }
     } catch (error) {
-      console.error('Error fetching predictions:', error);
+      if (!cancelled) {
+        console.error('Error fetching predictions:', error);
+      }
     }
   };
 
@@ -81,13 +95,16 @@ function HealthLogs({ onLogout }) {
   };
 
   const fetchFacilityComparison = async () => {
+    let cancelled = false;
     try {
       const data = await diagnosticComparisonService.getMyComparison();
-      if (data.success && data.has_facility_data) {
+      if (!cancelled && data.success && data.has_facility_data) {
         setFacilityComparison(data);
       }
     } catch (error) {
-      console.log('Facility comparison not available');
+      if (!cancelled) {
+        console.log('Facility comparison not available');
+      }
     }
   };
 

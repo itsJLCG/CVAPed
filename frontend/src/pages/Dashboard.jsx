@@ -20,46 +20,39 @@ function Dashboard({ onLogout }) {
   const toast = useToast();
 
   useEffect(() => {
-    loadUser();
-    loadAppointments();
-    loadTherapists();
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const storedUser = authService.getStoredUser();
+        if (!cancelled) setUser(storedUser);
+      } catch (error) {
+        if (!cancelled) console.error('Error loading user:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+
+      setLoadingAppointments(true);
+      try {
+        const response = await appointmentService.patient.getAppointments();
+        if (!cancelled && response.success) setAppointments(response.appointments || []);
+      } catch (error) {
+        if (!cancelled) console.error('Error loading appointments:', error);
+      } finally {
+        if (!cancelled) setLoadingAppointments(false);
+      }
+
+      try {
+        const response = await appointmentService.getAvailableTherapists();
+        if (!cancelled && response.success) setTherapists(response.therapists || []);
+      } catch (error) {
+        if (!cancelled) console.error('Error loading therapists:', error);
+      }
+    };
+
+    run();
+    return () => { cancelled = true; };
   }, []);
-
-  const loadUser = async () => {
-    try {
-      const storedUser = authService.getStoredUser();
-      setUser(storedUser);
-    } catch (error) {
-      console.error('Error loading user:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAppointments = async () => {
-    setLoadingAppointments(true);
-    try {
-      const response = await appointmentService.patient.getAppointments();
-      if (response.success) {
-        setAppointments(response.appointments || []);
-      }
-    } catch (error) {
-      console.error('Error loading appointments:', error);
-    } finally {
-      setLoadingAppointments(false);
-    }
-  };
-
-  const loadTherapists = async () => {
-    try {
-      const response = await appointmentService.getAvailableTherapists();
-      if (response.success) {
-        setTherapists(response.therapists || []);
-      }
-    } catch (error) {
-      console.error('Error loading therapists:', error);
-    }
-  };
 
   const handleBookAppointment = async () => {
     try {

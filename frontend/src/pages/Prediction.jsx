@@ -12,12 +12,14 @@ function Prediction({ onLogout }) {
   const [predictions, setPredictions] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     // Only fetch predictions for speech therapy
     if (selectedCategory === 'speech') {
       fetchPredictions();
     } else {
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
+    return () => { cancelled = true; };
   }, [selectedCategory]);
 
   const fetchPredictions = async () => {

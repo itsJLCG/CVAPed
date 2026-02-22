@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ToastProvider } from './components/ToastContext';
 import { TherapyCategoryProvider } from './components/TherapyCategoryContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import audioManager from './services/audioManager';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -63,6 +64,9 @@ function App() {
   };
 
   const handleLogout = async () => {
+    // Immediately stop any active Azure/Web Speech TTS or audio playback
+    audioManager.stopAll();
+
     // Clear localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTherapyCategory } from './TherapyCategoryContext';
 import { images } from '../assets/images';
 import './Header.css';
+import audioManager from '../services/audioManager';
 
 function Header({ onLogout }) {
   const navigate = useNavigate();
@@ -10,6 +11,8 @@ function Header({ onLogout }) {
   const { selectedCategory } = useTherapyCategory();
 
   const handleLogout = () => {
+     // Immediately stop any active Azure/Web Speech TTS or audio playback
+    audioManager.stopAll();
     onLogout();
     navigate('/login');
   };

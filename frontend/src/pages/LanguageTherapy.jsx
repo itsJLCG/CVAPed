@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { languageService, languageExerciseService, receptiveExerciseService } from '../services/api';
+import audioManager from '../services/audioManager';
 import './LanguageTherapy.css';
 
 // Language Therapy mode metadata (exercises loaded from database)
@@ -32,7 +33,7 @@ function LanguageTherapy({ onLogout }) {
   useEffect(() => {
     selectCategory('speech');
   }, [selectCategory]);
-  
+
   // State for exercises - both will be loaded from database
   const [expressiveExercises, setExpressiveExercises] = useState([]);
   const [receptiveExercises, setReceptiveExercises] = useState([]);
@@ -54,6 +55,28 @@ function LanguageTherapy({ onLogout }) {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const speechTimeoutRef = useRef(null);
+  // Set to true on unmount so all in-flight async speech chains abort immediately
+  const isCancelledRef = useRef(false);
+
+  // Stop all speech synthesis when this component unmounts (e.g. on logout)
+  useEffect(() => {
+    // Register with audioManager so Header logout can abort this chain immediately
+    const unregister = audioManager.registerAbortCallback('LanguageTherapy', () => {
+      isCancelledRef.current = true;
+      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+      window.speechSynthesis.cancel();
+    });
+    return () => {
+      unregister();
+      isCancelledRef.current = true;
+      if (speechTimeoutRef.current) {
+        clearTimeout(speechTimeoutRef.current);
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   // Load expressive exercises from database when component mounts
   useEffect(() => {
@@ -211,6 +234,11 @@ function LanguageTherapy({ onLogout }) {
   // Text-to-Speech for instructions with visual feedback
   const speakText = (text, repeatCount = 2) => {
     return new Promise((resolve) => {
+      // Abort immediately if the component has been unmounted (e.g. logout)
+      if (isCancelledRef.current) {
+        resolve();
+        return;
+      }
       if ('speechSynthesis' in window) {
         // Cancel any ongoing speech
         window.speechSynthesis.cancel();
@@ -218,6 +246,12 @@ function LanguageTherapy({ onLogout }) {
         let currentRepeat = 0;
         
         const speakOnce = () => {
+          // Guard every re-entry point so queued repeats also abort
+          if (isCancelledRef.current) {
+            setIsSpeaking(false);
+            resolve();
+            return;
+          }
           if (currentRepeat >= repeatCount) {
             setIsSpeaking(false);
             resolve();
@@ -271,6 +305,9 @@ function LanguageTherapy({ onLogout }) {
           target: currentExercise.target
         });
         
+        // Reset cancelled state so auto-play works after any previous stop
+        isCancelledRef.current = false;
+
         // Cancel any ongoing speech first
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
@@ -313,6 +350,8 @@ function LanguageTherapy({ onLogout }) {
 
   // Text-to-Speech for manual play button
   const speakInstruction = (text) => {
+    // Reset cancelled state so replay works after a previous stop
+    isCancelledRef.current = false;
     speakText(text, 1);
   };
 

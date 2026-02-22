@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import WaveSurfer from 'wavesurfer.js';
 import { articulationService, articulationExerciseService } from '../services/api';
+import audioManager from '../services/audioManager';
 import './ArticulationExercise.css';
 
 // Exercise data will be loaded from database
@@ -25,7 +26,22 @@ function ArticulationExercise({ onLogout }) {
   useEffect(() => {
     selectCategory('speech');
   }, [selectCategory]);
-  
+
+  // Stop all speech synthesis when this component unmounts (e.g. on logout)
+  useEffect(() => {
+    // Register with audioManager so Header logout can cancel speech immediately,
+    // before React unmounts this component
+    const unregister = audioManager.registerAbortCallback('ArticulationExercise', () => {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    });
+    return () => {
+      unregister();
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const [currentLevel, setCurrentLevel] = useState(1);
   const [currentItem, setCurrentItem] = useState(0);
   const [currentTrial, setCurrentTrial] = useState(1);
@@ -326,6 +342,9 @@ function ArticulationExercise({ onLogout }) {
 
   const playModelAudio = () => {
     if ('speechSynthesis' in window) {
+      // Always cancel any in-progress speech before starting a new utterance.
+      // No isCancelledRef needed here — playModelAudio is a one-shot synchronous
+      // speak() call, not an async chain, so cancel() alone is sufficient.
       window.speechSynthesis.cancel();
 
       // Get phonetic representation if it exists, otherwise use original

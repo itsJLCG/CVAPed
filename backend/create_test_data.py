@@ -341,10 +341,10 @@ def create_facility_diagnostic(therapist_token, patient_id):
         "receptive_score": 55,
         "expressive_score": 35,
         "gait_scores": {
-            "stability": 42,
-            "symmetry": 50,
-            "regularity": 45,
-            "overall": 46
+            "stability_score": 42,
+            "gait_symmetry": 50,
+            "step_regularity": 45,
+            "overall_gait": 46
         },
         "notes": "Initial facility assessment - Patient shows moderate delays across articulation and language domains. Good progress potential with consistent therapy."
     }

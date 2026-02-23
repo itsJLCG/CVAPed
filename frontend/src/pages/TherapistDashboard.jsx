@@ -1192,6 +1192,12 @@ function TherapistDashboard({ onLogout }) {
   };
 
   const handleEditAppointment = (appointment) => {
+    // Prevent editing cancelled or no-show appointments
+    if (appointment.status === 'cancelled' || appointment.status === 'no-show') {
+      alert('Cannot edit cancelled or no-show appointments. Please view details instead.');
+      return;
+    }
+    
     setEditingAppointment(appointment);
     setNewAppointment({
       patient_id: appointment.patient_id,
@@ -3155,13 +3161,15 @@ function TherapistDashboard({ onLogout }) {
                               >
                                 View
                               </button>
-                              <button 
-                                className="btn-icon-small btn-edit"
-                                onClick={() => handleEditAppointment(appointment)}
-                                title="Edit Appointment"
-                              >
-                                Edit
-                              </button>
+                              {appointment.status !== 'cancelled' && appointment.status !== 'no-show' && (
+                                <button 
+                                  className="btn-icon-small btn-edit"
+                                  onClick={() => handleEditAppointment(appointment)}
+                                  title="Edit Appointment"
+                                >
+                                  Edit
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -3506,12 +3514,14 @@ function TherapistDashboard({ onLogout }) {
                       <button className="btn-secondary" onClick={() => setShowAppointmentDetails(false)}>
                         Close
                       </button>
-                      <button className="btn-primary" onClick={() => {
-                        setShowAppointmentDetails(false);
-                        handleEditAppointment(selectedAppointment);
-                      }}>
-                        Edit Appointment
-                      </button>
+                      {selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'no-show' && (
+                        <button className="btn-primary" onClick={() => {
+                          setShowAppointmentDetails(false);
+                          handleEditAppointment(selectedAppointment);
+                        }}>
+                          Edit Appointment
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

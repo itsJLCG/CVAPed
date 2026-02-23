@@ -8202,6 +8202,18 @@
   border-color: #ef4444;
 }
 
+/* Non-editable appointment rows (cancelled/no-show) */
+.appointment-row.status-cancelled,
+.appointment-row.status-no-show {
+  background: #fef2f2;
+  opacity: 0.85;
+}
+
+.appointment-row.status-cancelled:hover,
+.appointment-row.status-no-show:hover {
+  background: #fee2e2;
+}
+
 /* Appointment Modal */
 .appointment-modal {
   max-width: 700px;

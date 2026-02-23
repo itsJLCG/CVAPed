@@ -901,6 +901,10 @@ function TherapistDashboard({ onLogout }) {
         diagnosticComparisonService.getDiagnostics(userId),
         diagnosticComparisonService.getComparisonHistory(userId)
       ]);
+      console.log('📊 Diagnostic Comparison Response:', comparisonRes);
+      console.log('📊 Facility Scores:', comparisonRes?.facility_scores);
+      console.log('📊 Home Scores:', comparisonRes?.home_scores);
+      console.log('📊 Deltas:', comparisonRes?.deltas);
       setDiagComparisonData(comparisonRes);
       setDiagPatientDiagnostics(diagnosticsRes.diagnostics || []);
       setDiagComparisonHistory(historyRes.history || []);
@@ -3889,8 +3893,10 @@ function TherapistDashboard({ onLogout }) {
                                 return (
                                   <tr key={`art-${sound}`}>
                                     <td className="metric-name" title={`Measures the patient's ability to correctly produce the /${sound.toUpperCase()}/ phoneme in various word positions`}>
-                                      <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
-                                      Articulation /{sound.toUpperCase()}/
+                                      <span className="metric-content">
+                                        <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
+                                        Articulation /{sound.toUpperCase()}/
+                                      </span>
                                     </td>
                                     <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
                                     <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
@@ -3916,10 +3922,12 @@ function TherapistDashboard({ onLogout }) {
                                 const hBand = getScoreBand(hVal);
                                 const alert = getAlertBadge(delta);
                                 return (
-                                  <tr>
+                                  <tr key="fluency">
                                     <td className="metric-name" title="Measures speech smoothness, rate, and rhythm without interruptions">
-                                      <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
-                                      Fluency
+                                      <span className="metric-content">
+                                        <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
+                                        Fluency
+                                      </span>
                                     </td>
                                     <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
                                     <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
@@ -3945,10 +3953,12 @@ function TherapistDashboard({ onLogout }) {
                                 const hBand = getScoreBand(hVal);
                                 const alert = getAlertBadge(delta);
                                 return (
-                                  <tr>
+                                  <tr key="receptive">
                                     <td className="metric-name" title="Measures comprehension of spoken language, following directions, and understanding concepts">
-                                      <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
-                                      Receptive Language
+                                      <span className="metric-content">
+                                        <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
+                                        Receptive Language
+                                      </span>
                                     </td>
                                     <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
                                     <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
@@ -3974,10 +3984,12 @@ function TherapistDashboard({ onLogout }) {
                                 const hBand = getScoreBand(hVal);
                                 const alert = getAlertBadge(delta);
                                 return (
-                                  <tr>
+                                  <tr key="expressive">
                                     <td className="metric-name" title="Measures ability to express thoughts, use vocabulary, and form sentences">
-                                      <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
-                                      Expressive Language
+                                      <span className="metric-content">
+                                        <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
+                                        Expressive Language
+                                      </span>
                                     </td>
                                     <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
                                     <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
@@ -4003,10 +4015,12 @@ function TherapistDashboard({ onLogout }) {
                                 const hBand = getScoreBand(hVal);
                                 const alert = getAlertBadge(delta);
                                 return (
-                                  <tr>
+                                  <tr key="gait">
                                     <td className="metric-name" title="Measures overall walking pattern including stability, symmetry, and step regularity">
-                                      <span className="metric-icon" style={{ backgroundColor: '#4CAF50' }}>🚶</span>
-                                      Gait (Overall)
+                                      <span className="metric-content">
+                                        <span className="metric-icon" style={{ backgroundColor: '#4CAF50' }}>🚶</span>
+                                        Gait (Overall)
+                                      </span>
                                     </td>
                                     <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
                                     <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>

@@ -106,7 +106,6 @@ function Dashboard({ onLogout }) {
   };
 
   const handleLogout = () => {
-    authService.logout();
     toast.info('Logged out successfully. See you soon!');
     onLogout();
   };
@@ -137,9 +136,6 @@ function Dashboard({ onLogout }) {
       <div className="dashboard-content">
         <div className="welcome-section">
           <h2>Welcome back, {user?.firstName}! 👋</h2>
-          <p className="user-type-badge">
-            Role: <span className="badge">{user?.role}</span>
-          </p>
         </div>
 
         <div className="info-cards">
@@ -334,10 +330,6 @@ function Dashboard({ onLogout }) {
             <div className="info-item">
               <span className="info-label">Name:</span>
               <span className="info-value">{user?.firstName} {user?.lastName}</span>
-            </div>
-            <div className="info-item">
-              <span className="info-label">Role:</span>
-              <span className="info-value">{user?.role}</span>
             </div>
             <div className="info-item">
               <span className="info-label">Status:</span>

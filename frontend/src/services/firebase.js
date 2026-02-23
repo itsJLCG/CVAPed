@@ -7,27 +7,14 @@ import {
   signOut 
 } from 'firebase/auth';
 
-/* // Your web app's Firebase configuration
+// Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCHr3gkWCfqiXuawHVN_5TFQRzF-YMU4W8",
-  authDomain: "cvaped-mobile.firebaseapp.com",
-  projectId: "cvaped-mobile",
-  storageBucket: "cvaped-mobile.firebasestorage.app",
-  messagingSenderId: "292803901437",
-  appId: "1:292803901437:web:08a5bbf35081711d178b94",
-  measurementId: "G-W0933XJRD1"
-};
-
- */
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyBrj_RrynkNqkd4y68hJW1SKrGZyHlL2rI",
-  authDomain: "cvaped-fa8b2.firebaseapp.com",
-  projectId: "cvaped-fa8b2",
-  storageBucket: "cvaped-fa8b2.firebasestorage.app",
-  messagingSenderId: "195089617239",
-  appId: "1:195089617239:web:c635a1cf461d0b8fa4ae12"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBrj_RrynkNqkd4y68hJW1SKrGZyHlL2rI",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "cvaped-fa8b2.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "cvaped-fa8b2",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "cvaped-fa8b2.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "195089617239",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:195089617239:web:c635a1cf461d0b8fa4ae12"
 };
 
 // Initialize Firebase

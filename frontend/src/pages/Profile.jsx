@@ -117,10 +117,6 @@ function Profile({ onLogout }) {
             <h1 className="profile-name">{user.firstName} {user.lastName}</h1>
             <p className="profile-email">{user.email}</p>
             <div className="profile-badges">
-              <span className="badge badge-role">
-                <span className="badge-icon">👤</span>
-                {user.role || 'Patient'}
-              </span>
               <span className="badge badge-therapy">
                 <span className="badge-icon">🏥</span>
                 {user.therapyType || 'N/A'}
@@ -225,13 +221,6 @@ function Profile({ onLogout }) {
                     Patient Type
                   </label>
                   <p className="info-value capitalize">{user.patientType || 'Not Set'}</p>
-                </div>
-                <div className="info-item">
-                  <label className="info-label">
-                    <span className="label-icon">🎭</span>
-                    Account Role
-                  </label>
-                  <p className="info-value capitalize">{user.role || 'Patient'}</p>
                 </div>
               </div>
               {isEditing && (

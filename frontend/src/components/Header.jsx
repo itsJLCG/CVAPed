@@ -4,15 +4,20 @@ import { useTherapyCategory } from './TherapyCategoryContext';
 import { images } from '../assets/images';
 import './Header.css';
 import audioManager from '../services/audioManager';
+import { authService } from '../services/api';
 
 function Header({ onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { selectedCategory } = useTherapyCategory();
 
-  const handleLogout = () => {
-     // Immediately stop any active Azure/Web Speech TTS or audio playback
+  const handleLogout = async () => {
     audioManager.stopAll();
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
     onLogout();
     navigate('/login');
   };

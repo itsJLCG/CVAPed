@@ -1754,11 +1754,23 @@ def get_unassigned_appointments(current_user):
         therapy_type = request.args.get('therapy_type')  # articulation, language, fluency, physical
         
         # Build query for pending appointments without therapist
+        # Logic: No therapist assigned AND (status is pending/waiting OR status doesn't exist)
+        # Use case-insensitive regex for status matching
         query = {
-            '$or': [
-                {'therapist_id': None},
-                {'therapist_id': {'$exists': False}},
-                {'status': 'pending'}
+            '$and': [
+                {
+                    '$or': [
+                        {'therapist_id': None},
+                        {'therapist_id': {'$exists': False}}
+                    ]
+                },
+                {
+                    '$or': [
+                        {'status': {'$regex': '^pending$', '$options': 'i'}},
+                        {'status': {'$regex': '^waiting$', '$options': 'i'}},
+                        {'status': {'$exists': False}}
+                    ]
+                }
             ]
         }
         

@@ -47,8 +47,22 @@ if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is not set. Cannot start application.")
 
 app.config['SECRET_KEY'] = SECRET_KEY
-# Enable CORS
-CORS(app, origins=["http://localhost:3000", "https://your-production-frontend.com"])
+# Enable CORS with full configuration
+CORS(
+    app,
+    origins=["http://localhost:3000", "http://localhost:5000", "https://your-production-frontend.com"],
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    expose_headers=["Content-Type", "Authorization"],
+    supports_credentials=True,
+    max_age=86400,  # Cache preflight response for 24 hours
+)
+
+# Print confirmation
+print("✅ CORS initialized for allowed origins")
+print("   - Allowed methods: GET, POST, PUT, DELETE, PATCH, OPTIONS")
+print("   - Allowed headers: Content-Type, Authorization, X-Requested-With, Accept, Origin")
+print("   - Credentials: enabled")
 
 # Rate limiting
 limiter = Limiter(
@@ -58,10 +72,15 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# Print confirmation
-print("✅ CORS initialized for allowed origins")
-
 bcrypt = Bcrypt(app)
+
+# Handle OPTIONS preflight requests before any route processing
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'ok'})
+        response.status_code = 200
+        return response
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGO_URI')

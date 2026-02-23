@@ -7,7 +7,7 @@ import { fluencyExerciseService } from '../services/api';
 import audioManager from '../services/audioManager';
 import './FluencyTherapy.css';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 function FluencyTherapy({ onLogout }) {
   const navigate = useNavigate();

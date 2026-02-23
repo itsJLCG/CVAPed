@@ -4,6 +4,8 @@ import { therapistService, authService, fluencyExerciseService, languageExercise
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
+
 function TherapistDashboard({ onLogout }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -2687,7 +2689,7 @@ function TherapistDashboard({ onLogout }) {
                                       {story.images.slice(0, 3).map((imagePath, idx) => (
                                         <img 
                                           key={idx}
-                                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`}
+                                          src={imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}/${imagePath}`}
                                           alt={`${story.patientName} - Image ${idx + 1}`}
                                           className="story-thumbnail"
                                           title={`Image ${idx + 1} of ${story.images.length}`}
@@ -5233,8 +5235,8 @@ function TherapistDashboard({ onLogout }) {
                     {editingStory.images.map((imagePath, index) => (
                       <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
                         <img 
-                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`} 
-                          alt={`Existing ${index + 1}`} 
+                          src={imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}/${imagePath}`} 
+                          alt={`Existing ${index + 1}`}
                           style={{ width: '100%', height: '120px', objectFit: 'cover' }}
                         />
                         <button

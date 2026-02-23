@@ -6,6 +6,8 @@ import { languageService, languageExerciseService, receptiveExerciseService } fr
 import audioManager from '../services/audioManager';
 import './LanguageTherapy.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 // Language Therapy mode metadata (exercises loaded from database)
 const languageExercises = {
   receptive: {
@@ -538,7 +540,7 @@ function LanguageTherapy({ onLogout }) {
       formData.append('expected_keywords', JSON.stringify(currentExercise.expectedKeywords));
       formData.append('min_words', currentExercise.minWords);
 
-      const response = await fetch('http://localhost:5000/api/language/assess-expressive', {
+      const response = await fetch(`${API_URL}/language/assess-expressive`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

@@ -4,6 +4,8 @@ import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import Header from '../components/Header';
 import './GaitRecording.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 function GaitRecording({ onLogout }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
@@ -63,7 +65,7 @@ function GaitRecording({ onLogout }) {
     // Poll backend every 500ms to check if ESP32 is sending data
     pollingRef.current = setInterval(async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/wearable/data');
+        const response = await fetch(`${API_URL}/wearable/data`);
         const data = await response.json();
         
         if (data && Object.keys(data).length > 0) {
@@ -274,7 +276,7 @@ function GaitRecording({ onLogout }) {
       const token = localStorage.getItem('token');
       console.log('🔄 Sending data to backend for analysis...');
       
-      const response = await fetch('http://localhost:5000/api/hardware/gait/analyze', {
+      const response = await fetch(`${API_URL}/hardware/gait/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

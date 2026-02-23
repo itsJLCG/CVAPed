@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { successStoryService } from '../services/api';
 import './SuccessStoriesSection.css';
 
-const API_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
 function SuccessStoriesSection() {
   const navigate = useNavigate();
@@ -95,7 +95,7 @@ function SuccessStoriesSection() {
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
-    return `${API_URL}/${imagePath}`;
+    return `${API_BASE_URL}/${imagePath}`;
   };
 
   const truncateText = (text, maxLength = 120) => {

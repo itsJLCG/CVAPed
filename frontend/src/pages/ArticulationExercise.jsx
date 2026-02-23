@@ -7,6 +7,8 @@ import { articulationService, articulationExerciseService } from '../services/ap
 import audioManager from '../services/audioManager';
 import './ArticulationExercise.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 // Exercise data will be loaded from database
 // Keeping this for metadata only (colors, names, etc.)
 const soundMetadata = {
@@ -250,7 +252,7 @@ function ArticulationExercise({ onLogout }) {
       formData.append('target', currentTarget);
       formData.append('trial', currentTrial);
 
-      const response = await fetch('http://localhost:5000/api/articulation/record', {
+      const response = await fetch(`${API_URL}/articulation/record`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

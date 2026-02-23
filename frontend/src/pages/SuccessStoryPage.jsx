@@ -4,7 +4,7 @@ import { successStoryService } from '../services/api';
 import { images, hasImage } from '../assets/images';
 import './SuccessStoryPage.css';
 
-const API_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
 function SuccessStoryPage() {
   const { storyId } = useParams();
@@ -133,7 +133,7 @@ function SuccessStoryPage() {
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
-    return `${API_URL}/${imagePath}`;
+    return `${API_BASE_URL}/${imagePath}`;
   };
 
   const formatDate = (dateString) => {

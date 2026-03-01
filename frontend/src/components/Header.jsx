@@ -11,6 +11,9 @@ function Header({ onLogout }) {
   const location = useLocation();
   const { selectedCategory } = useTherapyCategory();
 
+  const storedUser = authService.getStoredUser();
+  const hasDiagnosticProfile = Boolean(storedUser?.diagnosticData?.completedWizard);
+
   const handleLogout = async () => {
     audioManager.stopAll();
     try {
@@ -71,6 +74,14 @@ function Header({ onLogout }) {
                 Prescription
               </button>
             </>
+          )}
+          {hasDiagnosticProfile && (
+            <button
+              onClick={() => navigate('/diagnostic')}
+              className={`nav-btn ${isActive('/diagnostic') ? 'active' : ''}`}
+            >
+              Diagnostic
+            </button>
           )}
           <button 
             onClick={() => navigate('/profile')} 

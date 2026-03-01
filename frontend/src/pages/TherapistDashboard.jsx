@@ -133,6 +133,7 @@ function TherapistDashboard({ onLogout }) {
   const [diagPatientDiagnostics, setDiagPatientDiagnostics] = useState([]);
   const [diagComparisonHistory, setDiagComparisonHistory] = useState([]);
   const [loadingDiagComparison, setLoadingDiagComparison] = useState(false);
+  const [patientSelfReport, setPatientSelfReport] = useState(null);
   const [showDiagModal, setShowDiagModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(null);
   const [diagSearchQuery, setDiagSearchQuery] = useState('');
@@ -142,6 +143,14 @@ function TherapistDashboard({ onLogout }) {
   const [selectedDiagPatient, setSelectedDiagPatient] = useState(null);
   const [selectedDiagnosticId, setSelectedDiagnosticId] = useState(null);
   const [savingDiagnostic, setSavingDiagnostic] = useState(false);
+
+  // Pre-Evaluation tab state
+  const [preEvalPatientList, setPreEvalPatientList] = useState([]);
+  const [preEvalLoading, setPreEvalLoading] = useState(false);
+  const [preEvalTableFilter, setPreEvalTableFilter] = useState('');
+  const [preEvalModalEntry, setPreEvalModalEntry] = useState(null);
+  const [preEvalEntriesPerPage, setPreEvalEntriesPerPage] = useState(10);
+  const [preEvalCurrentPage, setPreEvalCurrentPage] = useState(1);
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [newDiagnostic, setNewDiagnostic] = useState({
     assessment_date: new Date().toISOString().split('T')[0],
@@ -714,6 +723,28 @@ function TherapistDashboard({ onLogout }) {
     return () => { cancelled = true; };
   }, [activeTab]);
 
+  // Auto-load all patients who completed the pre-evaluation wizard
+  useEffect(() => {
+    if (activeTab !== 'pre-evaluation') return;
+    if (preEvalPatientList.length > 0) return; // already loaded
+    let cancelled = false;
+    setPreEvalLoading(true);
+    diagnosticComparisonService.getAllCompletedEvaluations()
+      .then((res) => {
+        if (cancelled) return;
+        const patients = res?.patients ?? [];
+        setPreEvalPatientList(patients.map(p => ({ patient: p, selfReport: p.diagnosticData ?? null })));
+        setPreEvalCurrentPage(1);
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('Pre-eval fetch error:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setPreEvalLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
   useEffect(() => {
     let cancelled = false;
     // Load therapy data when switching tabs
@@ -895,11 +926,13 @@ function TherapistDashboard({ onLogout }) {
 
   const loadDiagComparison = async (userId, diagnosticId = null) => {
     setLoadingDiagComparison(true);
+    setPatientSelfReport(null);
     try {
-      const [comparisonRes, diagnosticsRes, historyRes] = await Promise.all([
+      const [comparisonRes, diagnosticsRes, historyRes, selfReportRes] = await Promise.all([
         diagnosticComparisonService.getComparison(userId, diagnosticId),
         diagnosticComparisonService.getDiagnostics(userId),
-        diagnosticComparisonService.getComparisonHistory(userId)
+        diagnosticComparisonService.getComparisonHistory(userId),
+        diagnosticComparisonService.getPatientSelfReport(userId).catch(() => null)
       ]);
       console.log('📊 Diagnostic Comparison Response:', comparisonRes);
       console.log('📊 Facility Scores:', comparisonRes?.facility_scores);
@@ -908,11 +941,13 @@ function TherapistDashboard({ onLogout }) {
       setDiagComparisonData(comparisonRes);
       setDiagPatientDiagnostics(diagnosticsRes.diagnostics || []);
       setDiagComparisonHistory(historyRes.history || []);
+      setPatientSelfReport(selfReportRes?.selfReport ?? null);
     } catch (error) {
       console.error('Error loading diagnostic comparison:', error);
       setDiagComparisonData(null);
       setDiagPatientDiagnostics([]);
       setDiagComparisonHistory([]);
+      setPatientSelfReport(null);
     } finally {
       setLoadingDiagComparison(false);
     }
@@ -1562,6 +1597,11 @@ function TherapistDashboard({ onLogout }) {
             <span className="nav-icon">🔬</span>
             {!sidebarCollapsed && <span className="nav-label">Diagnostic Comparison</span>}
           </button>
+
+          <button className={`nav-item ${activeTab === 'pre-evaluation' ? 'active' : ''}`} onClick={() => { setActiveTab('pre-evaluation'); setTherapyData([]); }}>
+            <span className="nav-icon">🩺</span>
+            {!sidebarCollapsed && <span className="nav-label">Pre-Evaluation</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -1580,7 +1620,7 @@ function TherapistDashboard({ onLogout }) {
       <main className="admin-main">
         <header className="admin-header">
           <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : activeTab === 'diagnostics' ? 'Diagnostic Comparison' : 'Therapist'}</h1>
+            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : activeTab === 'diagnostics' ? 'Diagnostic Comparison' : activeTab === 'pre-evaluation' ? 'Pre-Evaluation / Initial Diagnostic' : 'Therapist'}</h1>
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
@@ -3785,6 +3825,166 @@ function TherapistDashboard({ onLogout }) {
                     )}
                   </div>
 
+                  {/* Patient Self-Report Panel */}
+                  {patientSelfReport?.completedWizard && (
+                    <div className="diag-self-report-panel">
+                      <div className="diag-self-report-header">
+                        <span className="diag-self-report-icon">📝</span>
+                        <h4 className="diag-self-report-title">Patient Self-Report (Intake Wizard)</h4>
+                        <span className="diag-self-report-badge">Self-Reported</span>
+                      </div>
+                      <div className="diag-self-report-grid">
+                        {patientSelfReport.therapyFocus && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Therapy Focus</span>
+                            <span className="diag-sr-value">{patientSelfReport.therapyFocus === 'both' ? 'Speech + Physical' : patientSelfReport.therapyFocus.charAt(0).toUpperCase() + patientSelfReport.therapyFocus.slice(1)}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.strokeTimeframe && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Stroke Timeframe</span>
+                            <span className="diag-sr-value">{{
+                              less_than_1_month: '< 1 Month',
+                              '1_to_6_months': '1–6 Months',
+                              '6_to_12_months': '6–12 Months',
+                              over_1_year: 'Over 1 Year',
+                            }[patientSelfReport.strokeTimeframe] ?? patientSelfReport.strokeTimeframe}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.affectedSide && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Affected Side</span>
+                            <span className="diag-sr-value">{patientSelfReport.affectedSide.charAt(0).toUpperCase() + patientSelfReport.affectedSide.slice(1).replace('_', ' ')}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.childAgeGroup && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Age Group</span>
+                            <span className="diag-sr-value">{{
+                              toddler: '1–2 Years (Toddler)',
+                              preschool: '3–4 Years (Preschool)',
+                              school_age: '5–8 Years (School-Age)',
+                              older: '9+ Years',
+                            }[patientSelfReport.childAgeGroup] ?? patientSelfReport.childAgeGroup}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.childCommunicationMode && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Communication Mode</span>
+                            <span className="diag-sr-value">{{
+                              preverbal: 'Pre-verbal / Non-verbal',
+                              single_words: 'Single Words',
+                              short_phrases: 'Short Phrases',
+                              sentences: 'Full Sentences',
+                            }[patientSelfReport.childCommunicationMode] ?? patientSelfReport.childCommunicationMode}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.speechIntelligibility && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Intelligibility</span>
+                            <span className="diag-sr-value">{{
+                              easily: 'Easily Understood',
+                              mostly_family: 'Mostly by Family',
+                              difficult: 'Difficult to Understand',
+                              not_speaking: 'Not Yet Speaking',
+                            }[patientSelfReport.speechIntelligibility] ?? patientSelfReport.speechIntelligibility}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.mainSpeechConcern && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Speech Concern</span>
+                            <span className="diag-sr-value">{{
+                              articulation: 'Pronunciation',
+                              language: 'Language',
+                              fluency: 'Fluency',
+                              multiple: 'Multiple Areas',
+                            }[patientSelfReport.mainSpeechConcern] ?? patientSelfReport.mainSpeechConcern}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.followsInstructions && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Follows Instructions</span>
+                            <span className="diag-sr-value">{{
+                              yes_consistently: 'Yes, Consistently',
+                              sometimes: 'Sometimes',
+                              rarely: 'Rarely',
+                              no: 'No / Not Yet',
+                            }[patientSelfReport.followsInstructions] ?? patientSelfReport.followsInstructions}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.respondsToName && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Responds to Name</span>
+                            <span className="diag-sr-value">{{
+                              always: 'Always',
+                              usually: 'Usually',
+                              inconsistently: 'Inconsistently',
+                              rarely_no: 'Rarely / No',
+                            }[patientSelfReport.respondsToName] ?? patientSelfReport.respondsToName}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.priorSpeechEval && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Prior Speech Eval</span>
+                            <span className="diag-sr-value">{{
+                              formal_eval: 'Formal Evaluation',
+                              informal: 'Informal Screening',
+                              no: 'None',
+                            }[patientSelfReport.priorSpeechEval] ?? patientSelfReport.priorSpeechEval}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.mobilityStatus && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Mobility</span>
+                            <span className="diag-sr-value">{{
+                              independent: 'Walks Independently',
+                              assisted: 'With Assistance',
+                              wheelchair: 'Wheelchair User',
+                              bed_bound: 'Bed-bound',
+                            }[patientSelfReport.mobilityStatus] ?? patientSelfReport.mobilityStatus}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.armMotorFunction && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Arm Motor</span>
+                            <span className="diag-sr-value">{{
+                              normal: 'Normal',
+                              mild_weakness: 'Mild Weakness',
+                              moderate_weakness: 'Moderate Weakness',
+                              severe_weakness: 'Severe / No Movement',
+                            }[patientSelfReport.armMotorFunction] ?? patientSelfReport.armMotorFunction}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.legMotorFunction && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Leg Motor</span>
+                            <span className="diag-sr-value">{{
+                              normal: 'Normal',
+                              mild_weakness: 'Mild Weakness',
+                              moderate_weakness: 'Moderate Weakness',
+                              severe_weakness: 'Severe / No Movement',
+                            }[patientSelfReport.legMotorFunction] ?? patientSelfReport.legMotorFunction}</span>
+                          </div>
+                        )}
+
+                        {patientSelfReport.priorPhysicalTherapy && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Prior Physical Therapy</span>
+                            <span className="diag-sr-value">{patientSelfReport.priorPhysicalTherapy === 'facility' ? 'At a Facility' : patientSelfReport.priorPhysicalTherapy === 'self_guided' ? 'Self-Guided' : 'No'}</span>
+                          </div>
+                        )}
+                      </div>
+                      {patientSelfReport.recommendedFocus && (
+                        <div className="diag-sr-rec">
+                          <span className="diag-sr-rec-label">Patient-Reported Recommendation:</span>
+                          <span className="diag-sr-rec-therapy">{patientSelfReport.recommendedTherapy === 'speech' ? 'Speech Therapy' : patientSelfReport.recommendedTherapy === 'physical' ? 'Physical Therapy' : 'Therapy'}</span>
+                          <span className="diag-sr-rec-level">{patientSelfReport.recommendedLevelName ?? (patientSelfReport.recommendedLevel?.charAt(0).toUpperCase() + patientSelfReport.recommendedLevel?.slice(1) + ' Level')}</span>
+                          <span className="diag-sr-rec-focus">{patientSelfReport.recommendedFocus}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {!diagComparisonData.has_facility_data ? (
                     <div className="no-data-large">
                       <div className="no-data-icon">📋</div>
@@ -4320,6 +4520,295 @@ function TherapistDashboard({ onLogout }) {
               )}
             </div>
           )}
+
+          {activeTab === 'pre-evaluation' && (
+            <div className="preval-therapist-section">
+              <div className="preval-center-wrapper">
+
+                {/* Header */}
+                <div className="preval-dt-header">
+                  <div>
+                    <h2 className="preval-dt-title">🩺 Pre-Evaluation / Initial Diagnostic</h2>
+                    <p className="preval-dt-subtitle">Patients who completed the self-reported intake wizard</p>
+                  </div>
+                  <div className="preval-dt-count">
+                    <span className="preval-count-badge">{preEvalPatientList.length}</span>
+                    <span>patients</span>
+                  </div>
+                </div>
+
+                {/* Controls row */}
+                <div className="preval-controls-row">
+                  <input
+                    type="text"
+                    className="preval-filter-input"
+                    placeholder="🔍 Filter by name or email..."
+                    value={preEvalTableFilter}
+                    onChange={(e) => { setPreEvalTableFilter(e.target.value); setPreEvalCurrentPage(1); }}
+                  />
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select
+                        className="entries-select"
+                        value={preEvalEntriesPerPage}
+                        onChange={(e) => { setPreEvalEntriesPerPage(Number(e.target.value)); setPreEvalCurrentPage(1); }}
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+
+                {/* Datatable */}
+                {preEvalLoading ? (
+                  <div className="no-data-large">
+                    <div className="no-data-icon">⏳</div>
+                    <p className="no-data-text">Loading patients...</p>
+                  </div>
+                ) : preEvalPatientList.length === 0 ? (
+                  <div className="no-data-large">
+                    <div className="no-data-icon">🩺</div>
+                    <p className="no-data-text">No completed evaluations yet</p>
+                    <p className="no-data-hint">Patients who complete the self-reported intake wizard will appear here automatically</p>
+                  </div>
+                ) : (() => {
+                  const filtered = preEvalPatientList.filter(entry =>
+                    !preEvalTableFilter ||
+                    `${entry.patient.firstName} ${entry.patient.lastName}`.toLowerCase().includes(preEvalTableFilter.toLowerCase()) ||
+                    entry.patient.email?.toLowerCase().includes(preEvalTableFilter.toLowerCase())
+                  );
+                  const totalPages = Math.max(1, Math.ceil(filtered.length / preEvalEntriesPerPage));
+                  const safePage = Math.min(preEvalCurrentPage, totalPages);
+                  const pageEntries = filtered.slice((safePage - 1) * preEvalEntriesPerPage, safePage * preEvalEntriesPerPage);
+
+                  return (
+                    <>
+                      <div className="datatable-container">
+                        <table className="logs-table preval-table">
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>Patient</th>
+                              <th>Email</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pageEntries.map((entry, idx) => {
+                              const { patient } = entry;
+                              const rowNum = (safePage - 1) * preEvalEntriesPerPage + idx + 1;
+                              const initials = `${patient.firstName?.[0] ?? ''}${patient.lastName?.[0] ?? ''}`.toUpperCase();
+                              return (
+                                <tr key={patient._id || patient.id} className="preval-row">
+                                  <td className="preval-num">{rowNum}</td>
+                                  <td>
+                                    <div className="patient-cell">
+                                      <div className="patient-avatar-small">{initials}</div>
+                                      <span className="patient-name-text">{patient.firstName} {patient.lastName}</span>
+                                    </div>
+                                  </td>
+                                  <td><span className="email-text">{patient.email}</span></td>
+                                  <td>
+                                    <button
+                                      className="preval-view-btn"
+                                      onClick={() => setPreEvalModalEntry(entry)}
+                                    >
+                                      👁️ View
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination footer */}
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {Math.min((safePage - 1) * preEvalEntriesPerPage + 1, filtered.length)}–{Math.min(safePage * preEvalEntriesPerPage, filtered.length)} of {filtered.length} patients
+                        </span>
+                        <div className="pagination-buttons">
+                          <button className="pagination-btn" disabled={safePage === 1} onClick={() => setPreEvalCurrentPage(1)}>«</button>
+                          <button className="pagination-btn" disabled={safePage === 1} onClick={() => setPreEvalCurrentPage(p => p - 1)}>‹</button>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                            .reduce((acc, p, i, arr) => {
+                              if (i > 0 && p - arr[i - 1] > 1) acc.push('...');
+                              acc.push(p);
+                              return acc;
+                            }, [])
+                            .map((p, i) =>
+                              p === '...' ? (
+                                <span key={`ellipsis-${i}`} className="pagination-btn" style={{ cursor: 'default', border: 'none' }}>…</span>
+                              ) : (
+                                <button key={p} className={`pagination-btn${p === safePage ? ' active' : ''}`} onClick={() => setPreEvalCurrentPage(p)}>{p}</button>
+                              )
+                            )
+                          }
+                          <button className="pagination-btn" disabled={safePage === totalPages} onClick={() => setPreEvalCurrentPage(p => p + 1)}>›</button>
+                          <button className="pagination-btn" disabled={safePage === totalPages} onClick={() => setPreEvalCurrentPage(totalPages)}>»</button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+              </div>
+            </div>
+          )}
+
+          {/* Pre-Evaluation Self-Report Modal */}
+          {preEvalModalEntry && (() => {
+            const { patient, selfReport: r } = preEvalModalEntry;
+            const modalInitials = `${patient.firstName?.[0] ?? ''}${patient.lastName?.[0] ?? ''}`.toUpperCase();
+            const focusLabel = { speech: 'Speech Therapy', physical: 'Physical Therapy', both: 'Speech + Physical' };
+
+            const physicalFields = [
+              r?.strokeTimeframe && { icon: '🕐', label: 'Stroke Timeframe', value: { less_than_1_month: '< 1 Month', '1_to_6_months': '1–6 Months', '6_to_12_months': '6–12 Months', over_1_year: 'Over 1 Year' }[r.strokeTimeframe] ?? r.strokeTimeframe },
+              r?.affectedSide && { icon: '🧠', label: 'Affected Side', value: { left: 'Left Side', right: 'Right Side', both: 'Both Sides', unknown: 'Not Sure' }[r.affectedSide] ?? r.affectedSide },
+              r?.mobilityStatus && { icon: '🚶', label: 'Mobility', value: { independent: 'Walks Independently', assisted: 'With Assistance', wheelchair: 'Wheelchair User', bed_bound: 'Bed-bound' }[r.mobilityStatus] ?? r.mobilityStatus },
+              r?.balanceIssues != null && { icon: '⚖️', label: 'Balance Issues', value: r.balanceIssues ? 'Yes' : 'No' },
+              r?.armMotorFunction && { icon: '💪', label: 'Arm Motor', value: { normal: 'Normal', mild_weakness: 'Mild Weakness', moderate_weakness: 'Moderate Weakness', severe_weakness: 'Severe / No Movement' }[r.armMotorFunction] ?? r.armMotorFunction },
+              r?.legMotorFunction && { icon: '🦵', label: 'Leg Motor', value: { normal: 'Normal', mild_weakness: 'Mild Weakness', moderate_weakness: 'Moderate Weakness', severe_weakness: 'Severe / No Movement' }[r.legMotorFunction] ?? r.legMotorFunction },
+              r?.spasticity != null && { icon: '⚡', label: 'Spasticity', value: r.spasticity ? 'Present' : 'None' },
+              r?.priorPhysicalTherapy && { icon: '📋', label: 'Prior Physical Therapy', value: r.priorPhysicalTherapy === 'facility' ? 'At a Facility' : r.priorPhysicalTherapy === 'self_guided' ? 'Self-Guided' : 'No' },
+            ].filter(Boolean);
+
+            const speechFields = [
+              r?.childAgeGroup && { icon: '🎂', label: 'Age Group', value: { toddler: '1–2 Years (Toddler)', preschool: '3–4 Years (Preschool)', school_age: '5–8 Years (School-Age)', older: '9+ Years' }[r.childAgeGroup] ?? r.childAgeGroup },
+              r?.childCommunicationMode && { icon: '💬', label: 'Communication Mode', value: { preverbal: 'Pre-verbal / Non-verbal', single_words: 'Single Words', short_phrases: 'Short Phrases', sentences: 'Full Sentences' }[r.childCommunicationMode] ?? r.childCommunicationMode },
+              r?.speechIntelligibility && { icon: '🗣️', label: 'Speech Intelligibility', value: { easily: 'Easily Understood', mostly_family: 'Mostly by Family', difficult: 'Difficult to Understand', not_speaking: 'Not Yet Speaking' }[r.speechIntelligibility] ?? r.speechIntelligibility },
+              r?.mainSpeechConcern && { icon: '🔍', label: 'Main Concern', value: { articulation: 'Pronunciation', language: 'Language', fluency: 'Fluency', multiple: 'Multiple Areas' }[r.mainSpeechConcern] ?? r.mainSpeechConcern },
+              r?.followsInstructions && { icon: '📝', label: 'Follows Instructions', value: { yes_consistently: 'Yes, Consistently', sometimes: 'Sometimes', rarely: 'Rarely', no: 'No / Not Yet' }[r.followsInstructions] ?? r.followsInstructions },
+              r?.respondsToName && { icon: '👂', label: 'Responds to Name', value: { always: 'Always', usually: 'Usually', inconsistently: 'Inconsistently', rarely_no: 'Rarely / No' }[r.respondsToName] ?? r.respondsToName },
+              r?.priorSpeechEval && { icon: '📊', label: 'Prior Speech Eval', value: { formal_eval: 'Formal Evaluation', informal: 'Informal Screening', no: 'None' }[r.priorSpeechEval] ?? r.priorSpeechEval },
+              r?.primarySpeechGoal && { icon: '🎯', label: 'Primary Goal', value: r.primarySpeechGoal },
+            ].filter(Boolean);
+
+            const hasPhysical = (r?.therapyFocus === 'physical' || r?.therapyFocus === 'both') && physicalFields.length > 0;
+            const hasSpeech = (r?.therapyFocus === 'speech' || r?.therapyFocus === 'both') && speechFields.length > 0;
+
+            return (
+              <div className="modal-overlay" onClick={() => setPreEvalModalEntry(null)}>
+                <div className="modal-content preval-modal" onClick={(e) => e.stopPropagation()}>
+
+                  {/* Hero Header */}
+                  <div className="preval-modal-hero">
+                    <div className={`preval-modal-avatar-lg preval-avatar-${r?.therapyFocus ?? 'default'}`}>{modalInitials}</div>
+                    <div className="preval-modal-hero-info">
+                      <h2 className="preval-modal-hero-name">{patient.firstName} {patient.lastName}</h2>
+                      <p className="preval-modal-hero-email">{patient.email}</p>
+                      <div className="preval-modal-hero-badges">
+                        <span className="preval-hero-badge preval-hero-badge--self">🩺 Self-Reported</span>
+                        {r?.therapyFocus && <span className={`preval-hero-badge preval-hero-badge--focus preval-focus-${r.therapyFocus}`}>{focusLabel[r.therapyFocus] ?? r.therapyFocus}</span>}
+                        {r?.recommendedLevel && <span className={`preval-hero-badge preval-hero-badge--level preval-level-${r.recommendedLevel}`}>{r.recommendedLevel.charAt(0).toUpperCase() + r.recommendedLevel.slice(1)} Level</span>}
+                      </div>
+                    </div>
+                    <button className="modal-close preval-modal-close-btn" onClick={() => setPreEvalModalEntry(null)}>×</button>
+                  </div>
+
+                  <div className="modal-body preval-modal-body">
+                    {r?.completedWizard ? (
+                      <>
+                        {/* General Section */}
+                        <div className="preval-section">
+                          <div className="preval-section-header preval-section-general">
+                            <span>📋</span>
+                            <h3>General Information</h3>
+                          </div>
+                          <div className="preval-section-grid">
+                            {r.hasInitialDiagnostic != null && (
+                              <div className="preval-field-card">
+                                <span className="preval-field-icon">🏥</span>
+                                <span className="preval-field-label">Facility Visit</span>
+                                <span className="preval-field-value">{r.hasInitialDiagnostic ? 'Yes — Visited Facility' : 'No — Not Yet'}</span>
+                              </div>
+                            )}
+                            {r.therapyFocus && (
+                              <div className="preval-field-card">
+                                <span className="preval-field-icon">🎯</span>
+                                <span className="preval-field-label">Therapy Focus</span>
+                                <span className="preval-field-value">{focusLabel[r.therapyFocus] ?? r.therapyFocus}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Physical Section */}
+                        {hasPhysical && (
+                          <div className="preval-section">
+                            <div className="preval-section-header preval-section-physical">
+                              <span>🏃</span>
+                              <h3>Physical Therapy Assessment</h3>
+                            </div>
+                            <div className="preval-section-grid">
+                              {physicalFields.map((f, i) => (
+                                <div key={i} className="preval-field-card">
+                                  <span className="preval-field-icon">{f.icon}</span>
+                                  <span className="preval-field-label">{f.label}</span>
+                                  <span className="preval-field-value">{f.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Speech Section */}
+                        {hasSpeech && (
+                          <div className="preval-section">
+                            <div className="preval-section-header preval-section-speech">
+                              <span>🗣️</span>
+                              <h3>Speech Therapy Assessment</h3>
+                            </div>
+                            <div className="preval-section-grid">
+                              {speechFields.map((f, i) => (
+                                <div key={i} className="preval-field-card">
+                                  <span className="preval-field-icon">{f.icon}</span>
+                                  <span className="preval-field-label">{f.label}</span>
+                                  <span className="preval-field-value">{f.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Recommendation Banner */}
+                        {r.recommendedFocus && (
+                          <div className={`preval-rec-banner preval-rec-banner--${r.therapyFocus ?? 'default'}`}>
+                            <div className="preval-rec-banner-icon">⭐</div>
+                            <div className="preval-rec-banner-body">
+                              <span className="preval-rec-banner-title">Recommended Starting Point</span>
+                              <div className="preval-rec-banner-tags">
+                                <span className="preval-rec-tag preval-rec-tag--therapy">{ { speech: 'Speech Therapy', physical: 'Physical Therapy', both: 'Both Therapies' }[r.recommendedTherapy] ?? 'Therapy' }</span>
+                                {r.recommendedLevel && <span className="preval-rec-tag preval-rec-tag--level">{r.recommendedLevel.charAt(0).toUpperCase() + r.recommendedLevel.slice(1)} Level</span>}
+                                {r.recommendedLevelName && <span className="preval-rec-tag preval-rec-tag--sublevel">{r.recommendedLevelName}</span>}
+                              </div>
+                              <span className="preval-rec-banner-focus">{r.recommendedFocus}</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="no-data-large" style={{ padding: '3rem 1rem' }}>
+                        <div className="no-data-icon">📋</div>
+                        <p className="no-data-text">No self-diagnostic data found</p>
+                        <p className="no-data-hint">This patient has not yet completed the initial self-assessment wizard</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="modal-footer" style={{ justifyContent: 'center' }}>
+                    <button className="secondary-btn" onClick={() => setPreEvalModalEntry(null)}>Close</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
         </div>
       </main>

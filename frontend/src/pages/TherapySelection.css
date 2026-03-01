@@ -116,7 +116,18 @@
   text-align: center;
   font-size: 1.2rem;
   color: var(--color-text-light);
-  margin-bottom: -20px;
+  margin-bottom: 24px;
+}
+
+/* Diagnostic profile card spacing inside therapy page */
+.therapy-container .dpc-card {
+  max-width: 720px;
+  margin: 0 auto 32px;
+}
+
+.therapy-container .dpc-compact {
+  max-width: 720px;
+  margin: 0 auto 32px;
 }
 
 /* Therapy Options Container */

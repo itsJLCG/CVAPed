@@ -220,3 +220,884 @@
     padding: 14px;
   }
 }
+
+/* ── Wizard Mode Overrides ─────────────────────────────────────── */
+.diagnostic-modal-content.wizard-mode {
+  max-width: 680px;
+  width: 96%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+.wizard-header {
+  padding: 20px 28px 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.wizard-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.wizard-header-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wizard-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.wizard-step-sublabel {
+  font-size: 0.75rem;
+  color: #7b91a8;
+  font-weight: 500;
+}
+
+/* ── Step Progress Bar ─────────────────────────────────────────── */
+.wizard-step-bar {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.wizard-step-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.wizard-step-node-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #9ca3af;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+}
+
+.wizard-step-node.active .wizard-step-node-circle {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+}
+
+.wizard-step-node.completed .wizard-step-node-circle {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.wizard-step-node-label {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: #9ca3af;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.wizard-step-node.active .wizard-step-node-label {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.wizard-step-node.completed .wizard-step-node-label {
+  color: #16a34a;
+}
+
+.wizard-step-connector {
+  flex: 1;
+  height: 2px;
+  background: #e5e7eb;
+  margin: 14px 4px 0;
+  transition: background 0.3s;
+}
+
+.wizard-step-connector.completed {
+  background: #16a34a;
+}
+
+/* ── Body ──────────────────────────────────────────────────────── */
+.wizard-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 28px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #d1dce6 transparent;
+}
+
+/* ── Validation Banner ─────────────────────────────────────────── */
+.wizard-validation-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: #dc2626;
+  font-weight: 500;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+/* ── Step Content ──────────────────────────────────────────────── */
+.wizard-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wizard-step-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+.wizard-step-icon {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.wizard-step-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.wizard-step-description {
+  margin: 0;
+  color: #4a6282;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  max-width: 480px;
+}
+
+/* ── Field Groups ──────────────────────────────────────────────── */
+.wizard-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wizard-field-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wizard-required-mark {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.wizard-field-error {
+  font-size: 0.75rem;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.wizard-field-group--error .wizard-field-label {
+  color: #dc2626;
+}
+
+.wizard-field-group--error .wizard-choices {
+  border: 1.5px solid #fca5a5;
+  border-radius: 12px;
+  padding: 6px;
+  background: #fff5f5;
+}
+
+/* ── Choice Layouts ────────────────────────────────────────────── */
+.wizard-choices {
+  display: flex;
+  gap: 8px;
+}
+
+.wizard-choices-col {
+  flex-direction: column;
+}
+
+.wizard-choices-col-sm {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-choices-grid {
+  flex-wrap: wrap;
+}
+
+.wizard-choices-grid .wizard-choice-card {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 110px;
+}
+
+/* ── Choice Card ───────────────────────────────────────────────── */
+.wizard-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 14px;
+  border: 2px solid #d1dce6;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+  font-family: inherit;
+}
+
+.wizard-choice-card:hover {
+  border-color: #2563eb;
+  background: #f0f5ff;
+}
+
+.wizard-choice-card.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.wizard-choice-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.wizard-choice-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1e3a5f;
+  line-height: 1.3;
+}
+
+.wizard-choice-description {
+  font-size: 0.74rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+.wizard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-footer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.btn-wizard-back {
+  background: transparent;
+  border: 2px solid #d1dce6;
+  color: #4a6282;
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  border-radius: 8px;
+}
+
+.btn-wizard-back:hover:not(:disabled) {
+  border-color: #7b91a8;
+  background: #f4f7fb;
+}
+
+.btn-wizard-skip {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-wizard-skip:hover:not(:disabled) {
+  color: #4a6282;
+  background: #f4f7fb;
+}
+
+/* ── Summary Step ──────────────────────────────────────────────── */
+.wizard-summary {
+  gap: 14px;
+}
+
+.wizard-summary-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wizard-summary-check {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.wizard-summary-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.wizard-summary-header p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #7b91a8;
+}
+
+.wizard-summary-section {
+  background: #f8fafc;
+  border: 1px solid #e2eaf2;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.wizard-summary-section-title {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4a6282;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.wizard-summary-items {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.wizard-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  gap: 8px;
+}
+
+.wizard-summary-item-label {
+  color: #7b91a8;
+  flex-shrink: 0;
+}
+
+.wizard-summary-item-value {
+  font-weight: 600;
+  color: #1e3a5f;
+  text-align: right;
+}
+
+/* ── Recommendation Badge ──────────────────────────────────────── */
+.wizard-recommendation-section {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.wizard-rec-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.wizard-rec-therapy-badge,
+.wizard-rec-level-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.wizard-rec-therapy-badge {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.wizard-rec-level-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.wizard-rec-focus-text {
+  font-size: 0.82rem;
+  color: #1e3a5f;
+  text-align: center;
+}
+
+.wizard-rec-focus-text strong {
+  color: #2563eb;
+}
+
+/* ── No Diagnostic Note ────────────────────────────────────────── */
+.wizard-no-diagnostic-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.wizard-no-diagnostic-note p {
+  margin: 0;
+}
+
+.wizard-no-diagnostic-note span {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 520px) {
+  .diagnostic-modal-content.wizard-mode {
+    width: 98%;
+  }
+
+  .wizard-header {
+    padding: 16px 18px 14px;
+  }
+
+  .wizard-body {
+    padding: 14px 18px 10px;
+  }
+
+  .diagnostic-modal-footer.wizard-footer {
+    padding: 14px 18px;
+  }
+
+  .wizard-step-node-label {
+    display: none;
+  }
+
+  .wizard-step-connector {
+    margin: 14px 2px 0;
+  }
+
+  .wizard-choices-grid .wizard-choice-card {
+    flex: 1 1 100%;
+  }
+}
+
+.wizard-header-info h2 {
+  margin: 0 0 2px;
+  font-size: 1.1rem;
+}
+
+.wizard-step-sublabel {
+  font-size: 0.78rem;
+  color: #7b91a8;
+  font-weight: 500;
+}
+
+.wizard-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wizard-steps-indicator {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.wizard-step-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d1dce6;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.wizard-step-dot.active {
+  background: #2563eb;
+  transform: scale(1.25);
+}
+
+.wizard-step-dot.completed {
+  background: #16a34a;
+}
+
+/* ── Body scroll ───────────────────────────────────────────────── */
+.wizard-body {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 8px 0 4px;
+  scrollbar-width: thin;
+}
+
+/* ── Step Content ──────────────────────────────────────────────── */
+.wizard-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wizard-step-icon {
+  font-size: 2rem;
+  text-align: center;
+}
+
+.wizard-step-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  text-align: center;
+}
+
+.wizard-step-description {
+  margin: 0;
+  color: #4a6282;
+  font-size: 0.9rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.wizard-step-hint {
+  margin: -8px 0 0;
+  color: #7b91a8;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* ── Field Groups ──────────────────────────────────────────────── */
+.wizard-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wizard-field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1e3a5f;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ── Choice Layouts ────────────────────────────────────────────── */
+.wizard-choices {
+  display: flex;
+  gap: 8px;
+}
+
+.wizard-choices-col {
+  flex-direction: column;
+}
+
+.wizard-choices-col-sm {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-choices-grid {
+  flex-wrap: wrap;
+}
+
+.wizard-choices-grid .wizard-choice-card {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 110px;
+}
+
+/* ── Choice Card ───────────────────────────────────────────────── */
+.wizard-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 14px;
+  border: 2px solid #d1dce6;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+  font-family: inherit;
+}
+
+.wizard-choice-card:hover {
+  border-color: #2563eb;
+  background: #f0f5ff;
+}
+
+.wizard-choice-card.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.wizard-choice-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.wizard-choice-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1e3a5f;
+  line-height: 1.3;
+}
+
+.wizard-choice-description {
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+.wizard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-footer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.btn-wizard-back {
+  background: transparent;
+  border: 2px solid #d1dce6;
+  color: #4a6282;
+  padding: 9px 18px;
+  font-size: 0.88rem;
+}
+
+.btn-wizard-back:hover:not(:disabled) {
+  border-color: #7b91a8;
+  background: #f4f7fb;
+}
+
+.btn-wizard-skip {
+  background: transparent;
+  border: none;
+  color: #7b91a8;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-wizard-skip:hover:not(:disabled) {
+  color: #4a6282;
+  background: #f4f7fb;
+}
+
+/* ── Summary Step ──────────────────────────────────────────────── */
+.wizard-summary {
+  gap: 14px;
+}
+
+.wizard-summary-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wizard-summary-check {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.wizard-summary-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.wizard-summary-header p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #7b91a8;
+}
+
+.wizard-summary-section {
+  background: #f8fafc;
+  border: 1px solid #e2eaf2;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.wizard-summary-section-title {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #4a6282;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.wizard-summary-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.83rem;
+}
+
+.wizard-summary-item-label {
+  color: #7b91a8;
+}
+
+.wizard-summary-item-value {
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+/* ── Recommendation Badge ──────────────────────────────────────── */
+.wizard-recommendation-section {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  text-align: center;
+}
+
+.wizard-rec-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  justify-content: center;
+}
+
+.wizard-rec-therapy-badge,
+.wizard-rec-level-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.wizard-rec-therapy-badge {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.wizard-rec-level-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.wizard-rec-focus-text {
+  font-size: 0.83rem;
+  color: #1e3a5f;
+  text-align: center;
+}
+
+.wizard-rec-focus-text strong {
+  color: #2563eb;
+}
+
+/* ── No Diagnostic Note ────────────────────────────────────────── */
+.wizard-no-diagnostic-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.wizard-no-diagnostic-note p {
+  margin: 0;
+}
+
+.wizard-no-diagnostic-note span {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 520px) {
+  .diagnostic-modal-content.wizard-mode {
+    width: 98%;
+    max-height: 92vh;
+  }
+
+  .wizard-body {
+    max-height: 52vh;
+  }
+
+  .wizard-choices-grid .wizard-choice-card {
+    flex: 1 1 100%;
+  }
+
+  .wizard-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

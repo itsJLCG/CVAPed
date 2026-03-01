@@ -348,7 +348,10 @@ def login():
                 'firstName': user['firstName'],
                 'lastName': user['lastName'],
                 'role': user.get('role', 'user'),
-                'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
+                'therapyType': user.get('therapyType'),
+                'patientType': user.get('patientType'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                'diagnosticData': user.get('diagnosticData')
             }
         }), 200
         
@@ -422,7 +425,8 @@ def firebase_auth():
                     'isProfileComplete': user.get('isProfileComplete', True),
                     'therapyType': user.get('therapyType'),
                     'patientType': user.get('patientType'),
-                    'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
+                    'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                    'diagnosticData': user.get('diagnosticData')
                 }
             }), 200
         
@@ -468,7 +472,8 @@ def firebase_auth():
                         'isProfileComplete': existing_user.get('isProfileComplete', True),
                         'therapyType': existing_user.get('therapyType'),
                         'patientType': existing_user.get('patientType'),
-                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic')
+                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic'),
+                        'diagnosticData': existing_user.get('diagnosticData')
                     }
                 }), 200
             else:
@@ -641,7 +646,12 @@ def get_user(current_user):
                 'email': current_user['email'],
                 'firstName': current_user['firstName'],
                 'lastName': current_user['lastName'],
-                'role': current_user.get('role', 'user')
+                'role': current_user.get('role', 'user'),
+                'therapyType': current_user.get('therapyType'),
+                'patientType': current_user.get('patientType'),
+                'hasInitialDiagnostic': current_user.get('hasInitialDiagnostic'),
+                'diagnosticData': current_user.get('diagnosticData'),
+                'diagnosticDataUpdatedAt': str(current_user.get('diagnosticDataUpdatedAt', ''))
             }
         }), 200
     except Exception as e:
@@ -740,6 +750,96 @@ def update_diagnostic_status(current_user):
         
     except Exception as e:
         return jsonify({'message': 'Failed to update diagnostic status'}), 500
+
+@app.route('/api/user/diagnostic-data', methods=['PUT'])
+@token_required
+def save_diagnostic_data(current_user):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No data provided'}), 400
+
+        update_fields = {
+            'diagnosticData': data,
+            'hasInitialDiagnostic': bool(data.get('hasInitialDiagnostic', False)),
+            'diagnosticDataUpdatedAt': datetime.datetime.utcnow(),
+            'updatedAt': datetime.datetime.utcnow()
+        }
+        if data.get('therapyFocus') and data['therapyFocus'] != 'both':
+            update_fields['therapyType'] = data['therapyFocus']
+
+        users_collection.update_one(
+            {'_id': current_user['_id']},
+            {'$set': update_fields}
+        )
+
+        updated_user = users_collection.find_one({'_id': current_user['_id']})
+        return jsonify({
+            'message': 'Diagnostic data saved successfully',
+            'user': {
+                'id': str(updated_user['_id']),
+                'email': updated_user['email'],
+                'firstName': updated_user['firstName'],
+                'lastName': updated_user['lastName'],
+                'role': updated_user.get('role', 'patient'),
+                'therapyType': updated_user.get('therapyType'),
+                'patientType': updated_user.get('patientType'),
+                'hasInitialDiagnostic': updated_user.get('hasInitialDiagnostic', False),
+                'diagnosticData': updated_user.get('diagnosticData'),
+                'diagnosticDataUpdatedAt': str(updated_user.get('diagnosticDataUpdatedAt', ''))
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'message': 'Failed to save diagnostic data'}), 500
+
+
+@app.route('/api/therapist/patients/<user_id>/self-report', methods=['GET'])
+@token_required
+def get_patient_self_report(current_user, user_id):
+    try:
+        if current_user.get('role') not in ('therapist', 'admin'):
+            return jsonify({'message': 'Unauthorized'}), 403
+
+        from bson import ObjectId
+        patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        if not patient:
+            return jsonify({'message': 'Patient not found'}), 404
+
+        diagnostic_data = patient.get('diagnosticData')
+        return jsonify({
+            'patientId': user_id,
+            'patientName': f"{patient.get('firstName', '')} {patient.get('lastName', '')}".strip(),
+            'selfReport': diagnostic_data,
+            'completedWizard': bool(diagnostic_data and diagnostic_data.get('completedWizard')),
+            'updatedAt': str(patient.get('diagnosticDataUpdatedAt', ''))
+        }), 200
+
+    except Exception as e:
+        return jsonify({'message': 'Failed to retrieve self-report data'}), 500
+
+
+@app.route('/api/therapist/patients/completed-evaluation', methods=['GET'])
+@token_required
+@therapist_required
+def get_all_completed_evaluations(current_user):
+    try:
+        patients = users_collection.find(
+            {'diagnosticData.completedWizard': True, 'role': 'patient'},
+            {'password': 0}
+        )
+
+        result = []
+        for patient in patients:
+            patient['_id'] = str(patient['_id'])
+            result.append(patient)
+
+        return jsonify({'success': True, 'patients': result}), 200
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve completed evaluations: {e}")
+        return jsonify({'success': False, 'message': 'Failed to retrieve completed evaluations'}), 500
+
 
 @app.route('/api/health', methods=['GET'])
 def health():

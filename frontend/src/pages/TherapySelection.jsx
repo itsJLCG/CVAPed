@@ -14,6 +14,7 @@ function TherapySelection({ onLogout }) {
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
   const [diagnosticStatus, setDiagnosticStatus] = useState(null);
   const [showBanner, setShowBanner] = useState(false);
+  const [diagnosticData, setDiagnosticData] = useState(null);
   const navigate = useNavigate();
   const { selectCategory, clearCategory } = useTherapyCategory();
   const toast = useToast();
@@ -27,14 +28,17 @@ function TherapySelection({ onLogout }) {
   useEffect(() => {
     const storedUser = authService.getStoredUser();
     if (storedUser) {
-      if (storedUser.hasInitialDiagnostic == null) {
+      if (storedUser.diagnosticData?.completedWizard) {
+        // Wizard completed — show profile card, highlight recommendation
+        setDiagnosticData(storedUser.diagnosticData);
+        setDiagnosticStatus(true);
+      } else if (storedUser.hasInitialDiagnostic == null) {
         // Never answered — show modal
         setShowDiagnosticModal(true);
       } else if (storedUser.hasInitialDiagnostic === true) {
-        // Already diagnosed — auto-navigate if they have a therapy type
+        // Legacy: already diagnosed — auto-navigate if they have a therapy type
         setDiagnosticStatus(true);
         if (storedUser.therapyType) {
-          // Use setTimeout to ensure clearCategory runs first
           setTimeout(() => {
             selectCategory(storedUser.therapyType);
             if (storedUser.therapyType === 'physical') {
@@ -45,38 +49,33 @@ function TherapySelection({ onLogout }) {
           }, 0);
         }
       } else {
-        // Answered "No" — show guidance banner
+        // Answered "No" the old way — show guidance banner
         setDiagnosticStatus(false);
         setShowBanner(true);
       }
     }
   }, []);
 
-  const handleDiagnosticConfirm = async (hasVisited) => {
+  const handleDiagnosticConfirm = async (wizardData) => {
     setDiagnosticLoading(true);
     try {
-      await authService.updateDiagnosticStatus(hasVisited);
+      await authService.saveDiagnosticData(wizardData);
       setShowDiagnosticModal(false);
-      setDiagnosticStatus(hasVisited);
-      if (hasVisited) {
-        toast.success('Thank you! Your diagnostic status has been recorded.');
-        // Auto-navigate for "Yes" users with a therapy type
-        const storedUser = authService.getStoredUser();
-        if (storedUser && storedUser.therapyType) {
-          selectCategory(storedUser.therapyType);
-          if (storedUser.therapyType === 'physical') {
-            navigate('/physical-therapy', { replace: true });
-          } else if (storedUser.therapyType === 'speech') {
-            navigate('/speech-therapy', { replace: true });
-          }
-        }
-      } else {
-        toast.info('We recommend scheduling an initial diagnostic assessment.');
-        setShowBanner(true);
+      setDiagnosticData(wizardData);
+      setDiagnosticStatus(true);
+      toast.success('Your diagnostic profile has been saved!');
+
+      const rec = wizardData.recommendedTherapy;
+      if (rec === 'speech' || (rec !== 'physical' && wizardData.therapyFocus === 'speech')) {
+        selectCategory('speech');
+        navigate('/speech-therapy', { replace: true });
+      } else if (rec === 'physical' || wizardData.therapyFocus === 'physical') {
+        selectCategory('physical');
+        navigate('/physical-therapy', { replace: true });
       }
     } catch (error) {
-      console.error('Error updating diagnostic status:', error);
-      toast.error('Failed to save your response. Please try again.');
+      console.error('Error saving diagnostic data:', error);
+      toast.error('Failed to save your profile. Please try again.');
     } finally {
       setDiagnosticLoading(false);
     }

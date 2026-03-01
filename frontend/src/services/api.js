@@ -122,6 +122,11 @@ export const authService = {
     return response.data;
   },
 
+  getMe: async () => {
+    const response = await api.get('/user');
+    return { data: response.data.user };
+  },
+
   getStoredUser: () => {
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
@@ -137,6 +142,14 @@ export const authService = {
 
   updateDiagnosticStatus: async (hasInitialDiagnostic) => {
     const response = await api.put('/user/diagnostic-status', { hasInitialDiagnostic });
+    if (response.data.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  saveDiagnosticData: async (diagnosticData) => {
+    const response = await api.put('/user/diagnostic-data', diagnosticData);
     if (response.data.user) {
       localStorage.setItem('user', JSON.stringify(response.data.user));
     }
@@ -768,6 +781,18 @@ export const diagnosticComparisonService = {
   // Patient: Get own comparison (read-only)
   getMyComparison: async () => {
     const response = await api.get('/diagnostic-comparison');
+    return response.data;
+  },
+
+  // Therapist: Get patient's self-reported diagnostic wizard data
+  getPatientSelfReport: async (userId) => {
+    const response = await api.get(`/therapist/patients/${userId}/self-report`);
+    return response.data;
+  },
+
+  // Therapist: Get all patients who completed the pre-evaluation wizard
+  getAllCompletedEvaluations: async () => {
+    const response = await api.get('/therapist/patients/completed-evaluation');
     return response.data;
   },
 };

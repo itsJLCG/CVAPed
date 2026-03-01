@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { authService, appointmentService } from '../services/api';
 import { useToast } from '../components/ToastContext';
+import DiagnosticProfileCard from '../components/DiagnosticProfileCard';
+import InitialDiagnosticModal from '../components/InitialDiagnosticModal';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -10,6 +12,9 @@ function Dashboard({ onLogout }) {
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [therapists, setTherapists] = useState([]);
+  const [diagnosticData, setDiagnosticData] = useState(null);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
   const [newAppointment, setNewAppointment] = useState({
     therapist_id: '',
     therapy_type: 'articulation',
@@ -25,7 +30,20 @@ function Dashboard({ onLogout }) {
     const run = async () => {
       try {
         const storedUser = authService.getStoredUser();
-        if (!cancelled) setUser(storedUser);
+        if (!cancelled) {
+          setUser(storedUser);
+          setDiagnosticData(storedUser?.diagnosticData ?? null);
+        }
+        // Fetch fresh user data from DB so diagnosticData is always current
+        const meRes = await authService.getMe();
+        if (!cancelled && meRes?.data) {
+          const freshUser = meRes.data;
+          // Merge into stored user and update localStorage
+          const merged = { ...storedUser, ...freshUser };
+          localStorage.setItem('user', JSON.stringify(merged));
+          setUser(merged);
+          setDiagnosticData(freshUser.diagnosticData ?? null);
+        }
       } catch (error) {
         if (!cancelled) console.error('Error loading user:', error);
       } finally {
@@ -105,6 +123,21 @@ function Dashboard({ onLogout }) {
     }
   };
 
+  const handleDiagnosticSave = async (wizardData) => {
+    setDiagnosticLoading(true);
+    try {
+      await authService.saveDiagnosticData(wizardData);
+      setDiagnosticData(wizardData);
+      setShowDiagnosticModal(false);
+      toast.success('Diagnostic profile updated successfully!');
+    } catch (error) {
+      console.error('Error saving diagnostic data:', error);
+      toast.error('Failed to save diagnostic profile. Please try again.');
+    } finally {
+      setDiagnosticLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     toast.info('Logged out successfully. See you soon!');
     onLogout();
@@ -162,6 +195,35 @@ function Dashboard({ onLogout }) {
             <h3>Book Appointment</h3>
             <p>Schedule therapy sessions with our qualified therapists</p>
           </div>
+        </div>
+
+        {/* PRE-EVALUATION / INITIAL DIAGNOSTIC Section */}
+        <div className="preval-section">
+          <div className="section-header">
+            <h3>🩺 Pre-Evaluation / Initial Diagnostic</h3>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowDiagnosticModal(true)}
+            >
+              {diagnosticData?.completedWizard ? '✏️ Update Profile' : '➕ Start Assessment'}
+            </button>
+          </div>
+
+          {diagnosticData?.completedWizard ? (
+            <DiagnosticProfileCard
+              diagnosticData={diagnosticData}
+              onUpdate={() => setShowDiagnosticModal(true)}
+            />
+          ) : (
+            <div className="preval-empty">
+              <div className="preval-empty-icon">📋</div>
+              <h4>No Diagnostic Profile Yet</h4>
+              <p>Complete your initial self-assessment to help us tailor your therapy plan to your specific needs.</p>
+              <button className="btn btn-primary" onClick={() => setShowDiagnosticModal(true)}>
+                Start Self-Assessment
+              </button>
+            </div>
+          )}
         </div>
 
         {/* My Appointments Section */}
@@ -318,6 +380,15 @@ function Dashboard({ onLogout }) {
               </div>
             </div>
           </div>
+        )}
+
+        {showDiagnosticModal && (
+          <InitialDiagnosticModal
+            isOpen={showDiagnosticModal}
+            onClose={() => setShowDiagnosticModal(false)}
+            onConfirm={handleDiagnosticSave}
+            loading={diagnosticLoading}
+          />
         )}
 
         <div className="user-info-section">

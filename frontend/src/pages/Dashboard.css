@@ -566,6 +566,64 @@
   background: #e5e7eb;
 }
 
+/* Pre-Evaluation / Initial Diagnostic Section */
+.preval-section {
+  background: var(--color-white);
+  padding: 30px;
+  border-radius: 20px;
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+  margin-top: 30px;
+  margin-bottom: 30px;
+}
+
+.preval-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.preval-section .section-header h3 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.preval-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+  border-radius: 14px;
+  border: 2px dashed #bfdbfe;
+  gap: 12px;
+}
+
+.preval-empty-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.preval-empty h4 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin: 0;
+}
+
+.preval-empty p {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0;
+  max-width: 400px;
+  line-height: 1.6;
+}
+
 @media (max-width: 768px) {
   .appointment-item {
     flex-direction: column;
@@ -586,5 +644,19 @@
   .modal-body,
   .modal-footer {
     padding: 20px;
+  }
+
+  .preval-section {
+    padding: 20px;
+  }
+
+  .preval-section .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .preval-section .section-header h3 {
+    font-size: 1.4rem;
   }
 }

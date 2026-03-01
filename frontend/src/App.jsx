@@ -27,6 +27,7 @@ import Prediction from './pages/Prediction';
 import Prescription from './pages/Prescription';
 import Profile from './pages/Profile';
 import SuccessStoryPage from './pages/SuccessStoryPage';
+import Diagnostic from './pages/Diagnostic';
 import './App.css';
 
 function App() {
@@ -242,6 +243,12 @@ function App() {
               element={
                 isAuthenticated ? <Profile onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
+            />
+            <Route
+              path="/diagnostic"
+              element={
+                isAuthenticated ? <Diagnostic onLogout={handleLogout} /> : <Navigate to="/login" />
+              }
             />
           </Routes>
         </div>

@@ -14,8 +14,6 @@ function GaitRecording({ onLogout }) {
   const [recordingTime, setRecordingTime] = useState(0);
   const [sensorStatus, setSensorStatus] = useState('disconnected'); // 'disconnected', 'connected', 'recording'
   const [stepCount, setStepCount] = useState(0);
-  const [leftFootActive, setLeftFootActive] = useState(false);
-  const [rightFootActive, setRightFootActive] = useState(false);
   // Load analysis result from localStorage on mount
   const [analysisResult, setAnalysisResult] = useState(() => {
     const saved = localStorage.getItem('gaitAnalysisResult');
@@ -170,8 +168,6 @@ function GaitRecording({ onLogout }) {
         
         if (voltageDrop > STEP_THRESHOLD) {
           setStepCount(prev => prev + 1);
-          setLeftFootActive(true);
-          setTimeout(() => setLeftFootActive(false), 300); // Visual feedback for 300ms
           console.log(`👣 LEFT STEP #${stepCount + 1}! ${lastLeftHeelPressure.current.toFixed(2)}V → ${heel.toFixed(2)}V (Δ${voltageDrop.toFixed(2)}V)`);
           lastLeftHeelPressure.current = heel;
         } else if (heel > lastLeftHeelPressure.current + 0.15) {
@@ -208,8 +204,6 @@ function GaitRecording({ onLogout }) {
         
         if (voltageDrop > STEP_THRESHOLD) {
           setStepCount(prev => prev + 1);
-          setRightFootActive(true);
-          setTimeout(() => setRightFootActive(false), 300); // Visual feedback for 300ms
           console.log(`👣 RIGHT STEP #${stepCount + 1}! ${lastRightHeelPressure.current.toFixed(2)}V → ${heel.toFixed(2)}V (Δ${voltageDrop.toFixed(2)}V)`);
           lastRightHeelPressure.current = heel;
         } else if (heel > lastRightHeelPressure.current + 0.15) {
@@ -242,8 +236,6 @@ function GaitRecording({ onLogout }) {
     setError(null);
     setAnalysisResult(null);
     localStorage.removeItem('gaitAnalysisResult'); // Clear previous analysis from localStorage
-    setLeftFootActive(false);
-    setRightFootActive(false);
     
     // Reset FSR references to null so first reading initializes them
     lastLeftHeelPressure.current = null;
@@ -469,16 +461,36 @@ function GaitRecording({ onLogout }) {
 
                   {/* Step Count with Footprints */}
                   <div className="stat-box step-count-box">
-                    <div className="footprints-container">
-                      <div className={`footprint left-foot ${leftFootActive ? 'active' : ''}`}>
-                        <i className="fas fa-shoe-prints"></i>
-                        <span className="foot-label">L</span>
+                    {isRecording ? (
+                      <div className="walking-animation-container">
+                        <div className="walking-instruction">
+                          <i className="fas fa-walking" style={{fontSize: '3rem', color: 'var(--brand-primary)', marginBottom: '0.5rem'}}></i>
+                          <h3 style={{color: 'var(--brand-primary)', marginBottom: '0.5rem'}}>Keep Walking!</h3>
+                          <p style={{color: '#666', fontSize: '0.95rem'}}>Continue moving naturally</p>
+                        </div>
+                        <div className="footprints-container">
+                          <div className="footprint left-foot walking">
+                            <i className="fas fa-shoe-prints"></i>
+                            <span className="foot-label">L</span>
+                          </div>
+                          <div className="footprint right-foot walking">
+                            <i className="fas fa-shoe-prints"></i>
+                            <span className="foot-label">R</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className={`footprint right-foot ${rightFootActive ? 'active' : ''}`}>
-                        <i className="fas fa-shoe-prints"></i>
-                        <span className="foot-label">R</span>
+                    ) : (
+                      <div className="footprints-container">
+                        <div className="footprint left-foot">
+                          <i className="fas fa-shoe-prints"></i>
+                          <span className="foot-label">L</span>
+                        </div>
+                        <div className="footprint right-foot">
+                          <i className="fas fa-shoe-prints"></i>
+                          <span className="foot-label">R</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>

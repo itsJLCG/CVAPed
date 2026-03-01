@@ -4230,6 +4230,7 @@ def get_physical_therapy_data(current_user):
 latest_wearable_data = {}
 
 @app.route('/api/wearable/data', methods=['GET', 'POST'])
+@limiter.exempt
 def wearable_data():
     """
     Endpoint for wearable gait analysis sensor data

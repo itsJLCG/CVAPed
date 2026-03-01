@@ -1741,40 +1741,70 @@
   transform: rotate(-90deg); /* Same upward rotation for left foot */
 }
 
-/* Active Footprint Animation */
-.footprint.active {
-  background: linear-gradient(135deg, var(--brand-primary) 0%, #a82a26 100%);
-  border-color: var(--brand-primary);
-  transform: scale(1.15) rotate(5deg);
-  box-shadow: 0 8px 24px rgba(206, 54, 48, 0.4);
-  animation: stepPulse 0.3s ease;
+/* Walking Animation - Continuous movement during recording */
+.walking-animation-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 0;
 }
 
-.footprint.active i {
-  color: white;
-  transform: rotate(-90deg) scale(1.1); /* Maintain upward rotation when active */
+.walking-instruction {
+  text-align: center;
+  animation: breathe 2s ease-in-out infinite;
 }
 
-.footprint.left-foot.active i {
-  transform: rotate(-90deg) scale(1.1); /* Same upward rotation when active */
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
 }
 
-.footprint.active .foot-label {
-  background: var(--brand-primary);
-  border-color: white;
-  color: white;
-  transform: scale(1.1);
+.footprint.walking {
+  animation: alternateStep 1s ease-in-out infinite;
 }
 
-@keyframes stepPulse {
-  0% {
-    transform: scale(1) rotate(0deg);
+.footprint.left-foot.walking {
+  animation: alternateStep 1s ease-in-out infinite;
+}
+
+.footprint.right-foot.walking {
+  animation: alternateStep 1s ease-in-out infinite 0.5s;
+}
+
+@keyframes alternateStep {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    background: #f1f3f5;
+    border-color: #dee2e6;
   }
   50% {
-    transform: scale(1.2) rotate(5deg);
+    transform: translateY(-8px) scale(1.05);
+    background: linear-gradient(135deg, var(--brand-secondary) 0%, #3a7fa1 100%);
+    border-color: var(--brand-secondary);
+    box-shadow: 0 4px 16px rgba(71, 154, 195, 0.3);
   }
-  100% {
-    transform: scale(1.15) rotate(5deg);
+}
+
+.footprint.walking i {
+  color: #adb5bd;
+  animation: footIcon 1s ease-in-out infinite;
+}
+
+.footprint.left-foot.walking i {
+  animation: footIcon 1s ease-in-out infinite;
+}
+
+.footprint.right-foot.walking i {
+  animation: footIcon 1s ease-in-out infinite 0.5s;
+}
+
+@keyframes footIcon {
+  0%, 100% {
+    color: #adb5bd;
+  }
+  50% {
+    color: white;
   }
 }
 

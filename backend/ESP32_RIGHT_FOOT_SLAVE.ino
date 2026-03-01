@@ -1,13 +1,13 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * CVACare - RIGHT FOOT ESP32 (MASTER)
+ * CVACare - RIGHT FOOT ESP32 (SLAVE)
  * ═══════════════════════════════════════════════════════════════════════
  * 
- * ROLE: WiFi Master + ESP-NOW Receiver
+ * ROLE: ESP-NOW Sender Only (NO WiFi)
  * - Reads RIGHT KNEE & RIGHT ANKLE sensors (MPU6050)
  * - Reads RIGHT FOOT pressure sensors (FSR via ADS1115)
- * - RECEIVES left foot data via ESP-NOW
- * - Combines all data and sends to backend via WiFi
+ * - SENDS all data to WAIST via ESP-NOW
+ * - Does NOT connect to WiFi or backend
  * 
  * HARDWARE:
  * - MPU6050 (RIGHT KNEE) → I2C Address: 0x68
@@ -20,37 +20,33 @@
 
 #include <esp_now.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
 // ═══════════════════════════════════════════════════════════════════════
-// WiFi Configuration - CHANGE THESE TO YOUR WIFI!
+// WAIST ESP32 MAC Address
 // ═══════════════════════════════════════════════════════════════════════
-const char* ssid = "HONOR X9C";          // YOUR WIFI NAME
-const char* password = "buboycute";      // YOUR WIFI PASSWORD
+// ⚠️  IMPORTANT: Get this from WAIST Serial Monitor!
+//     Upload WAIST code first, copy the MAC address shown,
+//     then paste it here before uploading RIGHT foot code.
+// ═══════════════════════════════════════════════════════════════════════
+uint8_t waistMacAddress[] = {0xFC, 0xE8, 0xC0, 0x7B, 0xB4, 0x14};  // FC:E8:C0:7B:B4:14
 
 // ═══════════════════════════════════════════════════════════════════════
-// Backend Server URL - Using mDNS (No more IP changes!)
+// ESP-NOW Data Structure
 // ═══════════════════════════════════════════════════════════════════════
-const char* serverUrl = "http://cvacare.local:5000/api/wearable/data";
+typedef struct struct_foot_message {
+  float knee_ax, knee_ay, knee_az;
+  float knee_gx, knee_gy, knee_gz;
+  float ankle_ax, ankle_ay, ankle_az;
+  float ankle_gx, ankle_gy, ankle_gz;
+  float fsr[3];  // [toe, mid, heel]
+  char device_id[20];
+} struct_foot_message;
 
-// ═══════════════════════════════════════════════════════════════════════
-// ESP-NOW Data Structure (LEFT foot sends this)
-// ═══════════════════════════════════════════════════════════════════════
-typedef struct struct_message {
-  float left_knee_ax, left_knee_ay, left_knee_az;
-  float left_knee_gx, left_knee_gy, left_knee_gz;
-  float left_ankle_ax, left_ankle_ay, left_ankle_az;
-  float left_ankle_gx, left_ankle_gy, left_ankle_gz;
-  float left_fsr[3];  // [toe, mid, heel]
-} struct_message;
-
-struct_message leftFootData;
-bool leftFootDataReceived = false;
+struct_foot_message rightFootData;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Hardware Configuration
@@ -62,12 +58,11 @@ bool leftFootDataReceived = false;
 Adafruit_ADS1115 ads;
 
 // ═══════════════════════════════════════════════════════════════════════
-// ESP-NOW Callback - Receives LEFT foot data
+// ESP-NOW Callback - Confirms data was sent
 // ═══════════════════════════════════════════════════════════════════════
-void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
-  memcpy(&leftFootData, incomingData, sizeof(leftFootData));
-  leftFootDataReceived = true;
-  Serial.println("✅ LEFT foot data received via ESP-NOW");
+void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+  Serial.print("📤 Send Status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "✅ SUCCESS" : "❌ FAILED");
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -104,8 +99,17 @@ void setup() {
   delay(2000);
 
   Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║    RIGHT FOOT ESP32 (MASTER)          ║");
+  Serial.println("║    RIGHT FOOT ESP32 (SLAVE)           ║");
   Serial.println("╚════════════════════════════════════════╝");
+
+  // ─────────────────────────────────────────────────────────────────────
+  // WiFi Mode (NO CONNECTION - ESP-NOW only!)
+  // ─────────────────────────────────────────────────────────────────────
+  WiFi.mode(WIFI_STA);
+  
+  Serial.println("\n📍 My MAC Address:");
+  Serial.print("   ");
+  Serial.println(WiFi.macAddress());
 
   // ─────────────────────────────────────────────────────────────────────
   // Initialize I2C Sensors
@@ -138,32 +142,6 @@ void setup() {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Connect to WiFi
-  // ─────────────────────────────────────────────────────────────────────
-  Serial.println("\n📡 Connecting to WiFi...");
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi Connected!");
-    Serial.print("   IP Address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("   Gateway: ");
-    Serial.println(WiFi.gatewayIP());
-    Serial.println("   Backend: http://cvacare.local:5000");
-  } else {
-    Serial.println("\n❌ WiFi Connection FAILED!");
-    Serial.println("   Check SSID and password!");
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
   // Initialize ESP-NOW
   // ─────────────────────────────────────────────────────────────────────
   Serial.println("\n🔗 Initializing ESP-NOW...");
@@ -174,17 +152,38 @@ void setup() {
   }
   
   Serial.println("✅ ESP-NOW Ready");
-  esp_now_register_recv_cb(OnDataRecv);
+  esp_now_register_send_cb(OnDataSent);
 
   // ─────────────────────────────────────────────────────────────────────
-  // Display MAC Address
+  // Register WAIST as peer
   // ─────────────────────────────────────────────────────────────────────
-  Serial.println("\n📍 MY MAC ADDRESS (Copy to LEFT foot code):");
-  Serial.print("   ");
-  Serial.println(WiFi.macAddress());
+  Serial.println("\n📡 Registering WAIST peer...");
+  
+  esp_now_peer_info_t peerInfo;
+  memset(&peerInfo, 0, sizeof(peerInfo));
+  memcpy(peerInfo.peer_addr, waistMacAddress, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("❌ Failed to register WAIST!");
+    Serial.println("⚠️  Check MAC address in code!");
+    return;
+  }
+  
+  Serial.println("✅ WAIST registered");
+  Serial.print("   MAC: ");
+  for (int i = 0; i < 6; i++) {
+    Serial.printf("%02X", waistMacAddress[i]);
+    if (i < 5) Serial.print(":");
+  }
+  Serial.println();
+
+  // Set device ID
+  strcpy(rightFootData.device_id, "RIGHT_FOOT");
 
   Serial.println("\n════════════════════════════════════════");
-  Serial.println("  SYSTEM READY - WAITING FOR DATA");
+  Serial.println("  SYSTEM READY - SENDING TO WAIST");
   Serial.println("════════════════════════════════════════\n");
 }
 
@@ -192,130 +191,64 @@ void setup() {
 // MAIN LOOP
 // ═══════════════════════════════════════════════════════════════════════
 void loop() {
-  // Check WiFi connection
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("⚠️  WiFi disconnected, reconnecting...");
-    WiFi.reconnect();
-    delay(3000);
-    return;
-  }
-
-  // Wait for LEFT foot data (timeout after 2 seconds)
-  unsigned long startWait = millis();
-  while (!leftFootDataReceived && (millis() - startWait) < 2000) {
-    delay(10);
-  }
+  // ─────────────────────────────────────────────────────────────────────
+  // Read RIGHT KNEE Sensor
+  // ─────────────────────────────────────────────────────────────────────
+  rightFootData.knee_ax = read16(MPU_KNEE, 0x3B) / 16384.0;
+  rightFootData.knee_ay = read16(MPU_KNEE, 0x3D) / 16384.0;
+  rightFootData.knee_az = read16(MPU_KNEE, 0x3F) / 16384.0;
+  rightFootData.knee_gx = read16(MPU_KNEE, 0x43) / 131.0;
+  rightFootData.knee_gy = read16(MPU_KNEE, 0x45) / 131.0;
+  rightFootData.knee_gz = read16(MPU_KNEE, 0x47) / 131.0;
 
   // ─────────────────────────────────────────────────────────────────────
-  // Read RIGHT FOOT Sensors
+  // Read RIGHT ANKLE Sensor
   // ─────────────────────────────────────────────────────────────────────
-  float right_knee_ax = read16(MPU_KNEE, 0x3B) / 16384.0;
-  float right_knee_ay = read16(MPU_KNEE, 0x3D) / 16384.0;
-  float right_knee_az = read16(MPU_KNEE, 0x3F) / 16384.0;
-  float right_knee_gx = read16(MPU_KNEE, 0x43) / 131.0;
-  float right_knee_gy = read16(MPU_KNEE, 0x45) / 131.0;
-  float right_knee_gz = read16(MPU_KNEE, 0x47) / 131.0;
-
-  float right_ankle_ax = read16(MPU_ANKLE, 0x3B) / 16384.0;
-  float right_ankle_ay = read16(MPU_ANKLE, 0x3D) / 16384.0;
-  float right_ankle_az = read16(MPU_ANKLE, 0x3F) / 16384.0;
-  float right_ankle_gx = read16(MPU_ANKLE, 0x43) / 131.0;
-  float right_ankle_gy = read16(MPU_ANKLE, 0x45) / 131.0;
-  float right_ankle_gz = read16(MPU_ANKLE, 0x47) / 131.0;
-
-  float right_fsr_heel = ads.readADC_SingleEnded(0) * 0.1875 / 1000.0;
-  float right_fsr_mid  = ads.readADC_SingleEnded(1) * 0.1875 / 1000.0;
-  float right_fsr_toe  = ads.readADC_SingleEnded(2) * 0.1875 / 1000.0;
+  rightFootData.ankle_ax = read16(MPU_ANKLE, 0x3B) / 16384.0;
+  rightFootData.ankle_ay = read16(MPU_ANKLE, 0x3D) / 16384.0;
+  rightFootData.ankle_az = read16(MPU_ANKLE, 0x3F) / 16384.0;
+  rightFootData.ankle_gx = read16(MPU_ANKLE, 0x43) / 131.0;
+  rightFootData.ankle_gy = read16(MPU_ANKLE, 0x45) / 131.0;
+  rightFootData.ankle_gz = read16(MPU_ANKLE, 0x47) / 131.0;
 
   // ─────────────────────────────────────────────────────────────────────
-  // Build JSON Payload
+  // Read RIGHT FOOT FSR Sensors
   // ─────────────────────────────────────────────────────────────────────
-  StaticJsonDocument<1536> doc;
-  
-  doc["device_id"] = "RIGHT_FOOT_MASTER";
-  doc["timestamp"] = millis();
-  doc["synchronized"] = leftFootDataReceived;
+  float heel = ads.readADC_SingleEnded(0) * 0.1875 / 1000.0;
+  float mid  = ads.readADC_SingleEnded(1) * 0.1875 / 1000.0;
+  float toe  = ads.readADC_SingleEnded(2) * 0.1875 / 1000.0;
 
-  // RIGHT FOOT DATA
-  JsonObject rightKnee = doc.createNestedObject("RIGHT_KNEE");
-  rightKnee["ax"] = right_knee_ax;
-  rightKnee["ay"] = right_knee_ay;
-  rightKnee["az"] = right_knee_az;
-  rightKnee["gx"] = right_knee_gx;
-  rightKnee["gy"] = right_knee_gy;
-  rightKnee["gz"] = right_knee_gz;
-
-  JsonObject rightAnkle = doc.createNestedObject("RIGHT_ANKLE");
-  rightAnkle["ax"] = right_ankle_ax;
-  rightAnkle["ay"] = right_ankle_ay;
-  rightAnkle["az"] = right_ankle_az;
-  rightAnkle["gx"] = right_ankle_gx;
-  rightAnkle["gy"] = right_ankle_gy;
-  rightAnkle["gz"] = right_ankle_gz;
-
-  JsonArray rightFsr = doc.createNestedArray("RIGHT_FOOT_FSR");
-  rightFsr.add(right_fsr_toe);
-  rightFsr.add(right_fsr_mid);
-  rightFsr.add(right_fsr_heel);
-
-  // LEFT FOOT DATA (if received)
-  if (leftFootDataReceived) {
-    JsonObject leftKnee = doc.createNestedObject("LEFT_KNEE");
-    leftKnee["ax"] = leftFootData.left_knee_ax;
-    leftKnee["ay"] = leftFootData.left_knee_ay;
-    leftKnee["az"] = leftFootData.left_knee_az;
-    leftKnee["gx"] = leftFootData.left_knee_gx;
-    leftKnee["gy"] = leftFootData.left_knee_gy;
-    leftKnee["gz"] = leftFootData.left_knee_gz;
-
-    JsonObject leftAnkle = doc.createNestedObject("LEFT_ANKLE");
-    leftAnkle["ax"] = leftFootData.left_ankle_ax;
-    leftAnkle["ay"] = leftFootData.left_ankle_ay;
-    leftAnkle["az"] = leftFootData.left_ankle_az;
-    leftAnkle["gx"] = leftFootData.left_ankle_gx;
-    leftAnkle["gy"] = leftFootData.left_ankle_gy;
-    leftAnkle["gz"] = leftFootData.left_ankle_gz;
-
-    JsonArray leftFsr = doc.createNestedArray("LEFT_FOOT_FSR");
-    leftFsr.add(leftFootData.left_fsr[0]);  // toe
-    leftFsr.add(leftFootData.left_fsr[1]);  // mid
-    leftFsr.add(leftFootData.left_fsr[2]);  // heel
-  }
+  rightFootData.fsr[0] = toe;
+  rightFootData.fsr[1] = mid;
+  rightFootData.fsr[2] = heel;
 
   // ─────────────────────────────────────────────────────────────────────
-  // Send to Backend
-  // ─────────────────────────────────────────────────────────────────────
-  String payload;
-  serializeJson(doc, payload);
-
-  HTTPClient http;
-  http.begin(serverUrl);
-  http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(payload);
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Display Results
+  // Display Data
   // ─────────────────────────────────────────────────────────────────────
   Serial.println("════════════════════════════════════════");
-  Serial.printf("📊 Data Sent (Sync: %s)\n", leftFootDataReceived ? "YES" : "NO");
-  Serial.printf("   RIGHT: Knee(%.2f,%.2f,%.2f) FSR(%.2f,%.2f,%.2f)\n", 
-                right_knee_ax, right_knee_ay, right_knee_az,
-                right_fsr_toe, right_fsr_mid, right_fsr_heel);
+  Serial.printf("📊 RIGHT Knee: (%.2f, %.2f, %.2f)\n",
+                rightFootData.knee_ax,
+                rightFootData.knee_ay,
+                rightFootData.knee_az);
+  Serial.printf("📊 RIGHT Ankle: (%.2f, %.2f, %.2f)\n",
+                rightFootData.ankle_ax,
+                rightFootData.ankle_ay,
+                rightFootData.ankle_az);
+  Serial.printf("📊 RIGHT FSR: Toe=%.2fV Mid=%.2fV Heel=%.2fV\n",
+                toe, mid, heel);
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Send to WAIST via ESP-NOW
+  // ─────────────────────────────────────────────────────────────────────
+  esp_err_t result = esp_now_send(waistMacAddress, 
+                                   (uint8_t*)&rightFootData, 
+                                   sizeof(rightFootData));
   
-  if (leftFootDataReceived) {
-    Serial.printf("   LEFT:  Knee(%.2f,%.2f,%.2f) FSR(%.2f,%.2f,%.2f)\n",
-                  leftFootData.left_knee_ax, leftFootData.left_knee_ay, leftFootData.left_knee_az,
-                  leftFootData.left_fsr[0], leftFootData.left_fsr[1], leftFootData.left_fsr[2]);
+  if (result != ESP_OK) {
+    Serial.println("❌ ESP-NOW Send Error!");
   }
-  
-  Serial.printf("📤 HTTP Response: %d %s\n", httpCode, 
-                httpCode == 200 ? "✅ OK" : "❌ ERROR");
+
   Serial.println("════════════════════════════════════════\n");
 
-  http.end();
-
-  // Reset flag for next cycle
-  leftFootDataReceived = false;
-  
   delay(1000);  // Send every 1 second
 }

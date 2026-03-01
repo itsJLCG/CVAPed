@@ -357,3 +357,18 @@ python app.py
 
 cd frontend
 npm run dev
+
+
+17:04:08.344 -> 📡 Connecting to WiFi...
+17:04:08.935 -> ........
+17:04:12.421 -> ✅ WiFi Connected!
+17:04:12.421 ->    IP Address: 10.251.202.231
+17:04:12.421 ->    Gateway: 10.251.202.223
+17:04:12.421 ->    Backend: http://cvacare.local:5000
+17:04:12.421 -> 
+17:04:12.421 -> 🔗 Initializing ESP-NOW...
+17:04:12.421 -> ✅ ESP-NOW Ready
+17:04:12.421 -> 
+17:04:12.421 -> 📍 MY MAC ADDRESS (Copy to BOTH foot ESP32s):
+17:04:12.421 ->    FC:E8:C0:7B:B4:14
+

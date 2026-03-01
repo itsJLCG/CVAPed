@@ -159,7 +159,7 @@ lsof -ti:5000 | xargs kill -9
 
 You need **TWO Command Prompt windows** open - one for backend, one for frontend.
 
-### Window 1: Start Backend Server
+### Window 1: Start Backend Server (with mDNS auto-start)
 
 1. Open Command Prompt in `CVACare_Thesis\backend`
 2. Activate virtual environment:
@@ -172,8 +172,38 @@ python app.py
 ```
 4. **Keep this window open!** You should see:
 ```
-* Running on http://localhost:5000
+🌐 mDNS Service Starting...
+📍 Local IP: 10.251.202.145
+🔗 Hostname: cvacare.local
+📡 ESP32 can connect using: http://cvacare.local:5000
+
+* Running on http://0.0.0.0:5000
 ```
+
+**Note:** mDNS service starts automatically - no separate commands needed!
+
+### Window 2: Start Frontend Server
+
+1. Open Command Prompt in `CVACare_Thesis\backend`
+2. Activate virtual environment:
+```bash
+venv\Scripts\activate
+```
+3. Run the server:
+```bash
+python app.py
+```
+4. **Keep this window open!** You should see:
+```
+🌐 mDNS Service Starting...
+📍 Local IP: 10.251.202.145
+🔗 Hostname: cvacare.local
+📡 ESP32 can connect using: http://cvacare.local:5000
+
+* Running on http://0.0.0.0:5000
+```
+
+**Note:** mDNS service starts automatically - ESP32 can now connect using hostname!
 
 ### Window 2: Start Frontend Server
 
@@ -191,6 +221,30 @@ Local: http://localhost:5173/
 
 1. Open your web browser (Chrome, Edge, Firefox)
 2. Go to: **http://localhost:5173**
+
+---
+
+## ESP32 Wearable Setup (Gait Analysis)
+
+### Upload ESP32 Code
+
+1. **RIGHT FOOT (Master):**
+   - Open `backend/ESP32_RIGHT_FOOT_MASTER.ino`
+   - Update WiFi credentials (lines 27-28) if needed
+   - Upload to RIGHT foot ESP32
+   - Copy MAC address from Serial Monitor
+
+2. **LEFT FOOT (Slave):**
+   - Open `backend/ESP32_LEFT_FOOT_SLAVE.ino`
+   - Paste RIGHT foot MAC address (line 35)
+   - Upload to LEFT foot ESP32
+
+**How it works:**
+- LEFT foot reads sensors → sends to RIGHT foot via ESP-NOW
+- RIGHT foot receives LEFT data + reads own sensors → sends combined data to backend via WiFi
+- Backend automatically discoverable via `cvacare.local` hostname (no IP changes!)
+
+---
 ## Quick Start Summary
 
 1. Install Node.js and Python
@@ -199,11 +253,12 @@ Local: http://localhost:5173/
    - Run: `python -m venv venv`
    - Run: `venv\Scripts\activate`
    - Run: `pip install -r requirements.txt`
-   - Run: `python app.py` (keep open)
+   - Run: `python app.py` (mDNS auto-starts, keep window open)
 4. Open another Command Prompt in `frontend` folder
    - Run: `npm install`
-   - Run: `npm run dev` (keep open)
+   - Run: `npm run dev` (keep window open)
 5. Open browser: http://localhost:5173
+6. For ESP32 wearables: See `backend/ESP32_WEARABLE_GUIDE.md`
 
 ---
 
@@ -302,3 +357,18 @@ python app.py
 
 cd frontend
 npm run dev
+
+
+17:04:08.344 -> 📡 Connecting to WiFi...
+17:04:08.935 -> ........
+17:04:12.421 -> ✅ WiFi Connected!
+17:04:12.421 ->    IP Address: 10.251.202.231
+17:04:12.421 ->    Gateway: 10.251.202.223
+17:04:12.421 ->    Backend: http://cvacare.local:5000
+17:04:12.421 -> 
+17:04:12.421 -> 🔗 Initializing ESP-NOW...
+17:04:12.421 -> ✅ ESP-NOW Ready
+17:04:12.421 -> 
+17:04:12.421 -> 📍 MY MAC ADDRESS (Copy to BOTH foot ESP32s):
+17:04:12.421 ->    FC:E8:C0:7B:B4:14
+

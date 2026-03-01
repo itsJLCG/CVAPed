@@ -698,8 +698,9 @@ export const appointmentService = {
     },
 
     // Search patients by name
-    searchPatients: async (query, limit = 10) => {
-      const response = await api.get(`/therapist/patients/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+    searchPatients: async (query, limit = 10, signal) => {
+      const config = signal ? { signal } : {};
+      const response = await api.get(`/therapist/patients/search?query=${encodeURIComponent(query)}&limit=${limit}`, config);
       return response.data;
     },
   },

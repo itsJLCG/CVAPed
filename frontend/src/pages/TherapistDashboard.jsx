@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { images } from '../assets/images';
@@ -140,6 +140,8 @@ function TherapistDashboard({ onLogout }) {
   const [diagSearchResults, setDiagSearchResults] = useState([]);
   const [showDiagPatientDropdown, setShowDiagPatientDropdown] = useState(false);
   const [searchingDiagPatients, setSearchingDiagPatients] = useState(false);
+  const [diagSearchError, setDiagSearchError] = useState(null);
+  const diagSearchAbortRef = useRef(null);
   const [selectedDiagPatient, setSelectedDiagPatient] = useState(null);
   const [selectedDiagnosticId, setSelectedDiagnosticId] = useState(null);
   const [savingDiagnostic, setSavingDiagnostic] = useState(false);
@@ -896,25 +898,47 @@ function TherapistDashboard({ onLogout }) {
   };
 
   // Diagnostic Comparison Functions
-  const searchDiagPatients = async (query) => {
-    if (!query || query.length < 2) {
+  useEffect(() => {
+    if (!diagSearchQuery || diagSearchQuery.trim().length < 2) {
       setDiagSearchResults([]);
+      setDiagSearchError(null);
       setShowDiagPatientDropdown(false);
       return;
     }
-    setSearchingDiagPatients(true);
-    try {
-      const response = await appointmentService.therapist.searchPatients(query);
-      if (response.success) {
-        setDiagSearchResults(response.patients || []);
+
+    const query = diagSearchQuery.trim();
+
+    const runSearch = async () => {
+      diagSearchAbortRef.current?.abort();
+      diagSearchAbortRef.current = new AbortController();
+      const { signal } = diagSearchAbortRef.current;
+
+      setSearchingDiagPatients(true);
+      setDiagSearchError(null);
+      try {
+        const response = await appointmentService.therapist.searchPatients(query, 10, signal);
+        if (signal.aborted) return;
+        if (response.success) {
+          setDiagSearchResults(response.patients || []);
+          setShowDiagPatientDropdown(true);
+        }
+      } catch (error) {
+        if (error.name === 'AbortError' || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return;
+        console.error('Error searching patients:', error);
+        setDiagSearchError('Failed to search patients. Please try again.');
+        setDiagSearchResults([]);
         setShowDiagPatientDropdown(true);
+      } finally {
+        if (!signal.aborted) setSearchingDiagPatients(false);
       }
-    } catch (error) {
-      console.error('Error searching patients:', error);
-    } finally {
-      setSearchingDiagPatients(false);
-    }
-  };
+    };
+
+    const timeoutId = setTimeout(runSearch, 400);
+    return () => {
+      clearTimeout(timeoutId);
+      diagSearchAbortRef.current?.abort();
+    };
+  }, [diagSearchQuery]);
 
   const selectDiagPatient = async (patient) => {
     setSelectedDiagPatient(patient);
@@ -3714,25 +3738,30 @@ function TherapistDashboard({ onLogout }) {
                     className="diag-search-input"
                     placeholder="Search patient by name..."
                     value={diagSearchQuery}
-                    onChange={(e) => {
-                      setDiagSearchQuery(e.target.value);
-                      searchDiagPatients(e.target.value);
+                    onChange={(e) => setDiagSearchQuery(e.target.value)}
+                    onFocus={() => {
+                      if (diagSearchResults.length > 0 || diagSearchError) setShowDiagPatientDropdown(true);
                     }}
-                    onFocus={() => { if (diagSearchResults.length > 0) setShowDiagPatientDropdown(true); }}
                   />
                   {searchingDiagPatients && <span className="diag-search-spinner">⏳</span>}
-                  {showDiagPatientDropdown && diagSearchResults.length > 0 && (
+                  {showDiagPatientDropdown && (
                     <div className="diag-patient-dropdown">
-                      {diagSearchResults.map((p) => (
-                        <button
-                          key={p._id || p.id}
-                          className="diag-patient-option"
-                          onClick={() => selectDiagPatient(p)}
-                        >
-                          <span className="diag-patient-name">{p.firstName} {p.lastName}</span>
-                          <span className="diag-patient-email">{p.email}</span>
-                        </button>
-                      ))}
+                      {diagSearchError ? (
+                        <p className="diag-search-message diag-search-error-msg">{diagSearchError}</p>
+                      ) : diagSearchResults.length > 0 ? (
+                        diagSearchResults.map((p) => (
+                          <button
+                            key={p._id || p.id}
+                            className="diag-patient-option"
+                            onClick={() => selectDiagPatient(p)}
+                          >
+                            <span className="diag-patient-name">{p.firstName} {p.lastName}</span>
+                            <span className="diag-patient-email">{p.email}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="diag-search-message diag-search-no-results">No patients found for &ldquo;{diagSearchQuery}&rdquo;</p>
+                      )}
                     </div>
                   )}
                 </div>

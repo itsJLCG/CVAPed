@@ -8938,6 +8938,21 @@
   background: #f3f4f6;
 }
 
+.diag-search-message {
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  margin: 0;
+  text-align: center;
+}
+
+.diag-search-no-results {
+  color: #6b7280;
+}
+
+.diag-search-error-msg {
+  color: #dc2626;
+}
+
 .diag-patient-name {
   font-weight: 600;
   color: #1f2937;

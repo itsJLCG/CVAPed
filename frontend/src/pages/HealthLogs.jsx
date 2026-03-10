@@ -41,6 +41,16 @@ function HealthLogs({ onLogout }) {
       if (!cancelled) {
         setHealthLogs(logsData.logs || []);
         setSummary(summaryData.summary || null);
+        
+        // Debug: Check exercise plan and gait score data
+        console.log('🔍 Health Logs Data:', logsData.logs?.filter(l => l.therapyType === 'gait').map(l => ({
+          date: l.createdAt,
+          hasExercisePlan: !!l.exercisePlan,
+          exercises: l.exercisePlan?.exercises?.length || 0,
+          hasGaitScore: !!l.gait_score,
+          gaitScore: l.gait_score?.score,
+          gaitGrade: l.gait_score?.grade
+        })));
       }
     } catch (err) {
       if (!cancelled) {
@@ -627,6 +637,25 @@ function HealthLogs({ onLogout }) {
                           <tr className="gait-details-row">
                             <td colSpan="5">
                               <div className="gait-details-container">
+                                {/* Gait Score Display */}
+                                {log.gait_score && (
+                                  <div className="gait-score-section">
+                                    <div className={`gait-score-badge gait-score-${log.gait_score.color}`}>
+                                      <div className="score-circle">
+                                        <div className="score-number">{log.gait_score.score}</div>
+                                        <div className="score-label">/ 100</div>
+                                      </div>
+                                      <div className="score-info">
+                                        <div className="score-grade">
+                                          <span className="grade-emoji">{log.gait_score.grade_emoji}</span>
+                                          <span className="grade-text">{log.gait_score.grade}</span>
+                                        </div>
+                                        <div className="score-recommendation">{log.gait_score.recommendation}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                
                                 <div className="gait-metrics-grid">
                                   <div className="gait-metric-item">
                                     <i className="fas fa-shoe-prints"></i>
@@ -681,6 +710,32 @@ function HealthLogs({ onLogout }) {
                                       {log.detectedProblems.map((problem, idx) => (
                                         <div key={idx} className={`problem-badge ${problem.severity}`}>
                                           {problem.problem.replace(/_/g, ' ')}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {log.exercisePlan && log.exercisePlan.exercises && log.exercisePlan.exercises.length > 0 && (
+                                  <div className="gait-exercises-summary">
+                                    <div className="exercises-header">
+                                      <i className="fas fa-dumbbell"></i>
+                                      <strong>Recommended Exercises ({log.exercisePlan.exercises.length})</strong>
+                                    </div>
+                                    <div className="exercises-list">
+                                      {log.exercisePlan.exercises.map((exercise, idx) => (
+                                        <div key={idx} className="exercise-item-card">
+                                          <div className="exercise-number">{idx + 1}</div>
+                                          <div className="exercise-info">
+                                            <div className="exercise-title">{exercise.exercise_name}</div>
+                                            <div className="exercise-meta">
+                                              <span className="exercise-target">
+                                                <i className="fas fa-bullseye"></i> {exercise.problem_targeted?.replace(/_/g, ' ')}
+                                              </span>
+                                              <span className="exercise-difficulty">
+                                                <i className="fas fa-signal"></i> {exercise.difficulty}
+                                              </span>
+                                            </div>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>

@@ -125,7 +125,7 @@ init_admin_management(db)
 app.register_blueprint(success_story_bp, url_prefix='/api')
 init_success_story_crud(db)
 
-# Initialize XGBoost Prediction Service (Standalone - all 4 predictors)
+# Initialize XGBoost Prediction Service (Standalone - all 5 predictors)
 print("\n🤖 Initializing XGBoost Prediction Models...")
 print("="*60)
 try:
@@ -134,16 +134,30 @@ try:
     from language_mastery_predictor import LanguageMasteryPredictor
     from overall_speech_predictor import OverallSpeechPredictor
     
-    print("✅ All 4 XGBoost predictors loaded successfully!")
+    print("✅ All 4 Speech XGBoost predictors loaded successfully!")
     print("   - Articulation Mastery Predictor")
     print("   - Fluency Mastery Predictor")
     print("   - Language Mastery Predictor (Receptive & Expressive)")
     print("   - Overall Speech Improvement Predictor")
-    print("="*60)
 except Exception as e:
-    print(f"⚠️  Could not initialize all prediction models: {e}")
+    print(f"⚠️  Could not initialize speech prediction models: {e}")
     print("   Predictions will use baseline estimates")
-    print("="*60)
+
+# Initialize Gait Mastery Predictor for Physical Therapy
+try:
+    from gait_mastery_predictor import GaitMasteryPredictor
+    gait_predictor = GaitMasteryPredictor(db)
+    gait_predictor.load_model()
+    print("✅ Gait Mastery Predictor loaded successfully!")
+    print("   - Physical Therapy Gait Prediction")
+except FileNotFoundError:
+    print("⚠️  Gait model not found. Train the model using train_gait_model.py")
+    gait_predictor = None
+except Exception as e:
+    print(f"⚠️  Could not initialize gait predictor: {e}")
+    gait_predictor = None
+
+print("="*60)
 
 # Token required decorator
 def token_required(f):
@@ -928,6 +942,23 @@ def get_health_logs(current_user):
         # Fetch Gait Analysis Records
         gait_progress_collection = db['gaitprogresses']
         gait_records = list(gait_progress_collection.find({'user_id': user_id}).sort('created_at', -1))
+        
+        # Fetch Exercise Plans
+        exercise_plans_collection = db['exerciseplans']
+        exercise_plans = list(exercise_plans_collection.find({'user_id': user_id}))
+        
+        # Create a map of gait_analysis_id -> exercise plan for quick lookup
+        exercise_plan_map = {}
+        for plan in exercise_plans:
+            gait_id = plan.get('gait_analysis_id')
+            print(f"DEBUG - Plan {plan['_id']}: gait_analysis_id = {gait_id}, type = {type(gait_id)}")
+            if gait_id:
+                exercise_plan_map[str(gait_id)] = plan
+        
+        print(f"DEBUG Health Logs - User: {user_id}")
+        print(f"DEBUG - Found {len(exercise_plans)} exercise plans")
+        print(f"DEBUG - Exercise plan map keys: {list(exercise_plan_map.keys())}")
+        
         for gait in gait_records:
             # Calculate overall gait score based on metrics (0-100 scale)
             metrics = gait.get('metrics', {})
@@ -936,11 +967,27 @@ def get_health_logs(current_user):
             regularity = metrics.get('step_regularity', 0) * 100
             overall_gait_score = int((stability + symmetry + regularity) / 3) if any([stability, symmetry, regularity]) else 0
             
+            # Find associated exercise plan
+            gait_id_str = str(gait['_id'])
+            associated_plan = exercise_plan_map.get(gait_id_str)
+            
+            print(f"DEBUG - Gait ID: {gait_id_str}, Has plan: {associated_plan is not None}")
+            
+            exercise_plan_data = None
+            if associated_plan:
+                exercise_plan_data = {
+                    'planId': str(associated_plan['_id']),
+                    'totalExercises': associated_plan.get('total_exercises', 0),
+                    'exercises': associated_plan.get('exercises', []),
+                    'createdAt': associated_plan.get('created_at', datetime.datetime.utcnow()).isoformat() if isinstance(associated_plan.get('created_at'), datetime.datetime) else str(associated_plan.get('created_at', ''))
+                }
+            
             logs.append({
                 '_id': str(gait['_id']),
                 'therapyType': 'gait',
                 'level': 1,
                 'overallScore': overall_gait_score,
+                'gait_score': gait.get('gait_score'),  # Include saved gait mobility score
                 'gaitMetrics': {
                     'step_count': metrics.get('step_count', 0),
                     'cadence': metrics.get('cadence', 0),
@@ -952,6 +999,7 @@ def get_health_logs(current_user):
                     'vertical_oscillation': metrics.get('vertical_oscillation', 0),
                 },
                 'detectedProblems': gait.get('detected_problems', []),
+                'exercisePlan': exercise_plan_data,
                 'dataQuality': gait.get('data_quality', 'N/A'),
                 'duration': gait.get('analysis_duration', 0),
                 'createdAt': gait.get('created_at', datetime.datetime.utcnow()).isoformat()
@@ -1077,7 +1125,7 @@ def get_health_summary(current_user):
 @app.route('/api/prescriptive', methods=['GET'])
 @token_required
 def get_prescriptive_analysis(current_user):
-    """Get intelligent therapy prioritization using Decision Rules + Graph-Based Recommendations"""
+    """Get intelligent therapy prioritization using Decision Rules + Graph-Based Recommendations (Speech Therapy)"""
     try:
         from therapy_prioritization import generate_therapy_prioritization
         
@@ -1100,6 +1148,54 @@ def get_prescriptive_analysis(current_user):
         return jsonify({
             'success': False,
             'message': 'Failed to generate prescriptive analysis'
+        }), 500
+
+
+@app.route('/api/prescriptive/gait', methods=['GET'])
+@token_required
+def get_gait_prescriptive_analysis(current_user):
+    """Get intelligent gait therapy prioritization using Decision Rules + Graph-Based Recommendations (Physical Therapy)"""
+    try:
+        from gait_therapy_prioritization import generate_gait_prioritization
+        
+        # Get user_id from authenticated user
+        user_id = str(current_user['_id'])
+        
+        # Get predicted days from gait predictor if available
+        predicted_days = None
+        try:
+            from gait_mastery_predictor import GaitMasteryPredictor
+            gait_predictor = GaitMasteryPredictor(db)
+            gait_predictor.load_model()
+            prediction = gait_predictor.predict_days_to_mastery(user_id)
+            if prediction and 'predicted_days_to_mastery' in prediction:
+                predicted_days = prediction['predicted_days_to_mastery']
+        except Exception as e:
+            print(f"Could not get gait prediction for prescriptive analysis: {e}")
+        
+        # Generate prescriptive analysis
+        analysis = generate_gait_prioritization(user_id, predicted_days)
+        
+        # Check if there's an error (no data)
+        if 'error' in analysis:
+            return jsonify({
+                'success': False,
+                'message': analysis['message']
+            }), 400
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error generating gait prescriptive analysis: {e}", exc_info=True)
+        print(f"Error generating gait prescriptive analysis: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to generate gait prescriptive analysis'
         }), 500
 
 # ======================
@@ -1183,12 +1279,23 @@ def get_all_predictions(current_user):
         except Exception as e:
             print(f"Overall predictor error: {e}")
         
+        # 6. Gait prediction for physical therapy users
+        therapy_type = current_user.get('therapyType')
+        if therapy_type in ['physical', 'both'] and gait_predictor:
+            try:
+                gait_pred = gait_predictor.predict_days_to_mastery(user_id)
+                predictions['gait'] = gait_pred
+                print(f"   Gait: ✅")
+            except Exception as e:
+                print(f"   Gait: ❌ {e}")
+        
         print(f"✅ Predictions retrieved successfully")
         print(f"   Articulation sounds: {len(predictions.get('articulation', {}))}")
         print(f"   Fluency: {'✅' if 'fluency' in predictions else '❌'}")
         print(f"   Receptive: {'✅' if 'receptive' in predictions else '❌'}")
         print(f"   Expressive: {'✅' if 'expressive' in predictions else '❌'}")
-        print(f"   Overall: {'✅' if 'overall' in predictions else '❌'}\n")
+        print(f"   Overall: {'✅' if 'overall' in predictions else '❌'}")
+        print(f"   Gait: {'✅' if 'gait' in predictions else '❌'}\n")
         
         return jsonify({
             'success': True,
@@ -1315,6 +1422,40 @@ def get_overall_prediction(current_user):
         return jsonify({
             'success': False,
             'message': 'Failed to get overall prediction'
+        }), 500
+
+@app.route('/api/predictions/gait', methods=['GET'])
+@token_required
+def get_gait_prediction(current_user):
+    """
+    Get gait mastery prediction for physical therapy users
+    Predicts days until healthy gait parameters are achieved
+    """
+    try:
+        user_id = str(current_user['_id'])
+        
+        if not gait_predictor:
+            return jsonify({
+                'success': False,
+                'message': 'Gait predictor not available. Model may not be trained yet.'
+            }), 503
+        
+        # Get prediction
+        prediction = gait_predictor.predict_days_to_mastery(user_id)
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error fetching gait prediction: {e}", exc_info=True)
+        print(f"Gait prediction error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get gait prediction'
         }), 500
 
 
@@ -4330,15 +4471,80 @@ def hardware_gait_analyze(current_user):
             'data_quality': result['data']['data_quality'],
             'detected_problems': result['data']['detected_problems'],
             'problem_summary': result['data']['problem_summary'],
+            'gait_score': result['data'].get('gait_score'),
             'created_at': utc_now(),
             'updated_at': utc_now()
         }
         
         # Insert into database
         insert_result = gait_progress_collection.insert_one(gait_document)
+        gait_id = str(insert_result.inserted_id)
         
         print(f"💾 Saved to MongoDB collection: gaitprogresses")
-        print(f"   Document ID: {insert_result.inserted_id}")
+        print(f"   Document ID: {gait_id}")
+        
+        # Automatically create exercise plan if problems detected
+        exercise_plan_created = False
+        if result['data']['detected_problems'] and len(result['data']['detected_problems']) > 0:
+            try:
+                print(f"🏋️  Processing exercise plan for {len(result['data']['detected_problems'])} detected problems...")
+                
+                exercise_plans_collection = db['exerciseplans']
+                
+                # Extract exercises from detected problems (one exercise per problem)
+                exercises = []
+                for problem in result['data']['detected_problems']:
+                    recommendations = problem.get('exercises') or problem.get('recommendations', [])
+                    if recommendations:
+                        # Take first recommendation (one per problem)
+                        rec = recommendations[0]
+                        exercises.append({
+                            'exercise_id': rec.get('id'),
+                            'exercise_name': rec.get('name'),
+                            'problem_targeted': problem.get('problem'),
+                            'severity': problem.get('severity'),
+                            'description': rec.get('description'),
+                            'duration': rec.get('duration'),
+                            'difficulty': rec.get('difficulty')
+                        })
+                
+                if len(exercises) == 0:
+                    print(f"⚠️  No exercises found in detected problems")
+                else:
+                    # Always create new plan for each gait analysis
+                    print(f"📝 Creating new exercise plan...")
+                    
+                    print(f"DEBUG - Gait insert_result.inserted_id: {insert_result.inserted_id}, type: {type(insert_result.inserted_id)}")
+                    
+                    plan = {
+                        'user_id': str(current_user['_id']),
+                        'gait_analysis_id': insert_result.inserted_id,
+                        'detected_problems': result['data']['detected_problems'],
+                        'exercises': exercises,
+                        'total_exercises': len(exercises),
+                        'created_at': utc_now(),
+                        'updated_at': utc_now()
+                    }
+                    
+                    print(f"DEBUG - Plan dict gait_analysis_id before insert: {plan['gait_analysis_id']}")
+                    
+                    plan_result = exercise_plans_collection.insert_one(plan)
+                    print(f"✅ Exercise plan created: {plan_result.inserted_id}")
+                    print(f"   {len(exercises)} exercises recommended")
+                    
+                    # Verify what was actually saved
+                    saved_plan = exercise_plans_collection.find_one({'_id': plan_result.inserted_id})
+                    print(f"DEBUG - Saved plan gait_analysis_id: {saved_plan.get('gait_analysis_id')}")
+                    
+                    exercise_plan_created = True
+                    
+            except Exception as plan_error:
+                logger.error(f"Failed to create/update exercise plan: {plan_error}", exc_info=True)
+                print(f"❌ Exercise plan operation failed: {str(plan_error)}")
+                # Continue - gait analysis was successful even if plan creation failed
+        else:
+            print(f"ℹ️  No problems detected, skipping exercise plan creation")
+        
         print("="*60 + "\n")
         
         # Return success with MongoDB ID
@@ -4346,7 +4552,8 @@ def hardware_gait_analyze(current_user):
             'success': True,
             'message': 'Hardware gait analysis completed',
             'data': result['data'],
-            'gait_id': str(insert_result.inserted_id)
+            'gait_id': gait_id,
+            'exercise_plan_created': exercise_plan_created
         }), 200
         
     except Exception as e:
@@ -4385,6 +4592,345 @@ def hardware_gait_history(current_user):
         return jsonify({
             'success': False,
             'message': 'Failed to fetch gait history'
+        }), 500
+
+
+@app.route('/api/gait/exercise-plan', methods=['POST'])
+@token_required
+def save_gait_exercise_plan(current_user):
+    """
+    Save exercise plan from gait analysis results
+    Creates one plan per gait analysis
+    """
+    try:
+        data = request.json
+        detected_problems = data.get('detected_problems', [])
+        gait_analysis_id = data.get('gait_analysis_id')
+        
+        if not detected_problems:
+            return jsonify({
+                'success': False,
+                'message': 'No problems provided'
+            }), 400
+        
+        exercise_plans_collection = db['exerciseplans']
+        
+        # Always create new plan for each gait analysis
+        exercises = []
+        for problem in detected_problems:
+            recommendations = problem.get('exercises') or problem.get('recommendations', [])
+            if recommendations:
+                # Take first recommendation (one per problem)
+                rec = recommendations[0]
+                exercises.append({
+                    'exercise_id': rec.get('id'),
+                    'exercise_name': rec.get('name'),
+                    'problem_targeted': problem.get('problem'),
+                    'severity': problem.get('severity'),
+                    'description': rec.get('description'),
+                    'duration': rec.get('duration'),
+                    'difficulty': rec.get('difficulty')
+                })
+        
+        plan = {
+            'user_id': str(current_user['_id']),
+            'gait_analysis_id': gait_analysis_id,
+            'detected_problems': detected_problems,
+            'exercises': exercises,
+            'total_exercises': len(exercises),
+            'created_at': utc_now(),
+            'updated_at': utc_now()
+        }
+        
+        result = exercise_plans_collection.insert_one(plan)
+        plan_id = str(result.inserted_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Exercise plan saved',
+            'plan_id': plan_id,
+            'exercises_count': len(exercises)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error saving exercise plan: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to save exercise plan'
+        }), 500
+
+
+@app.route('/api/gait/exercise-plan/current', methods=['GET'])
+@token_required
+def get_current_exercise_plan(current_user):
+    """Get all exercise plans for the user (sorted by most recent first)"""
+    try:
+        exercise_plans_collection = db['exerciseplans']
+        
+        # Get all plans for the user, sorted by creation date (newest first)
+        plans_cursor = exercise_plans_collection.find(
+            {'user_id': str(current_user['_id'])},
+            sort=[('created_at', -1)]
+        )
+        
+        plans = list(plans_cursor)
+        
+        if not plans:
+            return jsonify({
+                'success': True,
+                'has_plans': False,
+                'message': 'No exercise plans'
+            }), 200
+        
+        # Convert ObjectIds to strings
+        for plan in plans:
+            plan['_id'] = str(plan['_id'])
+            if plan.get('gait_analysis_id'):
+                plan['gait_analysis_id'] = str(plan['gait_analysis_id'])
+        
+        return jsonify({
+            'success': True,
+            'has_plans': True,
+            'plans': plans,
+            'count': len(plans)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching current plan: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch exercise plan'
+        }), 500
+
+
+@app.route('/api/gait/demo', methods=['POST'])
+@token_required
+def save_demo_gait_data(current_user):
+    """
+    Save demo/fake gait data with real problem detection and exercise plan creation
+    Allows testing without hardware sensors
+    """
+    try:
+        from gait_problem_detector import GaitProblemDetector
+        
+        print("\n" + "🎭" + "="*60)
+        print("DEMO GAIT DATA SUBMISSION")
+        print("="*60)
+        
+        data = request.json
+        metrics = data.get('metrics', {})
+        
+        if not metrics:
+            return jsonify({
+                'success': False,
+                'message': 'No metrics provided'
+            }), 400
+        
+        print(f"  Steps: {metrics.get('step_count')}")
+        print(f"  Cadence: {metrics.get('cadence')} steps/min")
+        print(f"  Velocity: {metrics.get('velocity')} m/s")
+        
+        # Run REAL problem detection on the demo metrics
+        detector = GaitProblemDetector()
+        detected_problems = detector.detect_problems(metrics)
+        detected_problems = detector.prioritize_problems(detected_problems)
+        problem_summary = detector.generate_summary(detected_problems)
+        
+        # Calculate gait mobility score (0-100)
+        gait_score = detector.calculate_gait_score(metrics, detected_problems)
+        
+        print(f"✅ Problem detection complete: {len(detected_problems)} issues found")
+        print(f"📊 Gait Score: {gait_score['score']}/100 ({gait_score['grade']})")
+        for problem in detected_problems:
+            print(f"   - {problem.get('problem')} ({problem.get('severity')})")
+            print(f"     Has exercises key: {('exercises' in problem)}")
+            print(f"     Has recommendations key: {('recommendations' in problem)}")
+            if 'exercises' in problem:
+                print(f"     Exercises count: {len(problem.get('exercises', []))}")
+        
+        # Prepare gait document for database
+        gait_progress_collection = db['gaitprogresses']
+        
+        gait_document = {
+            'user_id': str(current_user['_id']),
+            'session_id': f"demo_{int(datetime.datetime.utcnow().timestamp())}",
+            'metrics': metrics,
+            'sensors_used': ['DEMO_DATA'],
+            'gait_phases': data.get('gait_phases', {
+                'stance_percentage': 60,
+                'swing_percentage': 40,
+                'double_support_percentage': 20
+            }),
+            'analysis_duration': data.get('analysis_duration', 45),
+            'data_quality': 'demo',
+            'detected_problems': detected_problems,
+            'problem_summary': problem_summary,
+            'gait_score': gait_score,
+            'created_at': utc_now(),
+            'updated_at': utc_now()
+        }
+        
+        # Save to database
+        insert_result = gait_progress_collection.insert_one(gait_document)
+        gait_id = str(insert_result.inserted_id)
+        
+        print(f"💾 Saved demo data to MongoDB")
+        print(f"   Document ID: {gait_id}")
+        
+        # Create exercise plan if problems detected
+        exercise_plan_created = False
+        plan_id = None
+        
+        if detected_problems and len(detected_problems) > 0:
+            try:
+                print(f"🏋️  Creating exercise plan for {len(detected_problems)} problems...")
+                
+                exercise_plans_collection = db['exerciseplans']
+                
+                # Extract exercises from detected problems
+                exercises = []
+                for problem in detected_problems:
+                    print(f"  Processing problem: {problem.get('problem')}")
+                    recommendations = problem.get('exercises') or problem.get('recommendations', [])
+                    print(f"    Found {len(recommendations) if recommendations else 0} recommendations")
+                    
+                    if recommendations:
+                        rec = recommendations[0]
+                        print(f"    First recommendation: {rec.get('name')}")
+                        exercises.append({
+                            'exercise_id': rec.get('id'),
+                            'exercise_name': rec.get('name'),
+                            'problem_targeted': problem.get('problem'),
+                            'severity': problem.get('severity'),
+                            'description': rec.get('description'),
+                            'duration': rec.get('duration'),
+                            'difficulty': rec.get('difficulty')
+                        })
+                
+                print(f"  Total exercises extracted: {len(exercises)}")
+                
+                if exercises:
+                    plan = {
+                        'user_id': str(current_user['_id']),
+                        'gait_analysis_id': insert_result.inserted_id,
+                        'detected_problems': detected_problems,
+                        'exercises': exercises,
+                        'total_exercises': len(exercises),
+                        'created_at': utc_now(),
+                        'updated_at': utc_now()
+                    }
+                    
+                    plan_result = exercise_plans_collection.insert_one(plan)
+                    plan_id = str(plan_result.inserted_id)
+                    exercise_plan_created = True
+                    
+                    print(f"✅ Exercise plan created: {plan_id}")
+                    print(f"   {len(exercises)} exercises recommended")
+                else:
+                    print(f"⚠️  No exercises extracted from problems - plan NOT created")
+                    print(f"   Problem detection may have returned empty exercises lists")
+                    
+            except Exception as plan_error:
+                logger.error(f"Failed to create exercise plan: {plan_error}", exc_info=True)
+                print(f"❌ Exercise plan creation failed: {str(plan_error)}")
+        
+        print("="*60 + "\n")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Demo gait data saved with real analysis',
+            'data': {
+                'gait_id': gait_id,
+                'metrics': metrics,
+                'detected_problems': detected_problems,
+                'problem_summary': problem_summary,
+                'gait_score': gait_score,
+                'exercise_plan_created': exercise_plan_created,
+                'plan_id': plan_id,
+                'timestamp': datetime.datetime.utcnow().isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Demo gait data error: {e}", exc_info=True)
+        print(f"❌ DEMO DATA ERROR: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to process demo data'
+        }), 500
+
+
+@app.route('/api/exercises/catalog', methods=['GET'])
+def get_exercise_catalog():
+    """
+    Get full exercise catalog with details
+    
+    Query Parameters:
+    - problem (optional): Filter by problem type (e.g., 'slow_cadence', 'asymmetric_gait')
+    - severity (optional): Filter by severity ('severe', 'moderate')
+    - detectable_only (optional): Return only sensor-detectable exercises (default: false)
+    """
+    try:
+        from pathlib import Path
+        import json
+        
+        # Load exercises database
+        exercises_file = Path(__file__).parent / 'datasets/physionet_gait/gait_exercises.json'
+        
+        if not exercises_file.exists():
+            return jsonify({
+                'success': False,
+                'message': 'Exercise catalog not found'
+            }), 404
+        
+        with open(exercises_file, 'r') as f:
+            exercises_db = json.load(f)
+        
+        # Get query parameters
+        problem_filter = request.args.get('problem')
+        severity_filter = request.args.get('severity')
+        detectable_only = request.args.get('detectable_only', 'false').lower() == 'true'
+        
+        # Filter exercises
+        filtered_exercises = []
+        
+        for problem_key, problem_data in exercises_db.items():
+            if problem_key == 'metadata':
+                continue
+            
+            # Apply problem filter
+            if problem_filter and problem_key != problem_filter:
+                continue
+            
+            for severity in ['severe', 'moderate']:
+                # Apply severity filter
+                if severity_filter and severity != severity_filter:
+                    continue
+                
+                if severity in problem_data:
+                    for exercise in problem_data[severity]:
+                        # Apply detectability filter
+                        if detectable_only and not exercise.get('sensor_validation', {}).get('detectable', False):
+                            continue
+                        
+                        # Add problem context
+                        exercise_copy = exercise.copy()
+                        exercise_copy['problem_category'] = problem_key
+                        exercise_copy['problem_severity'] = severity
+                        filtered_exercises.append(exercise_copy)
+        
+        return jsonify({
+            'success': True,
+            'metadata': exercises_db.get('metadata', {}),
+            'count': len(filtered_exercises),
+            'exercises': filtered_exercises
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching exercise catalog: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch exercise catalog'
         }), 500
 
 

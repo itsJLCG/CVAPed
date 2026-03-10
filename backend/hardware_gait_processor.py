@@ -169,7 +169,11 @@ class HardwareGaitProcessor:
                     detected_problems = self.problem_detector.prioritize_problems(detected_problems)
                     problem_summary = self.problem_detector.generate_summary(detected_problems)
                     
+                    # Calculate gait mobility score (0-100)
+                    gait_score = self.problem_detector.calculate_gait_score(user_metrics, detected_problems)
+                    
                     print(f"  Found {len(detected_problems)} problem(s)")
+                    print(f"  📊 Gait Score: {gait_score['score']}/100 ({gait_score['grade']})")
                     if problem_summary.get('severe_count', 0) > 0:
                         print(f"  ⚠️ {problem_summary['severe_count']} SEVERE issue(s)")
                     if problem_summary.get('moderate_count', 0) > 0:
@@ -199,7 +203,8 @@ class HardwareGaitProcessor:
                     'analysis_duration': round(analysis_duration, 2),
                     'data_quality': data_quality,
                     'detected_problems': detected_problems,
-                    'problem_summary': problem_summary
+                    'problem_summary': problem_summary,
+                    'gait_score': gait_score if 'gait_score' in locals() else None
                 }
             }
             
@@ -328,6 +333,7 @@ class HardwareGaitProcessor:
         """
         Enhanced step detection using FSR pressure sensors
         FSR voltage drop = heel strike = step detected
+        Automatically falls back to IMU if FSR sensors are stuck in contact
         
         Args:
             accel_data: numpy array of acceleration data
@@ -353,6 +359,17 @@ class HardwareGaitProcessor:
         
         print(f"  LEFT_HEEL: {len(left_heel)} samples, range: {left_heel.min():.2f}V - {left_heel.max():.2f}V")
         print(f"  RIGHT_HEEL: {len(right_heel)} samples, range: {right_heel.min():.2f}V - {right_heel.max():.2f}V")
+        
+        # ✅ NEW: Check if FSR sensors are stuck (low variance = constant contact)
+        left_variance = np.var(left_heel)
+        right_variance = np.var(right_heel)
+        print(f"  LEFT variance: {left_variance:.4f}, RIGHT variance: {right_variance:.4f}")
+        
+        # If variance is too low, sensors are stuck - fall back to IMU
+        MIN_VARIANCE_THRESHOLD = 0.01  # Minimum voltage variance expected during walking
+        if left_variance < MIN_VARIANCE_THRESHOLD and right_variance < MIN_VARIANCE_THRESHOLD:
+            print("  ⚠️  FSR sensors stuck (constant contact detected), falling back to IMU detection")
+            return self._detect_steps_acceleration(accel_data, timestamps)
         
         # Detect steps from FSR voltage drops
         # FSR: High voltage = no pressure, Low voltage = pressure

@@ -14,6 +14,8 @@ function Prescription({ onLogout }) {
   useEffect(() => {
     if (selectedCategory === 'speech') {
       fetchPrescriptiveAnalysis();
+    } else if (selectedCategory === 'physical') {
+      fetchGaitPrescriptiveAnalysis();
     } else {
       setLoading(false);
     }
@@ -28,6 +30,20 @@ function Prescription({ onLogout }) {
     } catch (err) {
       console.error('Error fetching prescriptive analysis:', err);
       setError(err.response?.data?.message || 'Failed to load prescriptive analysis');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchGaitPrescriptiveAnalysis = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await prescriptionService.getGaitAnalysis();
+      setAnalysis(response.analysis);
+    } catch (err) {
+      console.error('Error fetching gait prescriptive analysis:', err);
+      setError(err.response?.data?.message || 'Failed to load gait prescriptive analysis');
     } finally {
       setLoading(false);
     }
@@ -71,6 +87,10 @@ function Prescription({ onLogout }) {
       .join(' ');
   };
 
+  const getItemName = (item) => {
+    return item.therapy || item.parameter || '';
+  };
+
   if (loading) {
     return (
       <div className="blank-page">
@@ -80,42 +100,6 @@ function Prescription({ onLogout }) {
             <div className="loading-state">
               <div className="spinner-circle"></div>
               <p>Analyzing your therapy data...</p>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (selectedCategory === 'physical') {
-    return (
-      <div className="blank-page">
-        <Header onLogout={onLogout} />
-        <main className="blank-page-content">
-          <div className="prescription-container">
-            <div className="coming-soon-message">
-              <div className="coming-soon-icon">🚧</div>
-              <h2>Physical Therapy Prescription</h2>
-              <h3>Coming Soon</h3>
-              <p>AI-powered prescriptive therapy recommendations for physical rehabilitation are currently under development.</p>
-              <p className="coming-soon-detail">
-                This feature will provide personalized exercise plans, therapy prioritization, 
-                and intelligent scheduling based on your gait analysis and mobility assessments.
-              </p>
-              <div className="coming-soon-features">
-                <div className="feature-item">
-                  <i className="fas fa-dumbbell"></i>
-                  <span>Personalized Exercise Plans</span>
-                </div>
-                <div className="feature-item">
-                  <i className="fas fa-clipboard-list"></i>
-                  <span>Therapy Prioritization</span>
-                </div>
-                <div className="feature-item">
-                  <i className="fas fa-calendar-alt"></i>
-                  <span>Smart Scheduling</span>
-                </div>
-              </div>
             </div>
           </div>
         </main>
@@ -173,11 +157,14 @@ function Prescription({ onLogout }) {
                 <i className="fas fa-clipboard-check"></i>
               </div>
               <div className="header-text">
-                <h1>Therapy Prescription Plan</h1>
+                <h1>{selectedCategory === 'physical' ? 'Gait Therapy' : 'Speech Therapy'} Prescription Plan</h1>
                 <p>Personalized recommendations based on your progress</p>
               </div>
             </div>
-            <button onClick={fetchPrescriptiveAnalysis} className="refresh-btn">
+            <button 
+              onClick={selectedCategory === 'physical' ? fetchGaitPrescriptiveAnalysis : fetchPrescriptiveAnalysis} 
+              className="refresh-btn"
+            >
               <i className="fas fa-sync-alt"></i>
             </button>
           </div>
@@ -194,12 +181,13 @@ function Prescription({ onLogout }) {
                   <h3>{formatTherapyName(analysis.bottleneck_analysis.bottleneck)}</h3>
                 </div>
                 <p>{analysis.bottleneck_analysis.explanation}</p>
-                {analysis.bottleneck_analysis.affected_therapies.length > 0 && (
+                {(analysis.bottleneck_analysis.affected_therapies?.length > 0 || 
+                  analysis.bottleneck_analysis.affected_parameters?.length > 0) && (
                   <div className="blocking-areas">
                     <span className="blocking-label">Blocking:</span>
-                    {analysis.bottleneck_analysis.affected_therapies.map((therapy, index) => (
+                    {(analysis.bottleneck_analysis.affected_therapies || analysis.bottleneck_analysis.affected_parameters || []).map((item, index) => (
                       <span key={index} className="blocking-chip">
-                        {formatTherapyName(therapy)}
+                        {formatTherapyName(item)}
                       </span>
                     ))}
                   </div>
@@ -225,7 +213,7 @@ function Prescription({ onLogout }) {
                         className={`fas ${getPriorityIcon(priority.priority)}`}
                         style={{ color: getPriorityColor(priority.priority) }}
                       ></i>
-                      <h3>{formatTherapyName(priority.therapy)}</h3>
+                      <h3>{formatTherapyName(getItemName(priority))}</h3>
                       <span 
                         className="priority-label"
                         style={{ 
@@ -281,7 +269,9 @@ function Prescription({ onLogout }) {
                 >
                   <div className="day-header-row">
                     <span className="day-name">{day.day}</span>
-                    <span className="trial-badge">{day.total_trials}×</span>
+                    <span className="trial-badge">
+                      {day.total_trials ? `${day.total_trials}×` : `${day.total_duration} min`}
+                    </span>
                   </div>
                   
                   {selectedDay === index && (
@@ -289,11 +279,13 @@ function Prescription({ onLogout }) {
                       {day.exercises.map((exercise, exIndex) => (
                         <div key={exIndex} className="exercise-row">
                           <div className="exercise-left">
-                            <span className="exercise-name">{exercise.therapy}</span>
+                            <span className="exercise-name">{exercise.parameter || exercise.therapy}</span>
                             <span className="exercise-focus">{exercise.focus}</span>
                           </div>
                           <div className="exercise-right">
-                            <span className="exercise-count">{exercise.trials}×</span>
+                            <span className="exercise-count">
+                              {exercise.trials ? `${exercise.trials}×` : exercise.duration}
+                            </span>
                             <span 
                               className="exercise-priority-dot"
                               style={{ backgroundColor: getPriorityColor(exercise.priority) }}
@@ -322,7 +314,7 @@ function Prescription({ onLogout }) {
                   <div key={index} className="sequence-compact-item">
                     <span className="sequence-num">{index + 1}</span>
                     <div className="sequence-text">
-                      <strong>{formatTherapyName(item.therapy)}</strong>
+                      <strong>{formatTherapyName(getItemName(item))}</strong>
                       <p>{item.reason}</p>
                     </div>
                   </div>
@@ -347,6 +339,24 @@ function Prescription({ onLogout }) {
               </div>
             </div>
           </div>
+
+          {/* Key Insights Section */}
+          {analysis.insights && analysis.insights.length > 0 && (
+            <div className="insights-section">
+              <h3>
+                <i className="fas fa-lightbulb"></i>
+                Clinical Insights
+              </h3>
+              <div className="insights-list">
+                {analysis.insights.map((insight, index) => (
+                  <div key={index} className="insight-item">
+                    <i className="fas fa-info-circle"></i>
+                    <p>{insight}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Motivational Footer */}
           <div className="motivation-footer">

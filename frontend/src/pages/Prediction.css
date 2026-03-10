@@ -2,9 +2,15 @@
 
 .prediction-container {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 12px 24px;
+  padding: 16px 32px;
+}
+
+/* Full width for gait clinical container */
+.prediction-container:has(.gait-clinical-container) {
+  max-width: 100%;
+  padding: 0;
 }
 
 /* Header */
@@ -243,6 +249,10 @@
 
 .section-icon.expressive {
   background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+}
+
+.section-icon.gait {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
 }
 
 .section-title h3 {
@@ -546,6 +556,592 @@
   font-weight: 500;
 }
 
+/* ========================================
+   CLINICAL GAIT PREDICTION STYLES
+   Professional, detailed, space-efficient
+   ======================================== */
+
+.gait-clinical-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 60px;
+}
+
+/* Clinical Header */
+.clinical-header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: white;
+  padding: 20px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.2);
+}
+
+.clinical-title-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.clinical-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.clinical-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.clinical-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  opacity: 0.95;
+}
+
+/* Main Prediction Section */
+.clinical-prediction-main {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.prediction-primary {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+}
+
+.prediction-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.prediction-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.days-number {
+  font-size: 48px;
+  font-weight: 700;
+  color: #1e40af;
+  line-height: 1;
+}
+
+.days-unit {
+  font-size: 18px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.weeks-conversion {
+  font-size: 14px;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+
+.confidence-indicator {
+  margin-top: 8px;
+}
+
+.confidence-bar-container {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.confidence-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.confidence-text {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* Methodology Section */
+.prediction-methodology {
+  padding: 16px;
+  background: #fefce8;
+  border-radius: 8px;
+  border-left: 4px solid #f59e0b;
+}
+
+.prediction-methodology h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #78350f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.methodology-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.method-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.method-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.method-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #451a03;
+}
+
+/* Data Section */
+.clinical-data-section {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.clinical-data-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-description {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.data-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.data-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.data-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.data-card i {
+  font-size: 32px;
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.data-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.data-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Feature Importance */
+.feature-importance-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 16px;
+}
+
+.feature-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feature-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  transition: transform 0.2s;
+}
+
+.feature-bar:hover {
+  transform: translateX(4px);
+}
+
+.feature-name {
+  font-weight: 700;
+}
+
+.feature-weight {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.feature-explanation {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  padding-left: 8px;
+  line-height: 1.4;
+}
+
+/* Clinical Metrics Grid */
+.clinical-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.clinical-metric-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 18px;
+  transition: all 0.2s;
+}
+
+.clinical-metric-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-header i {
+  font-size: 18px;
+  color: #3b82f6;
+}
+
+.metric-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex: 1;
+}
+
+.healthy-badge {
+  background: #10b981;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.metric-values {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.current-val {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.unit {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.metric-bar-clinical {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.bar-fill-clinical {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.metric-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.deficit {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Clinical Note */
+.clinical-note {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #1e40af;
+}
+
+.clinical-note i {
+  font-size: 16px;
+  color: #3b82f6;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.clinical-note strong {
+  font-weight: 700;
+}
+
+/* Responsive */
+@media (max-width: 1400px) {
+  .clinical-metrics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .clinical-prediction-main {
+    grid-template-columns: 1fr;
+  }
+  
+  .data-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .clinical-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .gait-clinical-container {
+    padding: 0 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .clinical-prediction-main {
+    padding: 16px;
+  }
+  
+  .clinical-data-section {
+    padding: 16px;
+  }
+  
+  .prediction-container {
+    padding: 12px 16px;
+  }
+  
+  .gait-clinical-container {
+    padding: 0 16px;
+  }
+  
+  .methodology-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .data-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .clinical-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .feature-importance-list {
+    grid-template-columns: 1fr;
+  }
+  
+  .days-number {
+    font-size: 36px;
+  }
+  
+  .blank-page-content:has(.gait-clinical-container) {
+    padding: 1rem;
+  }
+}
+
+/* Gait Metrics Grid */
+.metric-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.metric-card:hover {
+  background: #f1f5f9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.metric-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  color: white;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.metric-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metric-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.current-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.metric-unit {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.metric-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.metric-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #06b6d4 0%, #0891b2 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.metric-target {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.coming-soon-detail {
+  font-size: 13px;
+  color: #64748b;
+  margin: 8px 0 0 0;
+  line-height: 1.6;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .therapies-list {
@@ -590,6 +1186,10 @@
   }
   
   .therapies-list {
+    grid-template-columns: 1fr;
+  }
+  
+  .metric-progress-grid {
     grid-template-columns: 1fr;
   }
 }

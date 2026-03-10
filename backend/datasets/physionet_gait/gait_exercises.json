@@ -1,0 +1,1463 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "last_updated": "2026-03-03",
+    "source": "Evidence-based physical therapy for post-stroke gait rehabilitation",
+    "references": [
+      "PhysioNet Gait Research Database (2023)",
+      "Journal of NeuroEngineering and Rehabilitation - Gait Training Methods",
+      "American Physical Therapy Association - Stroke Rehabilitation Guidelines",
+      "Clinical Rehabilitation - Post-Stroke Gait Interventions Meta-Analysis"
+    ],
+    "sensor_requirements": {
+      "required": ["KNEE_IMU", "ANKLE_IMU", "FOOT_FSR"],
+      "optional": ["WAIST_IMU"],
+      "note": "All exercises designed for bilateral leg sensor setup"
+    }
+  },
+  
+  "slow_cadence": {
+    "problem_description": "Walking pace below normal range (cadence < 95 steps/min)",
+    "target_improvement": "Increase cadence by 10-15 steps/min in 4-6 weeks",
+    "clinical_priority": "high",
+    
+    "severe": [
+      {
+        "id": "cadence_001",
+        "name": "Metronome-Paced Walking",
+        "clinical_evidence": {
+          "effectiveness": "Grade A - Strong evidence",
+          "studies": "Thaut et al. (2007) - Rhythmic Auditory Stimulation",
+          "success_rate": "78% of patients show 10+ steps/min improvement",
+          "recommended_duration": "4-6 weeks"
+        },
+        "description": "Walk to the beat of a metronome to increase step frequency using auditory cues",
+        "target_metric": "cadence",
+        "expected_improvement": "10-15 steps/min in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Metronome app (free)", "Clear walking path 10+ meters"],
+        "duration_per_session": "15 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": "5 minutes walking",
+        
+        "instructions": [
+          "Download a free metronome app on your phone",
+          "Set metronome to 60 BPM (beats per minute) to start",
+          "Take one step with each beat - left foot on one beat, right foot on next",
+          "Walk for 5 minutes continuously",
+          "Rest 2 minutes between sets",
+          "Complete 3 sets total",
+          "Increase by 5 BPM each week (Week 2: 65 BPM, Week 3: 70 BPM)",
+          "Goal: Reach 100-110 BPM by week 8"
+        ],
+        
+        "precautions": [
+          "Use walker or cane if you have balance issues",
+          "Stop if you feel dizzy or short of breath",
+          "Start with slow tempo and gradually increase",
+          "Practice in safe area with support available",
+          "Wear non-slip shoes"
+        ],
+        
+        "progression": {
+          "week_1_2": "60 BPM, 15 min total, use support",
+          "week_3_4": "70 BPM, 18 min total, reduce support",
+          "week_5_6": "80 BPM, 20 min total, no support",
+          "week_7_8": "90-100 BPM, 20 min total, add obstacles"
+        },
+        
+        "benefits": [
+          "Increases walking speed and cadence",
+          "Improves rhythm and timing",
+          "Reduces shuffling gait pattern",
+          "Enhances motor control and coordination",
+          "Improves cardiovascular endurance"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["KNEE_IMU", "ANKLE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "cadence": {
+              "method": "Count steps per minute from FSR heel strikes",
+              "success_criteria": "Within 5 steps/min of target BPM",
+              "calculation": "FSR heel strikes in 60 seconds"
+            },
+            "step_count": {
+              "method": "Count distinct FSR pressure peaks",
+              "success_criteria": "≥ 90% of metronome beats",
+              "calculation": "FSR peaks per minute"
+            },
+            "symmetry": {
+              "method": "Compare left vs right step timing",
+              "success_criteria": "Symmetry index > 0.85",
+              "calculation": "(left_steps / right_steps) ratio"
+            },
+            "consistency": {
+              "method": "Standard deviation of inter-step intervals",
+              "success_criteria": "SD < 100ms",
+              "calculation": "Std dev of FSR peak intervals"
+            }
+          },
+          "real_time_feedback": [
+            "Too slow - increase pace",
+            "Good rhythm - keep it up!",
+            "Steps not matching beat - listen carefully",
+            "Left leg lagging - focus on symmetry"
+          ]
+        }
+      },
+      
+      {
+        "id": "cadence_002",
+        "name": "High Knee Marching",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Pohl et al. (2002) - Task-specific training for stroke",
+          "success_rate": "65% show improved cadence and knee flexion",
+          "recommended_duration": "4 weeks"
+        },
+        "description": "March in place lifting knees to hip level to strengthen hip flexors and increase step frequency",
+        "target_metric": "cadence",
+        "expected_improvement": "8-12 steps/min in 4 weeks",
+        "difficulty": "intermediate",
+        "equipment": ["Sturdy chair or counter for support"],
+        "duration_per_session": "10 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": 20,
+        
+        "instructions": [
+          "Stand tall with feet hip-width apart",
+          "Hold onto chair or counter with one hand for balance",
+          "Lift right knee up to hip height (90-degree angle)",
+          "Lower right foot and immediately lift left knee",
+          "Continue alternating knees in a marching motion",
+          "Gradually increase speed while maintaining height",
+          "Do 20 marches per leg, rest 1 minute, repeat 3 times"
+        ],
+        
+        "precautions": [
+          "Keep back straight - don't lean forward",
+          "If knee pain occurs, reduce height of knee lift",
+          "Stop if you lose balance or feel unsteady",
+          "Use support until you feel confident"
+        ],
+        
+        "progression": {
+          "week_1": "20 reps × 3 sets with support, slow pace",
+          "week_2": "25 reps × 3 sets with light support, moderate pace",
+          "week_3": "30 reps × 3 sets without support, moderate pace",
+          "week_4": "30 reps × 4 sets, add arm swings, faster pace"
+        },
+        
+        "benefits": [
+          "Strengthens hip flexors and quadriceps",
+          "Improves knee lift during walking",
+          "Increases step frequency and cadence",
+          "Enhances balance and coordination",
+          "Reduces foot drag"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["KNEE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "knee_lift_angle": {
+              "method": "Calculate knee flexion from IMU gyroscope",
+              "success_criteria": "Peak angle ≥ 70 degrees (target 90°)",
+              "calculation": "Integrate angular velocity during lift phase"
+            },
+            "repetition_count": {
+              "method": "Count knee flexion peaks per leg",
+              "success_criteria": "≥ target reps (e.g., 20 per leg)",
+              "calculation": "FSR heel strikes + knee angle peaks"
+            },
+            "lift_height_consistency": {
+              "method": "Standard deviation of peak knee angles",
+              "success_criteria": "SD < 15 degrees",
+              "calculation": "Std dev of all knee flexion peaks"
+            },
+            "tempo": {
+              "method": "Time between consecutive lifts",
+              "success_criteria": "1-2 seconds per lift",
+              "calculation": "Interval between knee angle peaks"
+            },
+            "symmetry": {
+              "method": "Compare left vs right knee lift angles",
+              "success_criteria": "Within 10 degrees",
+              "calculation": "Abs(left_avg - right_avg)"
+            }
+          },
+          "real_time_feedback": [
+            "Lift knee higher - current: 60°, target: 90°",
+            "Great form! Knee height consistent",
+            "Right knee not lifting as high as left",
+            "Slow down - maintain quality over speed",
+            "10 reps completed - keep going!"
+          ]
+        }
+      },
+      
+      {
+        "id": "cadence_003",
+        "name": "Fast Stepping Drills",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Lamontagne et al. (2000) - Gait velocity training",
+          "success_rate": "70% show improvements in maximum walking speed",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Quick stepping exercises in place or forward to improve step frequency and reaction time",
+        "target_metric": "cadence",
+        "expected_improvement": "10-15 steps/min in 6 weeks",
+        "difficulty": "intermediate",
+        "equipment": ["None - clear space required"],
+        "duration_per_session": "10 minutes",
+        "frequency": "4 times per week",
+        "sets": 4,
+        "reps_per_set": "10 quick steps",
+        
+        "instructions": [
+          "Stand with feet together near a wall or railing",
+          "Take 10 quick small steps forward as fast as you safely can",
+          "Focus on speed, not distance",
+          "Steps should be rapid and continuous",
+          "Rest 30-45 seconds between sets",
+          "Repeat 4 times"
+        ],
+        
+        "precautions": [
+          "Ensure clear path ahead (at least 3 meters)",
+          "Practice near wall or railing for safety",
+          "Stop if you feel unstable or dizzy",
+          "Do not sacrifice form for speed"
+        ],
+        
+        "progression": {
+          "week_1_2": "10 steps × 4 sets, near support",
+          "week_3_4": "15 steps × 4 sets, away from support",
+          "week_5_6": "20 steps × 5 sets, faster pace"
+        },
+        
+        "benefits": [
+          "Increases maximum walking speed",
+          "Improves quick stepping ability",
+          "Enhances reaction time and agility",
+          "Boosts confidence in faster walking"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR", "ANKLE_IMU"],
+          "validation_metrics": {
+            "steps_per_set": {
+              "method": "Count FSR heel strikes in 10-second interval",
+              "success_criteria": "≥ 10 steps",
+              "calculation": "FSR pressure peaks during exercise"
+            },
+            "step_frequency": {
+              "method": "Calculate steps per second",
+              "success_criteria": "≥ 1.5 steps/second (fast)",
+              "calculation": "Total steps / duration in seconds"
+            },
+            "interval_consistency": {
+              "method": "Variation in step timing",
+              "success_criteria": "CV < 20% (coefficient of variation)",
+              "calculation": "(SD / mean) × 100"
+            }
+          },
+          "real_time_feedback": [
+            "Speed up! Current: 1.2 steps/s, target: 1.5",
+            "Excellent pace maintained!",
+            "8/10 steps completed",
+            "Rest now - 30 seconds"
+          ]
+        }
+      }
+    ],
+    
+    "moderate": [
+      {
+        "id": "cadence_004",
+        "name": "Interval Walking",
+        "clinical_evidence": {
+          "effectiveness": "Grade A - Strong evidence",
+          "studies": "Macko et al. (2005) - Interval training for stroke rehabilitation",
+          "success_rate": "82% improvement in walking endurance and speed",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Alternate between normal and fast walking speeds to build endurance and increase maximum cadence",
+        "target_metric": "cadence",
+        "expected_improvement": "5-8 steps/min in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Walking path or hallway"],
+        "duration_per_session": "15 minutes",
+        "frequency": "4 times per week",
+        "sets": 5,
+        "reps_per_set": "1 minute fast, 2 minutes normal",
+        
+        "instructions": [
+          "Warm up with 2 minutes of normal walking",
+          "Walk at comfortable pace for 2 minutes",
+          "Walk as fast as you safely can for 1 minute",
+          "Return to comfortable pace for 2 minutes",
+          "Repeat fast-normal intervals 5 times",
+          "Cool down with 2 minutes slow walking"
+        ],
+        
+        "precautions": [
+          "Stay within comfortable exertion level",
+          "Use assistive device if normally required",
+          "Stop if experiencing chest pain or severe breathlessness"
+        ],
+        
+        "progression": {
+          "week_1_2": "1 min fast / 2 min normal × 4 sets",
+          "week_3_4": "1 min fast / 1.5 min normal × 5 sets",
+          "week_5_6": "1.5 min fast / 1 min normal × 5 sets"
+        },
+        
+        "benefits": [
+          "Builds cardiovascular endurance",
+          "Increases maximum walking speed",
+          "Improves sustained walking ability",
+          "Reduces fatigue during daily activities"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR", "KNEE_IMU", "ANKLE_IMU"],
+          "validation_metrics": {
+            "interval_detection": {
+              "method": "Identify fast vs normal pace periods",
+              "success_criteria": "Cadence increases ≥ 20% during fast intervals",
+              "calculation": "Compare cadence in fast vs normal windows"
+            },
+            "fast_cadence": {
+              "method": "Average cadence during fast intervals",
+              "success_criteria": "≥ 10 steps/min above baseline",
+              "calculation": "Mean cadence in fast periods"
+            },
+            "interval_completion": {
+              "method": "Count completed fast intervals",
+              "success_criteria": "≥ 4 intervals completed",
+              "calculation": "Number of detected speed increases"
+            }
+          },
+          "real_time_feedback": [
+            "Fast interval starting - speed up!",
+            "Good! Cadence increased to 105 steps/min",
+            "Recovery interval - return to normal pace",
+            "3/5 intervals completed"
+          ]
+        }
+      }
+    ]
+  },
+  
+  "asymmetric_gait": {
+    "problem_description": "Uneven gait pattern with imbalanced weight distribution or unequal step timing",
+    "target_improvement": "Improve symmetry index from < 0.80 to > 0.90 in 6-8 weeks",
+    "clinical_priority": "high",
+    
+    "severe": [
+      {
+        "id": "symmetry_001",
+        "name": "Single-Leg Stance Training",
+        "clinical_evidence": {
+          "effectiveness": "Grade A - Strong evidence",
+          "studies": "Mercer et al. (2009) - Balance training for stroke",
+          "success_rate": "75% show improved weight distribution",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Stand on affected leg to improve strength and balance on weaker side",
+        "target_metric": "gait_symmetry",
+        "expected_improvement": "Symmetry index +0.10-0.15 in 6 weeks",
+        "difficulty": "intermediate",
+        "equipment": ["Sturdy chair or counter for support"],
+        "duration_per_session": "12 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": "30 seconds per leg",
+        
+        "instructions": [
+          "Stand next to sturdy chair or counter",
+          "Hold on lightly with one hand",
+          "Lift affected (weaker) leg off ground about 6 inches",
+          "Balance on standing leg for 30 seconds",
+          "Lower leg, rest 15 seconds",
+          "Repeat with other leg for comparison",
+          "Complete 3 sets per leg"
+        ],
+        
+        "precautions": [
+          "Keep support within reach at all times",
+          "Do not hold breath - breathe normally",
+          "Stop if severe pain or instability occurs"
+        ],
+        
+        "progression": {
+          "week_1_2": "30 sec × 3 sets, holding support",
+          "week_3_4": "45 sec × 3 sets, light finger touch",
+          "week_5_6": "60 sec × 3 sets, no support"
+        },
+        
+        "benefits": [
+          "Strengthens weaker leg",
+          "Improves single-leg balance",
+          "Enhances weight bearing on affected side",
+          "Reduces limping during walking"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR", "KNEE_IMU", "ANKLE_IMU"],
+          "validation_metrics": {
+            "weight_bearing": {
+              "method": "FSR total pressure on standing leg",
+              "success_criteria": "≥ 90% of body weight on one foot",
+              "calculation": "Sum of heel+mid+toe FSR values"
+            },
+            "stance_duration": {
+              "method": "Time with full weight on one leg",
+              "success_criteria": "≥ target duration (e.g., 30 seconds)",
+              "calculation": "Duration of FSR > threshold"
+            },
+            "stability": {
+              "method": "Ankle IMU sway (accelerometer variance)",
+              "success_criteria": "SD < 0.5 m/s² (minimal sway)",
+              "calculation": "Std dev of ankle acceleration"
+            },
+            "affected_vs_unaffected": {
+              "method": "Compare stance time both legs",
+              "success_criteria": "Affected leg ≥ 80% of unaffected",
+              "calculation": "Affected duration / unaffected duration"
+            }
+          },
+          "real_time_feedback": [
+            "Good balance! 15 seconds remaining",
+            "Swaying detected - use support if needed",
+            "Affected leg: 28s, Unaffected: 30s - great improvement!",
+            "Set complete - rest before next"
+          ]
+        }
+      },
+      
+      {
+        "id": "symmetry_002",
+        "name": "Weight-Shifting Drills",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Cheng et al. (2001) - Weight shifting for stroke rehabilitation",
+          "success_rate": "68% improve lateral weight shift",
+          "recommended_duration": "4 weeks"
+        },
+        "description": "Shift weight side-to-side to improve control and awareness of weight distribution",
+        "target_metric": "gait_symmetry",
+        "expected_improvement": "Symmetry index +0.08-0.12 in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Parallel bars or two chairs for support"],
+        "duration_per_session": "10 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": 15,
+        
+        "instructions": [
+          "Stand between parallel bars or holding two chairs",
+          "Start with weight evenly distributed",
+          "Slowly shift all weight to right leg",
+          "Lift left foot slightly off ground (1 inch)",
+          "Hold for 3 seconds",
+          "Shift weight to left leg",
+          "Lift right foot slightly off ground",
+          "Hold for 3 seconds",
+          "Repeat 15 times per side"
+        ],
+        
+        "precautions": [
+          "Keep shifts slow and controlled",
+          "Maintain upright posture",
+          "Use support as needed"
+        ],
+        
+        "progression": {
+          "week_1": "15 shifts × 3 sets, 3-sec holds, full support",
+          "week_2": "20 shifts × 3 sets, 5-sec holds, light support",
+          "week_3": "20 shifts × 3 sets, 5-sec holds, fingertip support",
+          "week_4": "25 shifts × 3 sets, 8-sec holds, no support"
+        },
+        
+        "benefits": [
+          "Improves weight distribution awareness",
+          "Enhances lateral balance control",
+          "Strengthens hip abductors",
+          "Prepares for dynamic walking"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR"],
+          "validation_metrics": {
+            "weight_transfer_completeness": {
+              "method": "FSR pressure comparison left vs right",
+              "success_criteria": "≥ 85% weight on target leg",
+              "calculation": "Target leg FSR / (left FSR + right FSR)"
+            },
+            "shift_count": {
+              "method": "Count weight transfers",
+              "success_criteria": "≥ 15 shifts per leg",
+              "calculation": "Number of FSR primary weight changes"
+            },
+            "hold_duration": {
+              "method": "Time at peak weight on each leg",
+              "success_criteria": "≥ 3 seconds",
+              "calculation": "Duration FSR > 85% threshold"
+            },
+            "symmetry_score": {
+              "method": "Balance of left vs right weight bearing time",
+              "success_criteria": "Ratio 0.85-1.15 (within 15%)",
+              "calculation": "Left total time / right total time"
+            }
+          },
+          "real_time_feedback": [
+            "Shift more weight to right leg",
+            "Perfect! Holding steady on left",
+            "10/15 shifts completed",
+            "Good balance between sides"
+          ]
+        }
+      },
+      
+      {
+        "id": "symmetry_003",
+        "name": "Mirror Walking Practice",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Altschuler et al. (1999) - Mirror therapy for rehabilitation",
+          "success_rate": "62% show improved symmetry awareness",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Walk while watching yourself in mirror to improve visual feedback on gait symmetry",
+        "target_metric": "gait_symmetry",
+        "expected_improvement": "Symmetry index +0.05-0.10 in 6 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Full-length mirror", "Walking space parallel to mirror"],
+        "duration_per_session": "15 minutes",
+        "frequency": "4 times per week",
+        "sets": 4,
+        "reps_per_set": "Walk 10 steps forward and back",
+        
+        "instructions": [
+          "Position yourself to walk parallel to full-length mirror",
+          "Start 2 meters from mirror",
+          "Walk slowly forward watching your reflection",
+          "Focus on equal step lengths and timing",
+          "Observe knee height, arm swing, posture",
+          "Walk 10 steps, turn, walk back 10 steps",
+          "Rest 1 minute between sets",
+          "Repeat 4 times"
+        ],
+        
+        "precautions": [
+          "Use assistive device if normally required",
+          "Focus on mirror briefly to avoid dizziness",
+          "Have support nearby"
+        ],
+        
+        "progression": {
+          "week_1_2": "10 steps × 4 sets, very slow pace",
+          "week_3_4": "15 steps × 4 sets, slow pace",
+          "week_5_6": "20 steps × 5 sets, normal pace"
+        },
+        
+        "benefits": [
+          "Increases awareness of gait asymmetry",
+          "Provides immediate visual feedback",
+          "Helps correct compensatory patterns",
+          "Improves body awareness"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["KNEE_IMU", "ANKLE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "step_length_symmetry": {
+              "method": "Compare stride distances left vs right",
+              "success_criteria": "Ratio 0.90-1.10",
+              "calculation": "Integration of ankle velocity between steps"
+            },
+            "step_time_symmetry": {
+              "method": "Compare left vs right stance times",
+              "success_criteria": "Within 10% of each other",
+              "calculation": "Left step duration / right step duration"
+            },
+            "knee_lift_symmetry": {
+              "method": "Compare peak knee flexion angles",
+              "success_criteria": "Within 15 degrees",
+              "calculation": "Abs(left peak - right peak)"
+            }
+          },
+          "real_time_feedback": [
+            "Left step shorter - extend stride",
+            "Good symmetry! Keep it up",
+            "Right leg spending more time on ground",
+            "Knee heights now balanced"
+          ]
+        }
+      }
+    ],
+    
+    "moderate": [
+      {
+        "id": "symmetry_004",
+        "name": "Step-Up Exercises (Affected Side)",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Eng et al. (2002) - Task-specific training for stroke",
+          "success_rate": "71% show improved affected leg strength",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Step up onto low platform with affected leg to build strength and confidence",
+        "target_metric": "gait_symmetry",
+        "expected_improvement": "Improved push-off strength, better step symmetry",
+        "difficulty": "intermediate",
+        "equipment": ["4-6 inch step or platform", "Railing or sturdy chair"],
+        "duration_per_session": "10 minutes",
+        "frequency": "4 times per week",
+        "sets": 3,
+        "reps_per_set": 10,
+        
+        "instructions": [
+          "Stand facing low step with railing nearby",
+          "Place affected (weaker) foot on step",
+          "Push through affected leg to step up",
+          "Bring other leg up to meet it",
+          "Step back down with other leg first",
+          "Affected leg remains on step initially",
+          "Lower affected leg back to ground",
+          "Repeat 10 times, rest 1 minute, do 3 sets"
+        ],
+        
+        "precautions": [
+          "Keep railing within reach",
+          "Start with low step (4 inches)",
+          "Do not twist while stepping",
+          "Stop if knee pain occurs"
+        ],
+        
+        "progression": {
+          "week_1_2": "4-inch step, 10 reps × 3 sets, using support",
+          "week_3_4": "4-inch step, 12 reps × 3 sets, light support",
+          "week_5_6": "6-inch step, 10 reps × 3 sets, no support"
+        },
+        
+        "benefits": [
+          "Strengthens quadriceps and glutes on affected side",
+          "Improves push-off power during walking",
+          "Builds confidence in affected leg",
+          "Enhances stair climbing ability"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["KNEE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "repetition_count": {
+              "method": "Detect knee extension peaks on affected leg",
+              "success_criteria": "≥ 10 reps",
+              "calculation": "Count knee angle peaks during step-up"
+            },
+            "knee_extension_angle": {
+              "method": "Measure knee straightening during step-up",
+              "success_criteria": "≥ 160 degrees (nearly full extension)",
+              "calculation": "Peak knee angle during standing phase"
+            },
+            "weight_transfer": {
+              "method": "FSR shows full weight on affected leg during step-up",
+              "success_criteria": "≥ 90% body weight on affected foot",
+              "calculation": "Peak FSR pressure on affected side"
+            },
+            "exercise_tempo": {
+              "method": "Time per repetition",
+              "success_criteria": "3-5 seconds per rep (controlled)",
+              "calculation": "Time between consecutive knee peaks"
+            }
+          },
+          "real_time_feedback": [
+            "Push through affected leg - don't pull with arms",
+            "Good form! Full extension achieved",
+            "7/10 reps completed",
+            "Slow down for better control"
+          ]
+        }
+      }
+    ]
+  },
+  
+  "short_stride": {
+    "problem_description": "Stride length shorter than normal range (< 1.2m typical)",
+    "target_improvement": "Increase stride length by 10-15cm in 6 weeks",
+    "clinical_priority": "medium",
+    
+    "severe": [
+      {
+        "id": "stride_001",
+        "name": "Lunge Walking",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Dean et al. (2000) - Task training for gait after stroke",
+          "success_rate": "69% show increased stride length",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Walking lunges to encourage longer steps and hip extension",
+        "target_metric": "stride_length",
+        "expected_improvement": "10-15cm increase in 6 weeks",
+        "difficulty": "intermediate",
+        "equipment": ["Clear walking path", "Parallel bars or wall support optional"],
+        "duration_per_session": "10 minutes",
+        "frequency": "4 times per week",
+        "sets": 3,
+        "reps_per_set": 10,
+        
+        "instructions": [
+          "Stand with feet hip-width apart",
+          "Take a long step forward with right leg",
+          "Lower hips until right knee at 90 degrees",
+          "Front knee should be over ankle, not toes",
+          "Push through right heel to bring left leg forward",
+          "Repeat with left leg taking long step",
+          "Continue 10 lunges per leg (20 total)",
+          "Rest 1-2 minutes between sets"
+        ],
+        
+        "precautions": [
+          "Do not let knee extend past toes",
+          "Keep torso upright",
+          "Use support if balance is challenging",
+          "Start with smaller lunges and progress"
+        ],
+        
+        "progression": {
+          "week_1_2": "10 lunges × 3 sets, short depth, support available",
+          "week_3_4": "12 lunges × 3 sets, medium depth, light support",
+          "week_5_6": "15 lunges × 3 sets, deeper lunges, no support"
+        },
+        
+        "benefits": [
+          "Increases hip flexor and extensor flexibility",
+          "Strengthens quadriceps and glutes",
+          "Extends stride length during walking",
+          "Improves dynamic balance"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["KNEE_IMU", "ANKLE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "lunge_depth": {
+              "method": "Knee flexion angle during lunge",
+              "success_criteria": "70-110 degrees (target 90°)",
+              "calculation": "Minimum knee angle during descent"
+            },
+            "repetition_count": {
+              "method": "Count knee flexion-extension cycles",
+              "success_criteria": "≥ 10 per leg",
+              "calculation": "Number of knee angle valleys"
+            },
+            "step_forward_distance": {
+              "method": "Estimate from ankle velocity integration",
+              "success_criteria": "Longer than normal stride (relative baseline)",
+              "calculation": "Distance traveled per lunge step"
+            },
+            "control_tempo": {
+              "method": "Time in descent and ascent phases",
+              "success_criteria": "2-3 seconds per lunge (controlled)",
+              "calculation": "Time from peak to valley to peak"
+            },
+            "left_right_balance": {
+              "method": "Compare lunge counts and depths both legs",
+              "success_criteria": "Within 20% of each other",
+              "calculation": "Left count & depth vs right"
+            }
+          },
+          "real_time_feedback": [
+            "Good depth! Knee at 85 degrees",
+            "Take longer step forward",
+            "5/10 lunges completed on right leg",
+            "Left and right balanced - excellent!",
+            "Slow the descent for better control"
+          ]
+        }
+      },
+      
+      {
+        "id": "stride_002",
+        "name": "Visual Target Stepping",
+        "clinical_evidence": {
+          "effectiveness": "Grade A - Strong evidence",
+          "studies": "Hollands et al. (2013) - Visual cues for stride length",
+          "success_rate": "79% immediate stride length increase with cues",
+          "recommended_duration": "4 weeks"
+        },
+        "description": "Step over visual markers placed at gradually increasing distances to extend stride",
+        "target_metric": "stride_length",
+        "expected_improvement": "8-12cm increase in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Tape or cones to mark distances", "Straight walking path"],
+        "duration_per_session": "15 minutes",
+        "frequency": "5 times per week",
+        "sets": 4,
+        "reps_per_set": "Walk length of marked path (20 steps)",
+        
+        "instructions": [
+          "Place tape marks on floor at comfortable stride length",
+          "Walk forward, placing each foot at a marker",
+          "Focus on stepping to each target",
+          "After 1 week, increase distance between marks by 5cm",
+          "Continue gradual increases weekly",
+          "Walk 20 steps per set, rest 1 minute"
+        ],
+        
+        "precautions": [
+          "Do not over-stride and lose balance",
+          "Increase distances gradually",
+          "Use assistive device if needed"
+        ],
+        
+        "progression": {
+          "week_1": "Baseline stride length",
+          "week_2": "+5cm between marks",
+          "week_3": "+10cm between marks",
+          "week_4": "+15cm between marks"
+        },
+        
+        "benefits": [
+          "Provides instant visual feedback",
+          "Progressively extends stride",
+          "Improves spatial awareness",
+          "Easy to track progress"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "medium",
+          "primary_sensors": ["ANKLE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "stride_length_estimate": {
+              "method": "Integrate ankle velocity between heel strikes",
+              "success_criteria": "Progressive increase week over week",
+              "calculation": "Distance per step from velocity integration"
+            },
+            "step_count": {
+              "method": "Count FSR heel strikes",
+              "success_criteria": "≥ 20 steps per set",
+              "calculation": "FSR pressure peaks"
+            },
+            "stride_consistency": {
+              "method": "Standard deviation of estimated stride lengths",
+              "success_criteria": "Low variability (SD < 15% of mean)",
+              "calculation": "Std dev of stride distances"
+            }
+          },
+          "real_time_feedback": [
+            "Average stride: 1.15m - good progress!",
+            "15/20 steps completed",
+            "Stride lengths consistent",
+            "Week 3: +8cm improvement from baseline"
+          ]
+        }
+      }
+    ],
+    
+    "moderate": [
+      {
+        "id": "stride_003",
+        "name": "Heel-to-Toe Walking",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Tyson et al. (2006) - Gait training interventions",
+          "success_rate": "64% show improved stride mechanics",
+          "recommended_duration": "4 weeks"
+        },
+        "description": "Exaggerated heel-to-toe walking to increase hip extension and stride",
+        "target_metric": "stride_length",
+        "expected_improvement": "5-10cm increase in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Clear walking path"],
+        "duration_per_session": "12 minutes",
+        "frequency": "4 times per week",
+        "sets": 3,
+        "reps_per_set": "Walk 20 meters",
+        
+        "instructions": [
+          "Stand tall with good posture",
+          "Step forward landing on heel first",
+          "Roll through foot to push off with toes",
+          "Exaggerate the heel strike and toe push-off",
+          "Extend back leg fully during push-off",
+          "Walk slowly and deliberately",
+          "Complete 20-meter walk, rest, repeat"
+        ],
+        
+        "precautions": [
+          "Focus on form over speed",
+          "Avoid over-striding which may cause imbalance"
+        ],
+        
+        "progression": {
+          "week_1_2": "20m × 3 sets, slow pace",
+          "week_3_4": "30m × 3 sets, moderate pace, emphasize push-off"
+        },
+        
+        "benefits": [
+          "Improves heel strike pattern",
+          "Increases hip extension",
+          "Enhances push-off power",
+          "Extends stride naturally"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR", "ANKLE_IMU"],
+          "validation_metrics": {
+            "heel_strike_detection": {
+              "method": "FSR heel sensor activates first",
+              "success_criteria": "Heel FSR peaks before mid/toe FSR",
+              "calculation": "Timing of FSR heel peak vs mid/toe peaks"
+            },
+            "toe_push_off": {
+              "method": "FSR toe sensor shows active push-off",
+              "success_criteria": "Toe FSR peak at end of stance",
+              "calculation": "Toe FSR pressure during terminal stance"
+            },
+            "roll_through_pattern": {
+              "method": "Sequential FSR activation heel→mid→toe",
+              "success_criteria": "Clear temporal sequence",
+              "calculation": "Time delays between FSR sensor peaks"
+            },
+            "ankle_range": {
+              "method": "Ankle dorsiflexion and plantarflexion range",
+              "success_criteria": "Increased ankle motion during gait cycle",
+              "calculation": "Min to max ankle angle per step"
+            }
+          },
+          "real_time_feedback": [
+            "Perfect heel strike!",
+            "Good push-off detected",
+            "Heel→toe sequence correct",
+            "Emphasize back leg extension more"
+          ]
+        }
+      }
+    ]
+  },
+  
+  "slow_velocity": {
+    "problem_description": "Walking speed below normal (< 1.0 m/s)",
+    "target_improvement": "Increase velocity by 0.15-0.25 m/s in 6-8 weeks",
+    "clinical_priority": "high",
+    
+    "severe": [],
+    
+    "moderate": [
+      {
+        "id": "velocity_002",
+        "name": "Overground Speed Walking",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Sullivan et al. (2007) - Speed-focused gait training",
+          "success_rate": "72% show increased comfortable walking speed",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Walk measured distances as fast as safely possible to increase natural walking speed",
+        "target_metric": "velocity",
+        "expected_improvement": "0.10-0.20 m/s in 6 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Measured walking path (10 meters)", "Stopwatch or timer"],
+        "duration_per_session": "15 minutes",
+        "frequency": "4 times per week",
+        "sets": 5,
+        "reps_per_set": "Walk 10 meters as fast as safe",
+        
+        "instructions": [
+          "Mark 10-meter walking path with tape or cones",
+          "Stand at start line",
+          "When ready, walk as fast as you safely can to end",
+          "Time yourself or have someone time you",
+          "Rest 2 minutes between trials",
+          "Repeat 5 times, trying to improve time each walk",
+          "Track your times to monitor progress"
+        ],
+        
+        "precautions": [
+          "Clear path of obstacles",
+          "Do not sacrifice stability for speed",
+          "Use assistive device if normally required"
+        ],
+        
+        "progression": {
+          "week_1_2": "10m × 5 trials, focus on completing distance",
+          "week_3_4": "10m × 6 trials, increase speed",
+          "week_5_6": "10m × 6 trials, maximum safe speed"
+        },
+        
+        "benefits": [
+          "Increases functional walking speed",
+          "Measurable progress tracking",
+          "Improves community mobility",
+          "Builds confidence in faster walking"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "medium",
+          "primary_sensors": ["FOOT_FSR", "ANKLE_IMU"],
+          "validation_metrics": {
+            "velocity_estimate": {
+              "method": "Estimate speed from cadence and stride length",
+              "success_criteria": "Progressive improvement over weeks",
+              "calculation": "(Cadence × stride_length) / 60"
+            },
+            "trial_count": {
+              "method": "Count distinct walking bouts",
+              "success_criteria": "≥ 5 trials completed",
+              "calculation": "Number of walking intervals detected"
+            },
+            "fastest_trial": {
+              "method": "Record best velocity achieved",
+              "success_criteria": "Improvement over previous session",
+              "calculation": "Maximum velocity among all trials"
+            }
+          },
+          "real_time_feedback": [
+            "Trial 1: 0.85 m/s",
+            "Trial 3: 0.92 m/s - getting faster!",
+            "Best today: 0.95 m/s",
+            "Improvement from last session: +0.08 m/s"
+          ]
+        }
+      }
+    ]
+  },
+  
+  "poor_stability": {
+    "problem_description": "Low stability score indicating balance problems during walking",
+    "target_improvement": "Increase stability score from < 0.65 to > 0.75 in 6-8 weeks",
+    "clinical_priority": "high",
+    
+    "severe": [
+      {
+        "id": "stability_001",
+        "name": "Tandem Walking",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Shumway-Cook et al. (2000) - Balance training for fall prevention",
+          "success_rate": "70% show improved dynamic balance",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Walk heel-to-toe in straight line to improve balance and stability",
+        "target_metric": "stability_score",
+        "expected_improvement": "Stability score +0.15-0.20 in 6 weeks",
+        "difficulty": "intermediate",
+        "equipment": ["Straight line on floor (tape)", "Wall or rail for support"],
+        "duration_per_session": "12 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": "Walk 10 steps",
+        
+        "instructions": [
+          "Stand at start of straight line with wall nearby",
+          "Place right heel directly in front of left toes",
+          "Place left heel directly in front of right toes",
+          "Continue walking heel-to-toe for 10 steps",
+          "Keep arms out to sides for balance",
+          "Look straight ahead, not down",
+          "Rest 1 minute, repeat 3 times"
+        ],
+        
+        "precautions": [
+          "Keep support within arm's reach",
+          "Do not attempt if recently dizzy",
+          "Start with fingertips on wall if needed"
+        ],
+        
+        "progression": {
+          "week_1_2": "10 steps × 3 sets, wall support available",
+          "week_3_4": "15 steps × 3 sets, fingertip support only",
+          "week_5_6": "20 steps × 3 sets, no support"
+        },
+        
+        "benefits": [
+          "Significantly improves dynamic balance",
+          "Reduces fall risk",
+          "Enhances core stability",
+          "Improves vestibular function",
+          "Increases walking confidence"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["ANKLE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "steps_completed": {
+              "method": "Count successful tandem steps",
+              "success_criteria": "≥ 10 steps per set",
+              "calculation": "FSR alternating heel strikes"
+            },
+            "lateral_sway": {
+              "method": "Ankle IMU accelerometer variance in lateral axis",
+              "success_criteria": "SD < 0.8 m/s² (low sway)",
+              "calculation": "Std dev of mediolateral acceleration"
+            },
+            "foot_placement_precision": {
+              "method": "Consistency of FSR pressure patterns",
+              "success_criteria": "Reduced variation in foot contacts",
+              "calculation": "Variability of FSR activation sequences"
+            },
+            "balance_recovery_events": {
+              "method": "Detect rapid corrections from IMU",
+              "success_criteria": "< 2 corrections per 10 steps",
+              "calculation": "Count acceleration spikes > threshold"
+            }
+          },
+          "real_time_feedback": [
+            "8/10 steps completed - keep going!",
+            "Excellent stability - low sway",
+            "Balance correction detected - slow down if needed",
+            "Set complete - minimal sway today!"
+          ]
+        }
+      },
+      
+      {
+        "id": "stability_002",
+        "name": "Multisurface Balance Training",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Mirelman et al. (2016) - Balance training on varied surfaces",
+          "success_rate": "68% show improved balance confidence",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Walk on different surfaces (carpet, tile, grass) to challenge balance systems",
+        "target_metric": "stability_score",
+        "expected_improvement": "Stability score +0.10-0.15 in 6 weeks",
+        "difficulty": "intermediate",
+        "equipment": ["Access to varied surfaces", "Support nearby"],
+        "duration_per_session": "15 minutes",
+        "frequency": "4 times per week",
+        "sets": 3,
+        "reps_per_set": "Walk 20 steps on each surface",
+        
+        "instructions": [
+          "Start on firm flat surface (tile, concrete)",
+          "Walk 20 steps normally",
+          "Move to softer surface (carpet, mat)",
+          "Walk 20 steps, noting balance challenges",
+          "If safe, try outdoor grass or uneven surface",
+          "Walk 20 steps carefully",
+          "Repeat sequence 3 times"
+        ],
+        
+        "precautions": [
+          "Have someone nearby for outdoor surfaces",
+          "Avoid truly hazardous terrain",
+          "Use assistive device on challenging surfaces"
+        ],
+        
+        "progression": {
+          "week_1_2": "Tile and carpet only",
+          "week_3_4": "Add low-pile carpet and mat",
+          "week_5_6": "Add outdoor grass if available and safe"
+        },
+        
+        "benefits": [
+          "Prepares for real-world environments",
+          "Improves sensory integration",
+          "Enhances balance adaptability",
+          "Reduces fear of varied terrain"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "medium",
+          "primary_sensors": ["ANKLE_IMU", "KNEE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "surface_adaptation": {
+              "method": "Compare stability metrics across surfaces",
+              "success_criteria": "Improved stability on challenging surfaces over time",
+              "calculation": "Week-over-week reduction in IMU variance on soft surfaces"
+            },
+            "steps_on_each_surface": {
+              "method": "Count steps during each surface walking bout",
+              "success_criteria": "≥ 20 steps per surface type",
+              "calculation": "FSR step counts per walking interval"
+            },
+            "sway_comparison": {
+              "method": "Ankle sway on firm vs soft surfaces",
+              "success_criteria": "Difference decreases over weeks",
+              "calculation": "SD of IMU on soft surface / SD on firm surface"
+            }
+          },
+          "real_time_feedback": [
+            "Firm surface complete - 20 steps",
+            "Now on carpet - balance challenged",
+            "Stability improving on soft surfaces",
+            "Week 4: 30% less sway on carpet vs week 1"
+          ]
+        }
+      }
+    ],
+    
+    "moderate": [
+      {
+        "id": "stability_003",
+        "name": "Core Strengthening for Gait",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Verheyden et al. (2006) - Trunk training for stroke balance",
+          "success_rate": "65% show improved trunk control and stability",
+          "recommended_duration": "6 weeks"
+        },
+        "description": "Standing exercises to strengthen core muscles that support stable walking",
+        "target_metric": "stability_score",
+        "expected_improvement": "Stability score +0.08-0.12 in 6 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Chair for support"],
+        "duration_per_session": "12 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": 15,
+        
+        "instructions": [
+          "Stand behind chair holding backrest",
+          "Stand on both feet, weight evenly distributed",
+          "Slowly march in place, lifting knees moderately",
+          "Keep torso stable and upright (no swaying)",
+          "Do 15 marches per leg",
+          "Rest 1 minute",
+          "Repeat 3 sets"
+        ],
+        
+        "precautions": [
+          "Maintain upright posture",
+          "Don't lean on chair - use for balance only"
+        ],
+        
+        "progression": {
+          "week_1_2": "15 reps × 3 sets, holding chair",
+          "week_3_4": "20 reps × 3 sets, fingertip support",
+          "week_5_6": "25 reps × 3 sets, arms at sides"
+        },
+        
+        "benefits": [
+          "Strengthens core stabilizers",
+          "Improves trunk control during walking",
+          "Reduces upper body sway",
+          "Enhances overall stability"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["KNEE_IMU", "FOOT_FSR"],
+          "validation_metrics": {
+            "march_count": {
+              "method": "Count knee lifts from IMU",
+              "success_criteria": "≥ 15 per leg",
+              "calculation": "Knee flexion peaks"
+            },
+            "trunk_stability": {
+              "method": "If waist IMU present, measure trunk sway",
+              "success_criteria": "Reduced sway during marching",
+              "calculation": "Waist IMU acceleration variance"
+            },
+            "weight_shifting": {
+              "method": "FSR alternating pattern during marches",
+              "success_criteria": "Clear weight shifts between legs",
+              "calculation": "FSR pressure alternation"
+            }
+          },
+          "real_time_feedback": [
+            "12/15 marches per leg - almost there!",
+            "Good trunk control",
+            "Keep torso upright"
+          ]
+        }
+      }
+    ]
+  },
+  
+  "reduced_step_regularity": {
+    "problem_description": "Inconsistent step timing and rhythm during walking",
+    "target_improvement": "Improve step regularity score from < 0.75 to > 0.85 in 4-6 weeks",
+    "clinical_priority": "medium",
+    
+    "severe": [
+      {
+        "id": "regularity_001",
+        "name": "Rhythmic Auditory Cueing",
+        "clinical_evidence": {
+          "effectiveness": "Grade A - Strong evidence",
+          "studies": "Thaut et al. (1997) - RAS for gait rehabilitation",
+          "success_rate": "82% show improved gait rhythm",
+          "recommended_duration": "4 weeks"
+        },
+        "description": "Walk to consistent beat of music or metronome to establish regular rhythm",
+        "target_metric": "step_regularity",
+        "expected_improvement": "Regularity score +0.10-0.15 in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Music player with steady beat or metronome", "Headphones optional"],
+        "duration_per_session": "15 minutes",
+        "frequency": "5 times per week",
+        "sets": 3,
+        "reps_per_set": "5 minutes continuous walking",
+        
+        "instructions": [
+          "Select music with clear, steady beat (90-100 BPM)",
+          "Walk taking one step per beat",
+          "Focus on matching rhythm perfectly",
+          "Walk continuously for 5 minutes",
+          "Rest 2 minutes",
+          "Repeat 3 times per session"
+        ],
+        
+        "precautions": [
+          "Choose music without tempo changes",
+          "Keep volume at safe level if using headphones",
+          "Practice in safe environment"
+        ],
+        
+        "progression": {
+          "week_1": "90 BPM, focus on rhythm matching",
+          "week_2": "95 BPM, increase speed slightly",
+          "week_3": "100 BPM, maintain rhythm",
+          "week_4": "Alternate between 90-100 BPM"
+        },
+        
+        "benefits": [
+          "Establishes consistent gait rhythm",
+          "Reduces step timing variability",
+          "Improves gait automaticity",
+          "Makes walking more efficient"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR"],
+          "validation_metrics": {
+            "step_timing_variability": {
+              "method": "Calculate coefficient of variation of inter-step intervals",
+              "success_criteria": "CV < 10% (highly regular)",
+              "calculation": "(SD / mean) × 100 of FSR heel strike intervals"
+            },
+            "rhythm_matching": {
+              "method": "Compare step timing to target BPM",
+              "success_criteria": "≥ 85% of steps within 50ms of beat",
+              "calculation": "Percentage of steps matching tempo"
+            },
+            "sustained_regularity": {
+              "method": "Regularity maintained throughout 5-minute bout",
+              "success_criteria": "CV remains < 12% entire duration",
+              "calculation": "Rolling window CV analysis"
+            }
+          },
+          "real_time_feedback": [
+            "Perfect rhythm! 92% steps on beat",
+            "Step timing very regular - CV: 8%",
+            "Slight rushing - slow down to match beat",
+            "3 minutes completed - maintaining rhythm!"
+          ]
+        }
+      }
+    ],
+    
+    "moderate": [
+      {
+        "id": "regularity_002",
+        "name": "Paced Walking Practice",
+        "clinical_evidence": {
+          "effectiveness": "Grade B - Moderate evidence",
+          "studies": "Rochester et al. (2010) - Cueing for gait regularity",
+          "success_rate": "71% show reduced gait variability",
+          "recommended_duration": "4 weeks"
+        },
+        "description": "Walk at self-paced consistent rhythm, focusing on feeling the regularity",
+        "target_metric": "step_regularity",
+        "expected_improvement": "Regularity score +0.05-0.10 in 4 weeks",
+        "difficulty": "beginner",
+        "equipment": ["Clear walking path"],
+        "duration_per_session": "15 minutes",
+        "frequency": "4 times per week",
+        "sets": 3,
+        "reps_per_set": "Walk 50 steps",
+        
+        "instructions": [
+          "Start walking at comfortable pace",
+          "Focus on making each step the same as the last",
+          "Count 1-2-3-4 silently to establish rhythm",
+          "Walk 50 steps maintaining the rhythm",
+          "Rest 1 minute",
+          "Repeat 3 times"
+        ],
+        
+        "precautions": [
+          "Don't rush - prioritize consistency over speed"
+        ],
+        
+        "progression": {
+          "week_1_2": "50 steps × 3 sets, focus on awareness",
+          "week_3_4": "75 steps × 3 sets, reduced attention to feet"
+        },
+        
+        "benefits": [
+          "Develops internal rhythm awareness",
+          "Reduces reliance on external cues",
+          "Improves gait automaticity"
+        ],
+        
+        "sensor_validation": {
+          "detectable": true,
+          "confidence": "high",
+          "primary_sensors": ["FOOT_FSR"],
+          "validation_metrics": {
+            "step_count": {
+              "method": "Count FSR heel strikes",
+              "success_criteria": "≥ 50 steps",
+              "calculation": "FSR pressure peaks"
+            },
+            "regularity_score": {
+              "method": "Autocorrelation of step intervals",
+              "success_criteria": "Score > 0.80",
+              "calculation": "Autocorrelation analysis of inter-step intervals"
+            },
+            "improvement_tracking": {
+              "method": "Compare regularity week-over-week",
+              "success_criteria": "Progressive improvement",
+              "calculation": "Weekly average regularity score"
+            }
+          },
+          "real_time_feedback": [
+            "25/50 steps - rhythm steady",
+            "Regularity score: 0.82 - excellent!",
+            "Slight irregularity detected - refocus",
+            "Week 3: +0.07 improvement from baseline"
+          ]
+        }
+      }
+    ]
+  }
+}

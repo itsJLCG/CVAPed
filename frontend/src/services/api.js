@@ -532,9 +532,15 @@ export const healthService = {
 
 // Prescriptive Analysis Service
 export const prescriptionService = {
-  // Get complete prescriptive analysis
+  // Get complete prescriptive analysis (Speech Therapy)
   getAnalysis: async () => {
     const response = await api.get('/prescriptive');
+    return response.data;
+  },
+
+  // Get complete gait prescriptive analysis (Physical Therapy)
+  getGaitAnalysis: async () => {
+    const response = await api.get('/prescriptive/gait');
     return response.data;
   },
 
@@ -544,9 +550,21 @@ export const prescriptionService = {
     return data.analysis.priorities;
   },
 
+  // Get gait priorities
+  getGaitPriorities: async () => {
+    const data = await prescriptionService.getGaitAnalysis();
+    return data.analysis.priorities;
+  },
+
   // Get weekly schedule
   getSchedule: async () => {
     const data = await prescriptionService.getAnalysis();
+    return data.analysis.weekly_schedule;
+  },
+
+  // Get gait weekly schedule
+  getGaitSchedule: async () => {
+    const data = await prescriptionService.getGaitAnalysis();
     return data.analysis.weekly_schedule;
   },
 
@@ -556,15 +574,33 @@ export const prescriptionService = {
     return data.analysis.bottleneck_analysis;
   },
 
+  // Get gait bottleneck analysis
+  getGaitBottlenecks: async () => {
+    const data = await prescriptionService.getGaitAnalysis();
+    return data.analysis.bottleneck_analysis;
+  },
+
   // Get recommendations
   getRecommendations: async () => {
     const data = await prescriptionService.getAnalysis();
     return data.analysis.recommendations;
   },
 
+  // Get gait recommendations
+  getGaitRecommendations: async () => {
+    const data = await prescriptionService.getGaitAnalysis();
+    return data.analysis.recommendations;
+  },
+
   // Get insights
   getInsights: async () => {
     const data = await prescriptionService.getAnalysis();
+    return data.analysis.insights;
+  },
+
+  // Get gait insights
+  getGaitInsights: async () => {
+    const data = await prescriptionService.getGaitAnalysis();
     return data.analysis.insights;
   }
 };

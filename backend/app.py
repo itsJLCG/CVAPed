@@ -4407,8 +4407,16 @@ def get_physical_therapy_patients(current_user):
         
         analyses_data = []
         for analysis in all_gait_analyses:
+            # Skip records with invalid ObjectId user_ids (e.g., synthetic users)
+            user_id = analysis.get('user_id')
+            if not user_id or not isinstance(user_id, str) or len(user_id) != 24:
+                continue
+            
             # Get user info for each analysis
-            user = users_collection.find_one({'_id': ObjectId(analysis['user_id'])})
+            try:
+                user = users_collection.find_one({'_id': ObjectId(user_id)})
+            except Exception:
+                continue
             
             if user:
                 # Extract detected problems

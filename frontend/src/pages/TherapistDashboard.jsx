@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
+import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf } from '../components/PdfReportTemplate';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
@@ -108,6 +109,7 @@ function TherapistDashboard({ onLogout }) {
   const [expandedGaitRows, setExpandedGaitRows] = useState({});
   const [currentGaitPage, setCurrentGaitPage] = useState(1);
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
+  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState(new Set());
 
   // Success Stories state
   const [successStories, setSuccessStories] = useState([]);
@@ -860,8 +862,75 @@ function TherapistDashboard({ onLogout }) {
     }));
   };
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return '#4CAF50';
+  const toggleSelectAnalysis = useCallback((id) => {
+    setSelectedAnalysisIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllOnPage = useCallback((pageIds) => {
+    setSelectedAnalysisIds(prev => {
+      const allSelected = pageIds.every(id => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        pageIds.forEach(id => next.delete(id));
+        return next;
+      }
+      return new Set([...prev, ...pageIds]);
+    });
+  }, []);
+
+  const handleExportPhysicalPdf = useCallback(async () => {
+    const selected = gaitAnalyses.filter(a => selectedAnalysisIds.has(a.id));
+    if (!selected.length) return;
+
+    const patients = selected.map(analysis => ({
+      name: analysis.user_name,
+      email: analysis.user_email,
+      score: analysis.overall_score,
+      severity: analysis.severity,
+      date: formatDate(analysis.created_at),
+      problems: analysis.problems ?? [],
+      metricsRows: buildGaitMetricsRows(
+        analysis.gait_metrics,
+        analysis.analysis_duration,
+        analysis.data_quality
+      ),
+    }));
+
+    const uniqueNames = [...new Set(selected.map(a => a.user_name))];
+    const namePart =
+      uniqueNames.length === 1
+        ? uniqueNames[0].replace(/\s+/g, '_')
+        : 'Multiple_Patients';
+    const filename = `CVAPed_PhysicalTherapyReport_${namePart}`;
+
+    await generatePdfReport({
+      title: 'Physical Therapy Report',
+      patients,
+      metricsColumns: PHYSICAL_THERAPY_METRICS_COLUMNS,
+      filename,
+    });
+  }, [selectedAnalysisIds, gaitAnalyses]);
+
+  const handleExportDiagnosticPdf = useCallback(async () => {
+    if (!selectedDiagPatient || !diagComparisonData) return;
+    await generateDiagnosticComparisonPdf({
+      comparisonData: diagComparisonData,
+      patient: selectedDiagPatient,
+    });
+  }, [selectedDiagPatient, diagComparisonData]);
+
+  const handleExportPreEvalPdf = useCallback(async (entry) => {
+    if (!entry) return;
+    const { patient, selfReport } = entry;
+    await generatePreEvalPdf({ patient, selfReport });
+  }, []);
+
+  const getScoreColor = (score) => {    if (score >= 80) return '#4CAF50';
     if (score >= 60) return '#FF9800';
     return '#F44336';
   };
@@ -2214,6 +2283,20 @@ function TherapistDashboard({ onLogout }) {
                   <h2>Physical Therapy</h2>
                   <p>Monitor and review patient gait analyses</p>
                 </div>
+                <div className="header-right">
+                  <button
+                    className={`btn-export-pdf${selectedAnalysisIds.size === 0 ? ' disabled' : ''}`}
+                    onClick={handleExportPhysicalPdf}
+                    disabled={selectedAnalysisIds.size === 0}
+                    title={selectedAnalysisIds.size === 0 ? 'Select at least one record to export' : `Export ${selectedAnalysisIds.size} selected record${selectedAnalysisIds.size > 1 ? 's' : ''} to PDF`}
+                  >
+                    <span className="btn-export-icon">⬇</span>
+                    Export to PDF
+                    {selectedAnalysisIds.size > 0 && (
+                      <span className="btn-export-count">{selectedAnalysisIds.size}</span>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {loadingPhysical ? (
@@ -2273,6 +2356,29 @@ function TherapistDashboard({ onLogout }) {
                     <table className="logs-table gait-table">
                       <thead>
                         <tr>
+                          <th className="gait-col-checkbox">
+                            {(() => {
+                              const filteredIds = gaitAnalyses
+                                .filter(a =>
+                                  !searchTerm ||
+                                  a.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                  a.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+                                )
+                                .map(a => a.id);
+                              const pageStart = (currentGaitPage - 1) * gaitEntriesPerPage;
+                              const pageIds = filteredIds.slice(pageStart, pageStart + gaitEntriesPerPage);
+                              const allChecked = pageIds.length > 0 && pageIds.every(id => selectedAnalysisIds.has(id));
+                              return (
+                                <input
+                                  type="checkbox"
+                                  className="gait-checkbox"
+                                  checked={allChecked}
+                                  onChange={() => toggleSelectAllOnPage(pageIds)}
+                                  title={allChecked ? 'Deselect all on this page' : 'Select all on this page'}
+                                />
+                              );
+                            })()}
+                          </th>
                           <th>Patient</th>
                           <th>Email</th>
                           <th>Problems</th>
@@ -2291,9 +2397,17 @@ function TherapistDashboard({ onLogout }) {
                           const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
                           const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage;
                           const currentEntries = filteredAnalyses.slice(indexOfFirstEntry, indexOfLastEntry);
-                          return currentEntries.map(analysis => (
+                           return currentEntries.map(analysis => (
                             <React.Fragment key={analysis.id}>
-                              <tr className="gait-row">
+                              <tr className={`gait-row${selectedAnalysisIds.has(analysis.id) ? ' gait-row-selected' : ''}`}>
+                                <td className="gait-col-checkbox">
+                                  <input
+                                    type="checkbox"
+                                    className="gait-checkbox"
+                                    checked={selectedAnalysisIds.has(analysis.id)}
+                                    onChange={() => toggleSelectAnalysis(analysis.id)}
+                                  />
+                                </td>
                                 <td>
                                   <div className="patient-cell">
                                     <div className="patient-avatar-small">
@@ -2348,7 +2462,7 @@ function TherapistDashboard({ onLogout }) {
                               {/* Expandable Gait Details Row */}
                               {expandedGaitRows[analysis.id] && (
                                 <tr className="gait-details-row">
-                                  <td colSpan="6">
+                                  <td colSpan="7">
                                     <div className="gait-details-container">
                                       <div className="gait-metrics-grid">
                                         <div className="gait-metric-item">
@@ -3770,8 +3884,8 @@ function TherapistDashboard({ onLogout }) {
                     <button className="diag-add-btn" onClick={() => setShowDiagModal(true)}>
                       + Add Facility Diagnostic
                     </button>
-                    <button className="diag-print-btn" onClick={handlePrintReport} title="Print Report">
-                      🖨️ Print
+                    <button className="diag-print-btn" onClick={handleExportDiagnosticPdf} title="Export to PDF">
+                      📄 Export PDF
                     </button>
                   </div>
                 )}
@@ -4738,7 +4852,16 @@ function TherapistDashboard({ onLogout }) {
                         {r?.recommendedLevel && <span className={`preval-hero-badge preval-hero-badge--level preval-level-${r.recommendedLevel}`}>{r.recommendedLevel.charAt(0).toUpperCase() + r.recommendedLevel.slice(1)} Level</span>}
                       </div>
                     </div>
-                    <button className="modal-close preval-modal-close-btn" onClick={() => setPreEvalModalEntry(null)}>×</button>
+                    <div className="preval-modal-hero-actions">
+                      <button
+                        className="btn-export-pdf preval-hero-export-btn"
+                        onClick={() => handleExportPreEvalPdf(preEvalModalEntry)}
+                        title="Export patient pre-evaluation to PDF"
+                      >
+                        📄 Export PDF
+                      </button>
+                      <button className="modal-close preval-modal-close-btn" onClick={() => setPreEvalModalEntry(null)}>×</button>
+                    </div>
                   </div>
 
                   <div className="modal-body preval-modal-body">

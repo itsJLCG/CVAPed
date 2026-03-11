@@ -5934,6 +5934,93 @@
   background: #f8f9fa;
 }
 
+/* ── Physical Therapy: Checkbox column ── */
+.gait-col-checkbox {
+  width: 42px;
+  min-width: 42px;
+  text-align: center;
+  padding: 0.85rem 0.5rem !important;
+}
+
+.gait-checkbox {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.gait-row-selected {
+  background-color: #fff5f5 !important;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.gait-row-selected:hover {
+  background-color: #ffecec !important;
+}
+
+/* ── Physical Therapy: Export to PDF button ── */
+.physical-section .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-export-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #b52e29 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+
+.btn-export-pdf:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(206, 54, 48, 0.35);
+}
+
+.btn-export-pdf:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-export-pdf.disabled,
+.btn-export-pdf:disabled {
+  background: linear-gradient(135deg, #cbd5e0 0%, #a0aec0 100%);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-export-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.btn-export-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 /* Physical Therapy / Gait Analyses Responsive */
 
 /* Large screens */
@@ -10648,10 +10735,33 @@
 .preval-hero-badge--level.preval-level-intermediate { background: #b45309; color: #fff; }
 .preval-hero-badge--level.preval-level-advanced     { background: #dc2626; color: #fff; }
 
+.preval-modal-hero-actions {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preval-hero-export-btn {
+  padding: 6px 14px !important;
+  font-size: 0.8rem !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+.preval-hero-export-btn:hover:not(:disabled) {
+  background: rgba(206, 54, 48, 0.75) !important;
+  border-color: rgba(206, 54, 48, 0.9) !important;
+  color: #fff !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 3px 10px rgba(206, 54, 48, 0.4) !important;
+}
+
 .preval-modal-close-btn {
-  position: absolute !important;
-  top: 1rem !important;
-  right: 1rem !important;
   background: rgba(255, 255, 255, 0.1) !important;
   color: #e2e8f0 !important;
 }

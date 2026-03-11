@@ -107,9 +107,9 @@ function TherapySelection({ onLogout }) {
           {diagnosticStatus === false && showBanner && (
             <div className="diagnostic-banner">
               <div className="diagnostic-banner-content">
-                <span className="diagnostic-banner-icon">ℹ️</span>
+                <span className="diagnostic-banner-icon">📋</span>
                 <div className="diagnostic-banner-text">
-                  <strong>No initial assessment on file.</strong> For the best therapy results, we recommend visiting our facility for a professional diagnostic assessment. You can still explore therapy exercises in the meantime.
+                  <strong>Complete your Initial Diagnostic first.</strong> Answering a short set of questions helps us understand your condition and determine the most appropriate therapy starting point and exercise level for you.
                 </div>
                 <button
                   className="diagnostic-banner-close"
@@ -121,9 +121,12 @@ function TherapySelection({ onLogout }) {
               </div>
               <button
                 className="diagnostic-banner-btn"
-                onClick={() => navigate('/appointments')}
+                onClick={() => {
+                  setShowBanner(false);
+                  setShowDiagnosticModal(true);
+                }}
               >
-                📅 Book Your Initial Assessment
+                Start Initial Diagnostic
               </button>
             </div>
           )}

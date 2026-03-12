@@ -27,7 +27,7 @@ const languageExercises = {
   }
 };
 
-function LanguageTherapy({ onLogout }) {
+function LanguageTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
   
@@ -383,14 +383,15 @@ function LanguageTherapy({ onLogout }) {
 
     // Save progress to database
     try {
-      await languageService.saveProgress({
+      const receptivePayload = {
         mode: 'receptive',
         exercise_index: currentExerciseIndex,
         exercise_id: currentExercise.id,
         is_correct: isCorrect,
         score: isCorrect ? 1.0 : 0.0,
         user_answer: selectedOption.text
-      });
+      };
+      await languageService.saveProgress(receptivePayload);
       console.log('Progress saved successfully');
     } catch (error) {
       console.error('Error saving progress:', error);
@@ -576,14 +577,15 @@ function LanguageTherapy({ onLogout }) {
 
         // Save progress to database
         try {
-          await languageService.saveProgress({
+          const expressivePayload = {
             mode: 'expressive',
             exercise_index: currentExerciseIndex,
             exercise_id: currentExercise.id,
             is_correct: isCorrect,
             score: result.score,
             transcription: result.transcription
-          });
+          };
+          await languageService.saveProgress(expressivePayload);
           console.log('Expressive progress saved successfully');
         } catch (error) {
           console.error('Error saving expressive progress:', error);
@@ -658,7 +660,7 @@ function LanguageTherapy({ onLogout }) {
     return (
       <div className="language-therapy-page">
         {/* Header */}
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
         {/* Mode Selection */}
         <main className="language-main">
@@ -758,7 +760,7 @@ function LanguageTherapy({ onLogout }) {
 
     return (
       <div className="language-therapy-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
         <main className="language-main">
           <div className="language-container">
@@ -843,7 +845,7 @@ function LanguageTherapy({ onLogout }) {
   return (
     <div className="language-therapy-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Exercise */}
       <main className="language-main">

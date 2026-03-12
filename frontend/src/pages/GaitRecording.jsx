@@ -6,7 +6,7 @@ import './GaitRecording.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-function GaitRecording({ onLogout }) {
+function GaitRecording({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
   const [isRecording, setIsRecording] = useState(false);
@@ -358,17 +358,19 @@ function GaitRecording({ onLogout }) {
     try {
       const token = localStorage.getItem('token');
       console.log('🔄 Sending data to backend for analysis...');
-      
+
+      const gaitBody = {
+        sensors: sensorBuffer.current,
+        fsr: fsrBuffer.current
+      };
+
       const response = await fetch(`${API_URL}/hardware/gait/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          sensors: sensorBuffer.current,
-          fsr: fsrBuffer.current
-        })
+        body: JSON.stringify(gaitBody)
       });
       
       const result = await response.json();
@@ -489,7 +491,7 @@ function GaitRecording({ onLogout }) {
 
   return (
     <div className="blank-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <main className="blank-page-content">
         <div className="gait-recording-container">
           <div className="recording-content-wrapper">

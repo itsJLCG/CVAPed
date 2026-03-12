@@ -3,7 +3,7 @@ import Header from '../components/Header';
 import { healthService, diagnosticComparisonService } from '../services/api';
 import './HealthLogs.css';
 
-function HealthLogs({ onLogout }) {
+function HealthLogs({ onLogout, onFacilityExit }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
@@ -224,7 +224,7 @@ function HealthLogs({ onLogout }) {
   if (loading) {
     return (
       <div className="health-logs-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="health-logs-content">
           <div className="loading-container">
             <div className="spinner"></div>
@@ -238,7 +238,7 @@ function HealthLogs({ onLogout }) {
   if (error) {
     return (
       <div className="health-logs-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="health-logs-content">
           <div className="error-container">
             <span className="error-icon">⚠️</span>
@@ -252,7 +252,7 @@ function HealthLogs({ onLogout }) {
 
   return (
     <div className="health-logs-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <main className="health-logs-content">
         <div className="health-logs-container">
           {/* Page Header */}

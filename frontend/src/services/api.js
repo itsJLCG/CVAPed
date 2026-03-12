@@ -84,6 +84,32 @@ export const authService = {
     return response.data;
   },
 
+  facilityLogin: async (credentials) => {
+    const therapistToken = localStorage.getItem('therapistToken');
+    const response = await api.post('/facility-login', {
+      ...credentials,
+      therapistToken,
+    });
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  facilityFirebaseAuth: async (firebaseData) => {
+    const therapistToken = localStorage.getItem('therapistToken');
+    const response = await api.post('/facility-firebase-auth', {
+      ...firebaseData,
+      therapistToken,
+    });
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
   // Firebase OAuth login
   firebaseAuth: async (firebaseData) => {
     const response = await api.post('/auth/firebase', firebaseData);

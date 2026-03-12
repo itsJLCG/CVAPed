@@ -9,7 +9,7 @@ import './FluencyTherapy.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-function FluencyTherapy({ onLogout }) {
+function FluencyTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
 
@@ -488,7 +488,7 @@ function FluencyTherapy({ onLogout }) {
     if (results) {
       try {
         const token = localStorage.getItem('token');
-        await axios.post(`${API_URL}/fluency/progress`, {
+        const fluencyPayload = {
           level: currentLevel,
           exercise_index: currentExerciseIndex,
           exercise_id: currentExercise.id,
@@ -497,7 +497,8 @@ function FluencyTherapy({ onLogout }) {
           pause_count: results.pauseCount,
           disfluencies: results.disfluencies,
           passed: results.passed
-        }, {
+        };
+        await axios.post(`${API_URL}/fluency/progress`, fluencyPayload, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -588,7 +589,7 @@ function FluencyTherapy({ onLogout }) {
       )}
 
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="fluency-main">

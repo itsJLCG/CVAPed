@@ -3,7 +3,7 @@ import { appointmentService } from '../services/api';
 import Header from '../components/Header';
 import './Appointments.css';
 
-function Appointments({ onLogout }) {
+function Appointments({ onLogout, onFacilityExit }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showBookModal, setShowBookModal] = useState(false);
@@ -190,7 +190,7 @@ function Appointments({ onLogout }) {
 
   return (
     <>
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <div className="appointments-page">
         <div className="appointments-container">
           {/* Header */}

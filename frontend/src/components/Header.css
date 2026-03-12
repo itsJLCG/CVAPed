@@ -74,6 +74,28 @@
   transform: translateY(-2px);
 }
 
+.nav-btn.facility-exit-btn {
+  background: #e65100;
+  border: none;
+}
+
+.nav-btn.facility-exit-btn:hover {
+  background: #bf360c;
+  transform: translateY(-2px);
+}
+
+.facility-mode-badge {
+  display: inline-block;
+  background: #e65100;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
 /* Responsive design */
 @media (max-width: 1200px) {
   .app-nav {

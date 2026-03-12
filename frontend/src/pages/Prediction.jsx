@@ -5,7 +5,7 @@ import { predictionService } from '../services/api';
 import './Prediction.css';
 import './BlankPage.css';
 
-function Prediction({ onLogout }) {
+function Prediction({ onLogout, onFacilityExit }) {
   const { selectedCategory } = useTherapyCategory();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -539,7 +539,7 @@ function Prediction({ onLogout }) {
   if (loading) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prediction-container">
             <div className="loading-state">
@@ -579,7 +579,7 @@ function Prediction({ onLogout }) {
     // Show message if no gait data available
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prediction-container">
             <div className="no-data-message">
@@ -600,7 +600,7 @@ function Prediction({ onLogout }) {
   if (error) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prediction-container">
             <div className="error-message">
@@ -620,7 +620,7 @@ function Prediction({ onLogout }) {
 
   return (
     <div className="blank-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <main className="blank-page-content">
         <div className="prediction-container">
           <div className="pred-page-header">

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_limiter import Limiter
@@ -173,6 +173,7 @@ def token_required(f):
             if token.startswith('Bearer '):
                 token = token[7:]
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            g.token_data = data
             current_user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401
@@ -376,6 +377,163 @@ def login():
         logger.error(f"Login error: {e}", exc_info=True)
         return jsonify({'message': 'Login failed'}), 500
 
+@app.route('/api/facility-login', methods=['POST'])
+@limiter.limit("5 per minute")
+def facility_login():
+    """Patient email/password login during a therapist-initiated facility session.
+    Requires a valid therapistToken to prove a therapist legitimately started facility mode.
+    Returns a JWT with facility_mode=True so the backend can set location='facility' on saves.
+    """
+    try:
+        data = request.get_json()
+
+        if not data.get('email') or not data.get('password'):
+            return jsonify({'message': 'Email and password are required'}), 400
+        if not data.get('therapistToken'):
+            return jsonify({'message': 'Facility mode requires an active therapist session'}), 400
+
+        # Validate the therapist token
+        raw_therapist_token = data['therapistToken']
+        if raw_therapist_token.startswith('Bearer '):
+            raw_therapist_token = raw_therapist_token[7:]
+        try:
+            therapist_data = jwt.decode(raw_therapist_token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            therapist_user = users_collection.find_one({'_id': ObjectId(therapist_data['user_id'])})
+            if not therapist_user or therapist_user.get('role') != 'therapist':
+                return jsonify({'message': 'Invalid therapist session for facility mode'}), 403
+        except Exception:
+            return jsonify({'message': 'Invalid or expired therapist session. Please re-activate facility mode.'}), 403
+
+        # Validate patient credentials
+        email = data['email'].lower()
+        user = users_collection.find_one({'email': email})
+        if not user or not bcrypt.check_password_hash(user.get('password', ''), data['password']):
+            return jsonify({'message': 'Invalid email or password'}), 401
+        if user.get('role') != 'patient':
+            return jsonify({'message': 'Only patient accounts can log in during facility mode'}), 403
+
+        # Issue a facility JWT — backend will trust this to set location='facility' on saves
+        token = jwt.encode({
+            'user_id': str(user['_id']),
+            'role': user.get('role', 'patient'),
+            'facility_mode': True,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=4)
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+
+        return jsonify({
+            'message': 'Facility login successful',
+            'token': token,
+            'user': {
+                'id': str(user['_id']),
+                'email': user['email'],
+                'firstName': user['firstName'],
+                'lastName': user['lastName'],
+                'role': user.get('role', 'patient'),
+                'isProfileComplete': user.get('isProfileComplete', True),
+                'therapyType': user.get('therapyType'),
+                'patientType': user.get('patientType'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                'diagnosticData': user.get('diagnosticData')
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Facility login error: {e}", exc_info=True)
+        return jsonify({'message': 'Facility login failed'}), 500
+
+@app.route('/api/facility-firebase-auth', methods=['POST'])
+@limiter.limit("10 per minute")
+def facility_firebase_auth():
+    """Firebase/Google sign-in during a therapist-initiated facility session.
+    Validates the therapistToken and the Firebase token, returns a JWT with facility_mode=True.
+    """
+    try:
+        data = request.get_json()
+
+        if not data.get('firebaseToken'):
+            return jsonify({'message': 'Firebase token is required'}), 400
+        if not data.get('therapistToken'):
+            return jsonify({'message': 'Facility mode requires an active therapist session'}), 400
+
+        # Validate the therapist token
+        raw_therapist_token = data['therapistToken']
+        if raw_therapist_token.startswith('Bearer '):
+            raw_therapist_token = raw_therapist_token[7:]
+        try:
+            therapist_data = jwt.decode(raw_therapist_token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            therapist_user = users_collection.find_one({'_id': ObjectId(therapist_data['user_id'])})
+            if not therapist_user or therapist_user.get('role') != 'therapist':
+                return jsonify({'message': 'Invalid therapist session for facility mode'}), 403
+        except Exception:
+            return jsonify({'message': 'Invalid or expired therapist session. Please re-activate facility mode.'}), 403
+
+        # Verify Firebase token
+        firebase_token = data['firebaseToken']
+        try:
+            decoded_token = auth.verify_id_token(firebase_token, check_revoked=True)
+            firebase_uid = decoded_token['uid']
+        except auth.ExpiredIdTokenError:
+            return jsonify({'message': 'Firebase token has expired. Please sign in again.', 'error': 'TOKEN_EXPIRED', 'code': 'auth/id-token-expired'}), 401
+        except auth.RevokedIdTokenError:
+            return jsonify({'message': 'Firebase token has been revoked.', 'error': 'TOKEN_REVOKED', 'code': 'auth/id-token-revoked'}), 401
+        except auth.InvalidIdTokenError:
+            return jsonify({'message': 'Invalid Firebase token.', 'error': 'TOKEN_INVALID', 'code': 'auth/invalid-id-token'}), 401
+        except Exception as e:
+            logger.error(f"Firebase token verification failed: {e}", exc_info=True)
+            return jsonify({'message': 'Firebase token verification failed.', 'code': 'auth/token-verification-failed'}), 401
+
+        # Look up user — first by exact Firebase UID, then by email (handles re-linked accounts)
+        user = users_collection.find_one({'providerId': firebase_uid})
+        if not user:
+            firebase_email = decoded_token.get('email', '').lower()
+            user = users_collection.find_one({'email': firebase_email})
+            if not user:
+                return jsonify({'message': 'No patient account found. Please register first.'}), 404
+            if user.get('role') != 'patient':
+                return jsonify({'message': 'Only patient accounts can log in during facility mode'}), 403
+            # Re-link only after confirming this is a patient account
+            users_collection.update_one(
+                {'_id': user['_id']},
+                {'$set': {
+                    'providerId': firebase_uid,
+                    'provider': decoded_token.get('firebase', {}).get('sign_in_provider', 'google.com'),
+                    'updatedAt': datetime.datetime.utcnow()
+                }}
+            )
+        if not user:
+            return jsonify({'message': 'No patient account found. Please register first.'}), 404
+        if user.get('role') != 'patient':
+            return jsonify({'message': 'Only patient accounts can log in during facility mode'}), 403
+
+        # Issue a facility JWT
+        token = jwt.encode({
+            'user_id': str(user['_id']),
+            'role': user.get('role', 'patient'),
+            'facility_mode': True,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=4)
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+
+        return jsonify({
+            'message': 'Facility login successful',
+            'token': token,
+            'user': {
+                'id': str(user['_id']),
+                'email': user['email'],
+                'firstName': user['firstName'],
+                'lastName': user['lastName'],
+                'role': user.get('role', 'patient'),
+                'isProfileComplete': user.get('isProfileComplete', True),
+                'therapyType': user.get('therapyType'),
+                'patientType': user.get('patientType'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                'diagnosticData': user.get('diagnosticData')
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Facility Firebase auth error: {e}", exc_info=True)
+        return jsonify({'message': 'Facility login failed'}), 500
+
 @app.route('/api/auth/firebase', methods=['POST'])
 @limiter.limit("10 per minute")
 def firebase_auth():
@@ -494,8 +652,41 @@ def firebase_auth():
                     }
                 }), 200
             else:
-                # User exists with a different provider
-                return jsonify({'message': 'Email already registered with a different method. Please login with password.'}), 409
+                # User exists with a different/outdated providerId — Firebase has verified email
+                # ownership, so re-link the account to the current Firebase UID.
+                users_collection.update_one(
+                    {'_id': existing_user['_id']},
+                    {
+                        '$set': {
+                            'providerId': firebase_uid,
+                            'provider': provider,
+                            'profilePicture': profile_picture or existing_user.get('profilePicture', ''),
+                            'updatedAt': datetime.datetime.utcnow()
+                        }
+                    }
+                )
+                token = jwt.encode({
+                    'user_id': str(existing_user['_id']),
+                    'role': existing_user.get('role', 'patient'),
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                }, app.config['SECRET_KEY'], algorithm="HS256")
+
+                return jsonify({
+                    'message': 'Account re-linked successfully',
+                    'token': token,
+                    'user': {
+                        'id': str(existing_user['_id']),
+                        'email': existing_user['email'],
+                        'firstName': existing_user['firstName'],
+                        'lastName': existing_user['lastName'],
+                        'role': existing_user.get('role', 'patient'),
+                        'isProfileComplete': existing_user.get('isProfileComplete', True),
+                        'therapyType': existing_user.get('therapyType'),
+                        'patientType': existing_user.get('patientType'),
+                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic'),
+                        'diagnosticData': existing_user.get('diagnosticData')
+                    }
+                }), 200
         
         # Create new user with incomplete profile
         new_user = {
@@ -2932,6 +3123,8 @@ def record_articulation(current_user):
                 'feedback': feedback,
                 'timestamp': datetime.datetime.utcnow()
             }
+            if getattr(g, 'token_data', {}).get('facility_mode'):
+                trial_data['location'] = 'facility'
             articulation_trials_collection.insert_one(trial_data)
             
             return jsonify({
@@ -3089,7 +3282,16 @@ def save_progress(current_user):
         level_data['total_items'] = total_items
         
         progress_doc['updated_at'] = datetime.datetime.utcnow()
-        
+
+        # Compute overall_mastery as the average of all item average_scores across all levels
+        all_item_scores = [
+            item.get('average_score', 0)
+            for lvl in progress_doc.get('levels', {}).values()
+            for item in lvl.get('items', {}).values()
+        ]
+        if all_item_scores:
+            progress_doc['overall_mastery'] = sum(all_item_scores) / len(all_item_scores)
+
         # Upsert progress document
         articulation_progress_collection.update_one(
             {'user_id': user_id, 'sound_id': sound_id},
@@ -3423,6 +3625,8 @@ def save_language_progress(current_user):
             'transcription': transcription,
             'timestamp': datetime.datetime.utcnow()
         }
+        if getattr(g, 'token_data', {}).get('facility_mode'):
+            trial_data['location'] = 'facility'
         language_trials_collection.insert_one(trial_data)
         
         # Upsert progress document
@@ -3814,7 +4018,16 @@ def save_fluency_progress(current_user):
         }
         
         progress_doc['updated_at'] = utc_now()
-        
+
+        # Compute overall_mastery as the average of all exercise fluency_scores across all levels
+        all_fluency_scores = [
+            ex.get('fluency_score', 0)
+            for lvl in progress_doc.get('levels', {}).values()
+            for ex in lvl.get('exercises', {}).values()
+        ]
+        if all_fluency_scores:
+            progress_doc['overall_mastery'] = sum(all_fluency_scores) / len(all_fluency_scores)
+
         # Save trial data
         trial_data = {
             'user_id': user_id,
@@ -3828,6 +4041,8 @@ def save_fluency_progress(current_user):
             'passed': passed,
             'timestamp': utc_now()
         }
+        if getattr(g, 'token_data', {}).get('facility_mode'):
+            trial_data['location'] = 'facility'
         fluency_trials_collection.insert_one(trial_data)
         
         # Upsert progress document
@@ -4475,6 +4690,8 @@ def hardware_gait_analyze(current_user):
             'created_at': utc_now(),
             'updated_at': utc_now()
         }
+        if getattr(g, 'token_data', {}).get('facility_mode'):
+            gait_document['location'] = 'facility'
         
         # Insert into database
         insert_result = gait_progress_collection.insert_one(gait_document)
@@ -4953,8 +5170,16 @@ def get_physical_therapy_patients(current_user):
         
         analyses_data = []
         for analysis in all_gait_analyses:
+            # Skip records with invalid ObjectId user_ids (e.g., synthetic users)
+            user_id = analysis.get('user_id')
+            if not user_id or not isinstance(user_id, str) or len(user_id) != 24:
+                continue
+            
             # Get user info for each analysis
-            user = users_collection.find_one({'_id': ObjectId(analysis['user_id'])})
+            try:
+                user = users_collection.find_one({'_id': ObjectId(user_id)})
+            except Exception:
+                continue
             
             if user:
                 # Extract detected problems
@@ -5255,11 +5480,99 @@ def delete_facility_diagnostic(current_user, diagnostic_id):
         return jsonify({'success': False, 'message': 'Failed to delete diagnostic'}), 500
 
 
+
+
+def aggregate_facility_scores(user_id):
+    """Aggregate facility scores from trial collections filtered by location='facility'."""
+    facility_scores = {}
+
+    # Articulation: per-sound average computed_score from articulation_trials
+    art_pipeline = [
+        {'$match': {'user_id': user_id, 'location': 'facility'}},
+        {'$group': {
+            '_id': '$sound_id',
+            'avg_score': {'$avg': '$scores.computed_score'}
+        }}
+    ]
+    art_results = list(articulation_trials_collection.aggregate(art_pipeline))
+    art_scores = {}
+    for r in art_results:
+        sound = r.get('_id', '')
+        if sound:
+            art_scores[sound] = round((r.get('avg_score') or 0) * 100, 1)
+    facility_scores['articulation'] = art_scores
+
+    # Fluency: average fluency_score from fluency_trials
+    fluency_pipeline = [
+        {'$match': {'user_id': user_id, 'location': 'facility'}},
+        {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+    ]
+    fluency_results = list(fluency_trials_collection.aggregate(fluency_pipeline))
+    if fluency_results and fluency_results[0].get('avg_score') is not None:
+        raw = fluency_results[0]['avg_score']
+        facility_scores['fluency'] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
+    else:
+        facility_scores['fluency'] = None
+
+    # Receptive language: accuracy from language_trials
+    receptive_pipeline = [
+        {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': 'facility'}},
+        {'$group': {
+            '_id': None,
+            'total': {'$sum': 1},
+            'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+        }}
+    ]
+    receptive_results = list(language_trials_collection.aggregate(receptive_pipeline))
+    if receptive_results and receptive_results[0].get('total', 0) > 0:
+        r = receptive_results[0]
+        facility_scores['receptive'] = round((r['correct'] / r['total']) * 100, 1)
+    else:
+        facility_scores['receptive'] = None
+
+    # Expressive language: accuracy from language_trials
+    expressive_pipeline = [
+        {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': 'facility'}},
+        {'$group': {
+            '_id': None,
+            'total': {'$sum': 1},
+            'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+        }}
+    ]
+    expressive_results = list(language_trials_collection.aggregate(expressive_pipeline))
+    if expressive_results and expressive_results[0].get('total', 0) > 0:
+        r = expressive_results[0]
+        facility_scores['expressive'] = round((r['correct'] / r['total']) * 100, 1)
+    else:
+        facility_scores['expressive'] = None
+
+    # Gait: average metrics from gaitprogresses where location='facility'
+    gait_records = list(db['gaitprogresses'].find({'user_id': user_id, 'location': 'facility'}))
+    if gait_records:
+        gm_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+        for rec in gait_records:
+            m = rec.get('metrics', {})
+            gm_avg['stability_score'] += m.get('stability_score', 0)
+            gm_avg['gait_symmetry'] += m.get('gait_symmetry', 0)
+            gm_avg['step_regularity'] += m.get('step_regularity', 0)
+        cnt = len(gait_records)
+        facility_scores['gait'] = {
+            'stability_score': round((gm_avg['stability_score'] / cnt) * 100, 1),
+            'gait_symmetry': round((gm_avg['gait_symmetry'] / cnt) * 100, 1),
+            'step_regularity': round((gm_avg['step_regularity'] / cnt) * 100, 1),
+            'overall_gait': round(((gm_avg['stability_score'] + gm_avg['gait_symmetry'] + gm_avg['step_regularity']) / (cnt * 3)) * 100, 1)
+        }
+    else:
+        facility_scores['gait'] = {}
+
+    return facility_scores
+
+
 @app.route('/api/therapist/diagnostics/<user_id>/comparison', methods=['GET'])
 @token_required
 @therapist_required
 def get_diagnostic_comparison(current_user, user_id):
-    """Get computed comparison between facility diagnostic and current at-home performance"""
+    """Get computed comparison between facility sessions and current at-home performance"""
     try:
         # Verify the patient exists
         try:
@@ -5269,71 +5582,87 @@ def get_diagnostic_comparison(current_user, user_id):
         if not patient:
             return jsonify({'success': False, 'message': 'Patient not found'}), 404
 
-        # Get the latest facility diagnostic (or specific one if diagnostic_id query param provided)
-        diagnostic_id = request.args.get('diagnostic_id')
-        if diagnostic_id:
-            try:
-                facility_diag = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id)})
-            except Exception:
-                facility_diag = None
-        else:
-            facility_diag = facility_diagnostics_collection.find_one(
-                {'user_id': user_id},
-                sort=[('assessment_date', -1)]
-            )
+        # Build facility scores from trial collections (location='facility')
+        facility_scores = aggregate_facility_scores(user_id)
 
-        if not facility_diag:
-            return jsonify({
-                'success': True,
-                'has_facility_data': False,
-                'message': 'No facility diagnostic found for this patient'
-            }), 200
+        # Determine if any facility data exists
+        has_facility_data = bool(
+            facility_scores.get('articulation') or
+            facility_scores.get('fluency') is not None or
+            facility_scores.get('receptive') is not None or
+            facility_scores.get('expressive') is not None or
+            facility_scores.get('gait')
+        )
 
-        # Build facility scores
-        facility_scores = {
-            'articulation': facility_diag.get('articulation_scores', {}),
-            'fluency': facility_diag.get('fluency_score'),
-            'receptive': facility_diag.get('receptive_score'),
-            'expressive': facility_diag.get('expressive_score'),
-            'gait': facility_diag.get('gait_scores', {})
-        }
-
-        # Aggregate current at-home scores from progress collections
+        # Aggregate home scores from trial collections, excluding facility sessions.
+        # Uses the same sources as aggregate_facility_scores but with location != 'facility',
+        # so facility and home data are strictly non-overlapping.
         home_scores = {}
+        home_filter = {'$ne': 'facility'}
 
-        # Articulation: get mastery per sound from articulation_progress
-        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        # Articulation: avg computed_score per sound from home trials
+        art_home_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {
+                '_id': '$sound_id',
+                'avg_score': {'$avg': '$scores.computed_score'}
+            }}
+        ]
+        art_home_results = list(articulation_trials_collection.aggregate(art_home_pipeline))
         art_scores = {}
-        for prog in articulation_progress:
-            sound = prog.get('sound_id', '')
-            mastery = prog.get('overall_mastery', 0)
-            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        for row in art_home_results:
+            sound = row.get('_id', '')
+            raw = row.get('avg_score')
+            if sound and raw is not None:
+                art_scores[sound] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
         home_scores['articulation'] = art_scores
 
-        # Fluency: get from fluency_progress
-        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
-        if fluency_progress:
-            fluency_mastery = fluency_progress.get('overall_mastery', 0)
-            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        # Fluency: avg fluency_score from home trials
+        fluency_home_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+        ]
+        fluency_home_results = list(fluency_trials_collection.aggregate(fluency_home_pipeline))
+        if fluency_home_results and fluency_home_results[0].get('avg_score') is not None:
+            raw = fluency_home_results[0]['avg_score']
+            home_scores['fluency'] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
         else:
             home_scores['fluency'] = None
 
-        # Receptive: get from language_progress (mode=receptive)
-        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
-        if receptive_progress:
-            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        # Receptive: accuracy from home language trials
+        receptive_home_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': home_filter}},
+            {'$group': {
+                '_id': None,
+                'total': {'$sum': 1},
+                'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+            }}
+        ]
+        receptive_home_results = list(language_trials_collection.aggregate(receptive_home_pipeline))
+        if receptive_home_results and receptive_home_results[0].get('total', 0) > 0:
+            r = receptive_home_results[0]
+            home_scores['receptive'] = round((r['correct'] / r['total']) * 100, 1)
         else:
             home_scores['receptive'] = None
 
-        # Expressive: get from language_progress (mode=expressive)
-        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
-        if expressive_progress:
-            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        # Expressive: accuracy from home language trials
+        expressive_home_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': home_filter}},
+            {'$group': {
+                '_id': None,
+                'total': {'$sum': 1},
+                'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+            }}
+        ]
+        expressive_home_results = list(language_trials_collection.aggregate(expressive_home_pipeline))
+        if expressive_home_results and expressive_home_results[0].get('total', 0) > 0:
+            e = expressive_home_results[0]
+            home_scores['expressive'] = round((e['correct'] / e['total']) * 100, 1)
         else:
             home_scores['expressive'] = None
 
-        # Gait: get average from gaitprogresses
-        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        # Gait: average metrics from home gait records only
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id, 'location': home_filter}))
         if gait_records:
             gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
             for gait in gait_records:
@@ -5350,6 +5679,16 @@ def get_diagnostic_comparison(current_user, user_id):
             }
         else:
             home_scores['gait'] = {}
+
+        if not has_facility_data:
+            return jsonify({
+                'success': True,
+                'has_facility_data': False,
+                'message': 'No facility sessions found for this patient',
+                'facility_scores': {'articulation': {}, 'fluency': None, 'receptive': None, 'expressive': None, 'gait': {}},
+                'home_scores': home_scores,
+                'deltas': {}
+            }), 200
 
         # Compute deltas
         deltas = {}
@@ -5387,16 +5726,8 @@ def get_diagnostic_comparison(current_user, user_id):
         else:
             deltas['gait'] = None
 
-        # Look up assessor name
-        try:
-            assessor = users_collection.find_one({'_id': ObjectId(facility_diag.get('assessed_by', ''))})
-            assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
-        except Exception:
-            assessor_name = 'Unknown'
-
         # Compute summary insights
         all_deltas = []
-        art_deltas = deltas.get('articulation', {})
         for sound, d in art_deltas.items():
             if d is not None:
                 all_deltas.append({'metric': f'/{sound.upper()}/ Sound', 'delta': d, 'category': 'articulation'})
@@ -5419,16 +5750,18 @@ def get_diagnostic_comparison(current_user, user_id):
             summary_insights['declining_count'] = len([d for d in valid_deltas if d < 0])
             summary_insights['stable_count'] = len([d for d in valid_deltas if d == 0])
 
+        patient_name = f"{patient['firstName']} {patient['lastName']}"
+
         return jsonify({
             'success': True,
             'has_facility_data': True,
-            'patient_name': f"{patient['firstName']} {patient['lastName']}",
-            'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
-            'assessment_type': facility_diag.get('assessment_type', 'initial'),
-            'assessor_name': assessor_name,
-            'severity_level': facility_diag.get('severity_level', ''),
-            'notes': facility_diag.get('notes', ''),
-            'recommended_focus': facility_diag.get('recommended_focus', []),
+            'patient_name': patient_name,
+            'assessment_date': None,
+            'assessment_type': 'auto',
+            'assessor_name': '',
+            'severity_level': '',
+            'notes': '',
+            'recommended_focus': [],
             'facility_scores': facility_scores,
             'home_scores': home_scores,
             'deltas': deltas,
@@ -5508,10 +5841,79 @@ def get_patient_diagnostic_comparison(current_user):
             )
 
         if not facility_diag:
+            home_scores_nf = {}
+            home_filter_nf = {'$ne': 'facility'}
+
+            art_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'location': home_filter_nf}},
+                {'$group': {'_id': '$sound_id', 'avg_score': {'$avg': '$scores.computed_score'}}}
+            ]
+            art_results_nf = list(articulation_trials_collection.aggregate(art_pipeline_nf))
+            art_scores_nf = {}
+            for r in art_results_nf:
+                sound = r.get('_id', '')
+                if sound:
+                    art_scores_nf[sound] = round((r.get('avg_score') or 0) * 100, 1)
+            home_scores_nf['articulation'] = art_scores_nf
+
+            fluency_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'location': home_filter_nf}},
+                {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+            ]
+            fluency_results_nf = list(fluency_trials_collection.aggregate(fluency_pipeline_nf))
+            if fluency_results_nf and fluency_results_nf[0].get('avg_score') is not None:
+                raw_nf = fluency_results_nf[0]['avg_score']
+                home_scores_nf['fluency'] = round(raw_nf * 100, 1) if raw_nf <= 1 else round(raw_nf, 1)
+            else:
+                home_scores_nf['fluency'] = None
+
+            receptive_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': home_filter_nf}},
+                {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+            ]
+            receptive_results_nf = list(language_trials_collection.aggregate(receptive_pipeline_nf))
+            if receptive_results_nf and receptive_results_nf[0].get('total', 0) > 0:
+                r_nf = receptive_results_nf[0]
+                home_scores_nf['receptive'] = round((r_nf['correct'] / r_nf['total']) * 100, 1)
+            else:
+                home_scores_nf['receptive'] = None
+
+            expressive_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': home_filter_nf}},
+                {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+            ]
+            expressive_results_nf = list(language_trials_collection.aggregate(expressive_pipeline_nf))
+            if expressive_results_nf and expressive_results_nf[0].get('total', 0) > 0:
+                r_nf = expressive_results_nf[0]
+                home_scores_nf['expressive'] = round((r_nf['correct'] / r_nf['total']) * 100, 1)
+            else:
+                home_scores_nf['expressive'] = None
+
+            gait_records_nf = list(db['gaitprogresses'].find({'user_id': user_id, 'location': home_filter_nf}))
+            if gait_records_nf:
+                gm_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+                for rec in gait_records_nf:
+                    m = rec.get('metrics', {})
+                    gm_avg['stability_score'] += m.get('stability_score', 0)
+                    gm_avg['gait_symmetry'] += m.get('gait_symmetry', 0)
+                    gm_avg['step_regularity'] += m.get('step_regularity', 0)
+                cnt = len(gait_records_nf)
+                home_scores_nf['gait'] = {
+                    'stability_score': round((gm_avg['stability_score'] / cnt) * 100, 1),
+                    'gait_symmetry': round((gm_avg['gait_symmetry'] / cnt) * 100, 1),
+                    'step_regularity': round((gm_avg['step_regularity'] / cnt) * 100, 1),
+                    'overall_gait': round(((gm_avg['stability_score'] + gm_avg['gait_symmetry'] + gm_avg['step_regularity']) / (cnt * 3)) * 100, 1)
+                }
+            else:
+                home_scores_nf['gait'] = {}
+
             return jsonify({
                 'success': True,
                 'has_facility_data': False,
-                'message': 'No facility diagnostic found'
+                'message': 'No facility diagnostic found',
+                'facility_scores': {'articulation': {}, 'fluency': None, 'receptive': None, 'expressive': None, 'gait': {}},
+                'home_scores': home_scores_nf,
+                'deltas': {}
             }), 200
 
         # Build facility scores (now includes gait)
@@ -5523,48 +5925,65 @@ def get_patient_diagnostic_comparison(current_user):
             'gait': facility_diag.get('gait_scores', {})
         }
 
-        # Aggregate at-home scores (same logic as therapist comparison)
+        # Aggregate at-home scores (trials-based, excludes facility sessions)
         home_scores = {}
+        home_filter = {'$ne': 'facility'}
 
         # Articulation
-        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        art_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {'_id': '$sound_id', 'avg_score': {'$avg': '$scores.computed_score'}}}
+        ]
+        art_results = list(articulation_trials_collection.aggregate(art_pipeline))
         art_scores = {}
-        for prog in articulation_progress:
-            sound = prog.get('sound_id', '')
-            if not sound:
-                continue
-            mastery = prog.get('overall_mastery', 0)
-            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        for r in art_results:
+            sound = r.get('_id', '')
+            if sound:
+                art_scores[sound] = round((r.get('avg_score') or 0) * 100, 1)
         home_scores['articulation'] = art_scores
 
         # Fluency
-        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
-        if fluency_progress:
-            fluency_mastery = fluency_progress.get('overall_mastery', 0)
-            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        fluency_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+        ]
+        fluency_results = list(fluency_trials_collection.aggregate(fluency_pipeline))
+        if fluency_results and fluency_results[0].get('avg_score') is not None:
+            raw = fluency_results[0]['avg_score']
+            home_scores['fluency'] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
         else:
             home_scores['fluency'] = None
 
         # Receptive
-        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
-        if receptive_progress:
-            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        receptive_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': home_filter}},
+            {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+        ]
+        receptive_results = list(language_trials_collection.aggregate(receptive_pipeline))
+        if receptive_results and receptive_results[0].get('total', 0) > 0:
+            r = receptive_results[0]
+            home_scores['receptive'] = round((r['correct'] / r['total']) * 100, 1)
         else:
             home_scores['receptive'] = None
 
         # Expressive
-        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
-        if expressive_progress:
-            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        expressive_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': home_filter}},
+            {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+        ]
+        expressive_results = list(language_trials_collection.aggregate(expressive_pipeline))
+        if expressive_results and expressive_results[0].get('total', 0) > 0:
+            r = expressive_results[0]
+            home_scores['expressive'] = round((r['correct'] / r['total']) * 100, 1)
         else:
             home_scores['expressive'] = None
 
-        # Gait: get average from gaitprogresses
-        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        # Gait: home-only records (excludes facility)
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id, 'location': home_filter}))
         if gait_records:
             gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
-            for gait in gait_records:
-                metrics = gait.get('metrics', {})
+            for rec in gait_records:
+                metrics = rec.get('metrics', {})
                 gait_metrics_avg['stability_score'] += metrics.get('stability_score', 0)
                 gait_metrics_avg['gait_symmetry'] += metrics.get('gait_symmetry', 0)
                 gait_metrics_avg['step_regularity'] += metrics.get('step_regularity', 0)

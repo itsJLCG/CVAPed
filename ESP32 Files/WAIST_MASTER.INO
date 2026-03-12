@@ -157,6 +157,11 @@ void setup() {
     Serial.print("   Gateway: ");
     Serial.println(WiFi.gatewayIP());
     Serial.println("   Backend: http://cvacare.local:5000");
+    Serial.println("   ──────────────────────────────────────────");
+    Serial.printf("   WiFi Channel: %d  <-- Set ESPNOW_CHANNEL to this\n", WiFi.channel());
+    Serial.println("   ──────────────────────────────────────────");
+    Serial.println("   Copy the channel number above into both");
+    Serial.println("   LEFT_FOOT and RIGHT_FOOT slave files.");
   } else {
     Serial.println("\n❌ WiFi Connection FAILED!");
   }

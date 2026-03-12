@@ -6,7 +6,7 @@
  * ROLE: ESP-NOW Sender Only (NO WiFi)
  * - Reads LEFT KNEE & LEFT ANKLE sensors (MPU6050)
  * - Reads LEFT FOOT pressure sensors (FSR via ADS1115)
- * - SENDS all data to RIGHT foot via ESP-NOW
+ * - SENDS all data to WAIST MASTER via ESP-NOW
  * - Does NOT connect to WiFi or backend
  * 
  * HARDWARE:
@@ -19,11 +19,22 @@
  */
 
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
+
+// ═══════════════════════════════════════════════════════════════════════
+// ESP-NOW Channel Configuration
+// ═══════════════════════════════════════════════════════════════════════
+// ⚠️  IMPORTANT: This MUST match the WiFi channel the WAIST Master is on!
+//     1. Upload & run WAIST_MASTER first.
+//     2. Check its Serial Monitor for "WiFi Channel: X".
+//     3. Set ESPNOW_CHANNEL to that value, then upload this file.
+// ═══════════════════════════════════════════════════════════════════════
+#define ESPNOW_CHANNEL 11  // Change to match WAIST Master's WiFi channel
 
 // ═══════════════════════════════════════════════════════════════════════
 // WAIST ESP32 MAC Address
@@ -33,6 +44,9 @@
 //     then paste it here before uploading LEFT foot code.
 // ═══════════════════════════════════════════════════════════════════════
 uint8_t waistMacAddress[] = {0xFC, 0xE8, 0xC0, 0x7B, 0xB4, 0x14};  // FC:E8:C0:7B:B4:14
+
+#define ESPNOW_SEND_RETRIES 3     // Retry count on send failure
+#define ESPNOW_RETRY_DELAY_MS 50  // Delay between retries (ms)
 
 // ═══════════════════════════════════════════════════════════════════════
 // ESP-NOW Data Structure
@@ -61,8 +75,8 @@ Adafruit_ADS1115 ads;
 // ESP-NOW Callback - Confirms data was sent
 // ═══════════════════════════════════════════════════════════════════════
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
-  Serial.print("📤 Send Status: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "✅ SUCCESS" : "❌ FAILED");
+  Serial.print("Send Status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "SUCCESS" : "FAILED");
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -106,10 +120,21 @@ void setup() {
   // WiFi Mode (NO CONNECTION - ESP-NOW only!)
   // ─────────────────────────────────────────────────────────────────────
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+
+  // Force the radio onto the same channel the WAIST Master's WiFi uses.
+  // Without this, the slave defaults to channel 1 while the master may
+  // be on a different channel, causing packets to never arrive.
+  esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   
-  Serial.println("\n📍 My MAC Address:");
+  Serial.println("\nMy MAC Address:");
   Serial.print("   ");
   Serial.println(WiFi.macAddress());
+
+  uint8_t primaryCh;
+  wifi_second_chan_t secondCh;
+  esp_wifi_get_channel(&primaryCh, &secondCh);
+  Serial.printf("   ESP-NOW Channel: %d\n", primaryCh);
 
   // ─────────────────────────────────────────────────────────────────────
   // Initialize I2C Sensors
@@ -162,7 +187,7 @@ void setup() {
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo));
   memcpy(peerInfo.peer_addr, waistMacAddress, 6);
-  peerInfo.channel = 0;
+  peerInfo.channel = ESPNOW_CHANNEL;
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
@@ -238,14 +263,20 @@ void loop() {
                 toe, mid, heel);
 
   // ─────────────────────────────────────────────────────────────────────
-  // Send to WAIST via ESP-NOW
+  // Send to WAIST via ESP-NOW (with retries)
   // ─────────────────────────────────────────────────────────────────────
-  esp_err_t result = esp_now_send(waistMacAddress, 
-                                   (uint8_t*)&leftFootData, 
-                                   sizeof(leftFootData));
+  esp_err_t result = ESP_FAIL;
+  for (int attempt = 1; attempt <= ESPNOW_SEND_RETRIES; attempt++) {
+    result = esp_now_send(waistMacAddress,
+                          (uint8_t*)&leftFootData,
+                          sizeof(leftFootData));
+    if (result == ESP_OK) break;
+    Serial.printf("Send attempt %d failed, retrying...\n", attempt);
+    delay(ESPNOW_RETRY_DELAY_MS);
+  }
   
   if (result != ESP_OK) {
-    Serial.println("❌ ESP-NOW Send Error!");
+    Serial.println("ESP-NOW Send Error after all retries!");
   }
 
   Serial.println("════════════════════════════════════════\n");

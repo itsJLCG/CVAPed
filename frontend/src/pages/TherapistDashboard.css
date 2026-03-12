@@ -9603,6 +9603,107 @@
   border-bottom: 2px solid #e5e7eb;
 }
 
+/* No-facility soft notice banner */
+.diag-no-facility-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fef9c3;
+  border: 1px solid #fde047;
+  border-left: 4px solid #eab308;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+}
+
+.diag-no-facility-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.diag-no-facility-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #78350f;
+  margin: 0 0 3px 0;
+}
+
+.diag-no-facility-hint {
+  font-size: 0.82rem;
+  color: #92400e;
+  margin: 0;
+}
+
+/* Therapy Section Dividers */
+.diag-therapy-section {
+  margin-bottom: 2rem;
+  border-radius: 12px;
+}
+
+.diag-therapy-section-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+
+.diag-therapy-speech .diag-therapy-section-header {
+  background: linear-gradient(135deg, #ede9fe 0%, #dbeafe 100%);
+  border-left: 4px solid #7c3aed;
+}
+
+.diag-therapy-physical .diag-therapy-section-header {
+  background: linear-gradient(135deg, #dcfce7 0%, #d1fae5 100%);
+  border-left: 4px solid #16a34a;
+}
+
+.diag-therapy-section-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.diag-therapy-section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 2px 0;
+  color: #111827;
+}
+
+.diag-therapy-speech .diag-therapy-section-title {
+  color: #5b21b6;
+}
+
+.diag-therapy-physical .diag-therapy-section-title {
+  color: #15803d;
+}
+
+.diag-therapy-section-subtitle {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.diag-therapy-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.diag-therapy-empty-icon {
+  font-size: 1.4rem;
+  opacity: 0.5;
+}
+
 .form-row {
   display: flex;
   gap: 12px;
@@ -9808,6 +9909,12 @@
   background: #f3f4f6;
   color: #9ca3af;
   font-style: italic;
+}
+
+.alert-home-only {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }
 
 /* Summary Insights Card */

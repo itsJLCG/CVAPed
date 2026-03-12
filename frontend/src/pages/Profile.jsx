@@ -5,7 +5,7 @@ import { authService } from '../services/api';
 import noProfileImg from '../assets/no_profile.png';
 import './Profile.css';
 
-function Profile({ onLogout }) {
+function Profile({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +103,7 @@ function Profile({ onLogout }) {
   return (
     <div className="profile-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <div className="profile-content">

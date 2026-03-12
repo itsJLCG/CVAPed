@@ -8,7 +8,7 @@ import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './TherapySelection.css';
 
-function TherapySelection({ onLogout }) {
+function TherapySelection({ onLogout, onFacilityExit }) {
   const [hoveredTherapy, setHoveredTherapy] = useState(null);
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
@@ -95,7 +95,7 @@ function TherapySelection({ onLogout }) {
   return (
     <div className="therapy-selection-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Selection Area */}
       <main className="therapy-main">

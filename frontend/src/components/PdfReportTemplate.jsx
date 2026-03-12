@@ -750,7 +750,14 @@ export const generateDiagnosticComparisonPdf = async ({
   }
 
   // ── Comparison table ───────────────────────────────────────────────────────
-  if (comparisonData?.has_facility_data) {
+  const hasAnyHomeScores = comparisonData?.home_scores && (
+    Object.keys(comparisonData.home_scores.articulation || {}).length > 0 ||
+    comparisonData.home_scores.fluency != null ||
+    comparisonData.home_scores.receptive != null ||
+    comparisonData.home_scores.expressive != null ||
+    comparisonData.home_scores.gait?.overall_gait != null
+  );
+  if (comparisonData?.has_facility_data || hasAnyHomeScores) {
     yPos = renderSectionLabel(doc, 'Facility vs. At-Home Comparison', yPos);
 
     const rows = [];

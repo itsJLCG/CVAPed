@@ -508,7 +508,7 @@ const EXERCISES = [
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-function ExercisePlans({ onLogout }) {
+function ExercisePlans({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
 
@@ -589,7 +589,7 @@ function ExercisePlans({ onLogout }) {
 
   return (
     <div className="exercise-plans-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       <main className="exercise-plans-main">
         {/* ── Page Header ─────────────────────────────────────────── */}

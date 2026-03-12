@@ -4,7 +4,7 @@ import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import './TherapyPage.css';
 
-function PhysicalTherapy({ onLogout }) {
+function PhysicalTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
 
@@ -16,7 +16,7 @@ function PhysicalTherapy({ onLogout }) {
   return (
     <div className="therapy-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="therapy-page-main">

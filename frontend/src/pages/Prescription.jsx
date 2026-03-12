@@ -4,7 +4,7 @@ import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { prescriptionService } from '../services/api';
 import './Prescription.css';
 
-function Prescription({ onLogout }) {
+function Prescription({ onLogout, onFacilityExit }) {
   const { selectedCategory } = useTherapyCategory();
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState(null);
@@ -74,7 +74,7 @@ function Prescription({ onLogout }) {
   if (loading) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prescription-container">
             <div className="loading-state">
@@ -90,7 +90,7 @@ function Prescription({ onLogout }) {
   if (selectedCategory === 'physical') {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prescription-container">
             <div className="coming-soon-message">
@@ -126,7 +126,7 @@ function Prescription({ onLogout }) {
   if (error) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prescription-container">
             <div className="error-state">
@@ -147,7 +147,7 @@ function Prescription({ onLogout }) {
   if (!analysis) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prescription-container">
             <div className="no-data-state">
@@ -163,7 +163,7 @@ function Prescription({ onLogout }) {
 
   return (
     <div className="blank-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <main className="blank-page-content">
         <div className="prescription-container">
           {/* Page Header */}

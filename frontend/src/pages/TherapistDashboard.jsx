@@ -1140,8 +1140,11 @@ function TherapistDashboard({ onLogout }) {
     return { label: 'Severe', className: 'band-severe' };
   };
 
-  const getAlertBadge = (delta) => {
-    if (delta === null || delta === undefined) return { text: 'No Data', className: 'alert-nodata', icon: '📋' };
+  const getAlertBadge = (delta, homeVal) => {
+    if (delta === null || delta === undefined) {
+      if (homeVal != null) return { text: 'At-Home Only', className: 'alert-home-only', icon: '🏠' };
+      return { text: 'No Data', className: 'alert-nodata', icon: '📋' };
+    }
     if (delta >= 20) return { text: 'Significant Progress', className: 'alert-great', icon: '🎉' };
     if (delta >= 5) return { text: 'Improving', className: 'alert-good', icon: '📈' };
     if (delta >= -3) return { text: 'Stable', className: 'alert-stable', icon: '➡️' };
@@ -1717,6 +1720,12 @@ function TherapistDashboard({ onLogout }) {
             <p className="page-subtitle">Welcome, {user?.firstName}</p>
           </div>
           <div className="header-right">
+            <button className="header-btn facility-btn" onClick={() => {
+              localStorage.setItem('therapistToken', localStorage.getItem('token') || '');
+              localStorage.setItem('therapistUser', localStorage.getItem('user') || '');
+              localStorage.setItem('facilityMode', 'true');
+              navigate('/facility-login');
+            }}>🏥 Facility Mode</button>
             <button className="header-btn logout-btn" onClick={onLogout}>🚪 Logout</button>
           </div>
         </header>
@@ -3930,21 +3939,8 @@ function TherapistDashboard({ onLogout }) {
                       {diagComparisonData.has_facility_data && (
                         <div className="diag-meta">
                           <span className="diag-meta-item">
-                            📅 Assessment: {new Date(diagComparisonData.assessment_date).toLocaleDateString()}
+                            📊 Auto-aggregated from facility sessions
                           </span>
-                          <span className="diag-meta-item">
-                            📋 Type: {diagComparisonData.assessment_type?.charAt(0).toUpperCase() + diagComparisonData.assessment_type?.slice(1)}
-                          </span>
-                          {diagComparisonData.assessor_name && (
-                            <span className="diag-meta-item">
-                              👤 Assessed by: {diagComparisonData.assessor_name}
-                            </span>
-                          )}
-                          {diagComparisonData.severity_level && (
-                            <span className={`diag-severity diag-severity-${diagComparisonData.severity_level}`}>
-                              {diagComparisonData.severity_level.toUpperCase()}
-                            </span>
-                          )}
                         </div>
                       )}
                     </div>
@@ -4128,16 +4124,19 @@ function TherapistDashboard({ onLogout }) {
                     </div>
                   )}
 
-                  {!diagComparisonData.has_facility_data ? (
-                    <div className="no-data-large">
-                      <div className="no-data-icon">📋</div>
-                      <p className="no-data-text">No facility diagnostic found for this patient</p>
-                      <p className="no-data-hint">Click "Add Facility Diagnostic" above to enter assessment results</p>
-                    </div>
-                  ) : (
-                    <>
+                  <>
+                    {!diagComparisonData.has_facility_data && (
+                      <div className="diag-no-facility-notice">
+                        <span className="diag-no-facility-icon">📋</span>
+                        <div>
+                          <p className="diag-no-facility-text">No facility diagnostic on file</p>
+                          <p className="diag-no-facility-hint">Click "Add Facility Diagnostic" above to add a formal assessment. At-home progress is shown below.</p>
+                        </div>
+                      </div>
+                    )}
+
                       {/* Summary Insights Card */}
-                      {diagComparisonData.summary_insights && Object.keys(diagComparisonData.summary_insights).length > 0 && (
+                      {diagComparisonData.has_facility_data && diagComparisonData.summary_insights && Object.keys(diagComparisonData.summary_insights).length > 0 && (
                         <div className="diag-insights-card">
                           <div className="diag-insights-header">
                             <h3 className="diag-insights-title">
@@ -4209,243 +4208,384 @@ function TherapistDashboard({ onLogout }) {
                         </div>
                       )}
 
-                      {/* Comparison Table */}
-                      <div className="report-card">
-                        <div className="report-card-header">
-                          <h3 className="report-card-title">
-                            <span className="report-icon">📊</span>
-                            Facility vs. At-Home Comparison
-                          </h3>
-                          <p className="report-card-subtitle">Side-by-side view of diagnostic results and current home performance</p>
-                        </div>
-                        <div className="report-card-body">
-                          <div className="diag-table-wrapper">
-                          <table className="diag-comparison-table">
-                            <thead>
-                              <tr>
-                                <th>Metric</th>
-                                <th>Facility Score</th>
-                                <th>Level</th>
-                                <th>At-Home Score</th>
-                                <th>Level</th>
-                                <th>Δ Change</th>
-                                <th>Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {/* Articulation Sounds */}
-                              {['r', 's', 'l', 'th', 'k'].map(sound => {
-                                const facilityVal = diagComparisonData.facility_scores?.articulation?.[sound];
-                                const homeVal = diagComparisonData.home_scores?.articulation?.[sound];
-                                const delta = diagComparisonData.deltas?.articulation?.[sound];
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(facilityVal);
-                                const hBand = getScoreBand(homeVal);
-                                const alert = getAlertBadge(delta);
-                                if (facilityVal == null && homeVal == null) return null;
-                                return (
-                                  <tr key={`art-${sound}`}>
-                                    <td className="metric-name" title={`Measures the patient's ability to correctly produce the /${sound.toUpperCase()}/ phoneme in various word positions`}>
-                                      <span className="metric-content">
-                                        <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
-                                        Articulation /{sound.toUpperCase()}/
-                                      </span>
-                                    </td>
-                                    <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{homeVal != null ? `${homeVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                      {/* Speech Therapy Section */}
+                      {(() => {
+                        const hasSpeechFacility =
+                          ['r', 's', 'l', 'th', 'k'].some(s => diagComparisonData.facility_scores?.articulation?.[s] != null) ||
+                          diagComparisonData.facility_scores?.fluency != null ||
+                          diagComparisonData.facility_scores?.receptive != null ||
+                          diagComparisonData.facility_scores?.expressive != null;
+                        const hasSpeechHome =
+                          ['r', 's', 'l', 'th', 'k'].some(s => diagComparisonData.home_scores?.articulation?.[s] != null) ||
+                          diagComparisonData.home_scores?.fluency != null ||
+                          diagComparisonData.home_scores?.receptive != null ||
+                          diagComparisonData.home_scores?.expressive != null;
+                        const hasSpeechData = hasSpeechFacility || hasSpeechHome;
 
-                              {/* Fluency */}
-                              {(diagComparisonData.facility_scores?.fluency != null || diagComparisonData.home_scores?.fluency != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.fluency;
-                                const hVal = diagComparisonData.home_scores?.fluency;
-                                const delta = diagComparisonData.deltas?.fluency;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr key="fluency">
-                                    <td className="metric-name" title="Measures speech smoothness, rate, and rhythm without interruptions">
-                                      <span className="metric-content">
-                                        <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
-                                        Fluency
-                                      </span>
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
+                        const speechBarItems = [
+                          { label: 'Fluency', facility: diagComparisonData.facility_scores?.fluency, home: diagComparisonData.home_scores?.fluency },
+                          { label: 'Receptive', facility: diagComparisonData.facility_scores?.receptive, home: diagComparisonData.home_scores?.receptive },
+                          { label: 'Expressive', facility: diagComparisonData.facility_scores?.expressive, home: diagComparisonData.home_scores?.expressive },
+                          ...['r', 's', 'l', 'th', 'k']
+                            .filter(s => diagComparisonData.facility_scores?.articulation?.[s] != null || diagComparisonData.home_scores?.articulation?.[s] != null)
+                            .map(s => ({
+                              label: `/${s.toUpperCase()}/`,
+                              facility: diagComparisonData.facility_scores?.articulation?.[s],
+                              home: diagComparisonData.home_scores?.articulation?.[s]
+                            }))
+                        ].filter(item => item.facility != null || item.home != null);
 
-                              {/* Receptive */}
-                              {(diagComparisonData.facility_scores?.receptive != null || diagComparisonData.home_scores?.receptive != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.receptive;
-                                const hVal = diagComparisonData.home_scores?.receptive;
-                                const delta = diagComparisonData.deltas?.receptive;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr key="receptive">
-                                    <td className="metric-name" title="Measures comprehension of spoken language, following directions, and understanding concepts">
-                                      <span className="metric-content">
-                                        <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
-                                        Receptive Language
-                                      </span>
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
+                        return (
+                          <div className="diag-therapy-section diag-therapy-speech">
+                            <div className="diag-therapy-section-header">
+                              <span className="diag-therapy-section-icon">🗣️</span>
+                              <div>
+                                <h3 className="diag-therapy-section-title">Speech Therapy</h3>
+                                <p className="diag-therapy-section-subtitle">Articulation, fluency, and language metrics</p>
+                              </div>
+                            </div>
 
-                              {/* Expressive */}
-                              {(diagComparisonData.facility_scores?.expressive != null || diagComparisonData.home_scores?.expressive != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.expressive;
-                                const hVal = diagComparisonData.home_scores?.expressive;
-                                const delta = diagComparisonData.deltas?.expressive;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr key="expressive">
-                                    <td className="metric-name" title="Measures ability to express thoughts, use vocabulary, and form sentences">
-                                      <span className="metric-content">
-                                        <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
-                                        Expressive Language
-                                      </span>
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
-
-                              {/* Gait */}
-                              {(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.gait?.overall_gait;
-                                const hVal = diagComparisonData.home_scores?.gait?.overall_gait;
-                                const delta = diagComparisonData.deltas?.gait;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr key="gait">
-                                    <td className="metric-name" title="Measures overall walking pattern including stability, symmetry, and step regularity">
-                                      <span className="metric-content">
-                                        <span className="metric-icon" style={{ backgroundColor: '#4CAF50' }}>🚶</span>
-                                        Gait (Overall)
-                                      </span>
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
-                            </tbody>
-                          </table>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Visual Bar Chart */}
-                      <div className="report-card">
-                        <div className="report-card-header">
-                          <h3 className="report-card-title">
-                            <span className="report-icon">📈</span>
-                            Visual Comparison
-                          </h3>
-                          <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
-                        </div>
-                        <div className="report-card-body">
-                          <div className="diag-bar-chart">
-                            {[
-                              { label: 'Fluency', facility: diagComparisonData.facility_scores?.fluency, home: diagComparisonData.home_scores?.fluency },
-                              { label: 'Receptive', facility: diagComparisonData.facility_scores?.receptive, home: diagComparisonData.home_scores?.receptive },
-                              { label: 'Expressive', facility: diagComparisonData.facility_scores?.expressive, home: diagComparisonData.home_scores?.expressive },
-                              ...(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null
-                                ? [{ label: 'Gait', facility: diagComparisonData.facility_scores?.gait?.overall_gait, home: diagComparisonData.home_scores?.gait?.overall_gait }]
-                                : []),
-                              ...['r', 's', 'l', 'th', 'k']
-                                .filter(s => diagComparisonData.facility_scores?.articulation?.[s] != null || diagComparisonData.home_scores?.articulation?.[s] != null)
-                                .map(s => ({
-                                  label: `/${s.toUpperCase()}/`,
-                                  facility: diagComparisonData.facility_scores?.articulation?.[s],
-                                  home: diagComparisonData.home_scores?.articulation?.[s]
-                                }))
-                            ].filter(item => item.facility != null || item.home != null).map((item, idx) => (
-                              <div key={idx} className="diag-bar-row">
-                                <span className="diag-bar-label">{item.label}</span>
-                                <div className="diag-bar-tracks">
-                                  <div className="diag-bar-track">
-                                    <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
-                                      {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
-                                    </div>
+                            {!hasSpeechData ? (
+                              <div className="diag-therapy-empty">
+                                <span className="diag-therapy-empty-icon">🗣️</span>
+                                <p>No speech therapy data available for this assessment</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="report-card">
+                                  <div className="report-card-header">
+                                    <h3 className="report-card-title">
+                                      <span className="report-icon">📊</span>
+                                      Facility vs. At-Home Comparison
+                                    </h3>
+                                    <p className="report-card-subtitle">Side-by-side view of speech diagnostic results and current home performance</p>
                                   </div>
-                                  <div className="diag-bar-track">
-                                    <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
-                                      {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                  <div className="report-card-body">
+                                    <div className="diag-table-wrapper">
+                                      <table className="diag-comparison-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Metric</th>
+                                            <th>Facility Score</th>
+                                            <th>Level</th>
+                                            <th>At-Home Score</th>
+                                            <th>Level</th>
+                                            <th>Δ Change</th>
+                                            <th>Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {['r', 's', 'l', 'th', 'k'].map(sound => {
+                                            const facilityVal = diagComparisonData.facility_scores?.articulation?.[sound];
+                                            const homeVal = diagComparisonData.home_scores?.articulation?.[sound];
+                                            const delta = diagComparisonData.deltas?.articulation?.[sound];
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(facilityVal);
+                                            const hBand = getScoreBand(homeVal);
+                                            const alert = getAlertBadge(delta, homeVal);
+                                            if (facilityVal == null && homeVal == null) return null;
+                                            return (
+                                              <tr key={`art-${sound}`}>
+                                                <td className="metric-name" title={`Measures the patient's ability to correctly produce the /${sound.toUpperCase()}/ phoneme in various word positions`}>
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
+                                                    Articulation /{sound.toUpperCase()}/
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{homeVal != null ? `${homeVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+
+                                          {(diagComparisonData.facility_scores?.fluency != null || diagComparisonData.home_scores?.fluency != null) && (() => {
+                                            const fVal = diagComparisonData.facility_scores?.fluency;
+                                            const hVal = diagComparisonData.home_scores?.fluency;
+                                            const delta = diagComparisonData.deltas?.fluency;
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            return (
+                                              <tr key="fluency">
+                                                <td className="metric-name" title="Measures speech smoothness, rate, and rhythm without interruptions">
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
+                                                    Fluency
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })()}
+
+                                          {(diagComparisonData.facility_scores?.receptive != null || diagComparisonData.home_scores?.receptive != null) && (() => {
+                                            const fVal = diagComparisonData.facility_scores?.receptive;
+                                            const hVal = diagComparisonData.home_scores?.receptive;
+                                            const delta = diagComparisonData.deltas?.receptive;
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            return (
+                                              <tr key="receptive">
+                                                <td className="metric-name" title="Measures comprehension of spoken language, following directions, and understanding concepts">
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
+                                                    Receptive Language
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })()}
+
+                                          {(diagComparisonData.facility_scores?.expressive != null || diagComparisonData.home_scores?.expressive != null) && (() => {
+                                            const fVal = diagComparisonData.facility_scores?.expressive;
+                                            const hVal = diagComparisonData.home_scores?.expressive;
+                                            const delta = diagComparisonData.deltas?.expressive;
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            return (
+                                              <tr key="expressive">
+                                                <td className="metric-name" title="Measures ability to express thoughts, use vocabulary, and form sentences">
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
+                                                    Expressive Language
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })()}
+                                        </tbody>
+                                      </table>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                            <div className="diag-bar-legend">
-                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
-                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
-                            </div>
+
+                                {speechBarItems.length > 0 && (
+                                  <div className="report-card">
+                                    <div className="report-card-header">
+                                      <h3 className="report-card-title">
+                                        <span className="report-icon">📈</span>
+                                        Visual Comparison — Speech
+                                      </h3>
+                                      <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
+                                    </div>
+                                    <div className="report-card-body">
+                                      <div className="diag-bar-chart">
+                                        {speechBarItems.map((item, idx) => (
+                                          <div key={idx} className="diag-bar-row">
+                                            <span className="diag-bar-label">{item.label}</span>
+                                            <div className="diag-bar-tracks">
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
+                                                  {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
+                                                </div>
+                                              </div>
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
+                                                  {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                        <div className="diag-bar-legend">
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
+
+                      {/* Physical Therapy Section */}
+                      {(() => {
+                        const hasGaitFacility = diagComparisonData.facility_scores?.gait?.overall_gait != null;
+                        const hasGaitHome = diagComparisonData.home_scores?.gait?.overall_gait != null;
+                        const hasGaitData = hasGaitFacility || hasGaitHome;
+
+                        const gaitMetrics = [
+                          { key: 'stability_score', label: 'Stability', icon: '🦿', color: '#4CAF50', title: 'Measures postural stability and balance during walking' },
+                          { key: 'gait_symmetry', label: 'Gait Symmetry', icon: '⚖️', color: '#009688', title: 'Measures the evenness of left/right stride patterns' },
+                          { key: 'step_regularity', label: 'Step Regularity', icon: '👣', color: '#03A9F4', title: 'Measures consistency and rhythm of step timing' },
+                          { key: 'overall_gait', label: 'Gait (Overall)', icon: '🚶', color: '#4CAF50', title: 'Measures overall walking pattern including stability, symmetry, and step regularity' },
+                        ];
+
+                        const ptBarItems = gaitMetrics
+                          .filter(m => diagComparisonData.facility_scores?.gait?.[m.key] != null || diagComparisonData.home_scores?.gait?.[m.key] != null)
+                          .map(m => ({
+                            label: m.label,
+                            facility: diagComparisonData.facility_scores?.gait?.[m.key],
+                            home: diagComparisonData.home_scores?.gait?.[m.key]
+                          }));
+
+                        return (
+                          <div className="diag-therapy-section diag-therapy-physical">
+                            <div className="diag-therapy-section-header">
+                              <span className="diag-therapy-section-icon">🦵</span>
+                              <div>
+                                <h3 className="diag-therapy-section-title">Physical Therapy</h3>
+                                <p className="diag-therapy-section-subtitle">Gait and mobility metrics</p>
+                              </div>
+                            </div>
+
+                            {!hasGaitData ? (
+                              <div className="diag-therapy-empty">
+                                <span className="diag-therapy-empty-icon">🦵</span>
+                                <p>No physical therapy data available for this assessment</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="report-card">
+                                  <div className="report-card-header">
+                                    <h3 className="report-card-title">
+                                      <span className="report-icon">📊</span>
+                                      Facility vs. At-Home Comparison
+                                    </h3>
+                                    <p className="report-card-subtitle">Side-by-side view of physical therapy diagnostic results and current home performance</p>
+                                  </div>
+                                  <div className="report-card-body">
+                                    <div className="diag-table-wrapper">
+                                      <table className="diag-comparison-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Metric</th>
+                                            <th>Facility Score</th>
+                                            <th>Level</th>
+                                            <th>At-Home Score</th>
+                                            <th>Level</th>
+                                            <th>Δ Change</th>
+                                            <th>Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {gaitMetrics.map(m => {
+                                            const fVal = diagComparisonData.facility_scores?.gait?.[m.key];
+                                            const hVal = diagComparisonData.home_scores?.gait?.[m.key];
+                                            const delta = m.key === 'overall_gait'
+                                              ? diagComparisonData.deltas?.gait
+                                              : (hVal != null && fVal != null ? parseFloat((hVal - fVal).toFixed(1)) : null);
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            if (fVal == null && hVal == null) return null;
+                                            return (
+                                              <tr key={m.key}>
+                                                <td className="metric-name" title={m.title}>
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: m.color }}>{m.icon}</span>
+                                                    {m.label}
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {ptBarItems.length > 0 && (
+                                  <div className="report-card">
+                                    <div className="report-card-header">
+                                      <h3 className="report-card-title">
+                                        <span className="report-icon">📈</span>
+                                        Visual Comparison — Physical
+                                      </h3>
+                                      <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
+                                    </div>
+                                    <div className="report-card-body">
+                                      <div className="diag-bar-chart">
+                                        {ptBarItems.map((item, idx) => (
+                                          <div key={idx} className="diag-bar-row">
+                                            <span className="diag-bar-label">{item.label}</span>
+                                            <div className="diag-bar-tracks">
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
+                                                  {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
+                                                </div>
+                                              </div>
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
+                                                  {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                        <div className="diag-bar-legend">
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Trend Chart (if multiple assessments) */}
-                      {diagComparisonHistory.length > 1 && (
+                      {diagComparisonData.has_facility_data && diagComparisonHistory.length > 1 && (
                         <div className="report-card">
                           <div className="report-card-header">
                             <h3 className="report-card-title">
@@ -4547,7 +4687,7 @@ function TherapistDashboard({ onLogout }) {
                       )}
 
                       {/* Recommended Focus Areas */}
-                      {diagComparisonData.recommended_focus && diagComparisonData.recommended_focus.length > 0 && (
+                      {diagComparisonData.has_facility_data && diagComparisonData.recommended_focus && diagComparisonData.recommended_focus.length > 0 && (
                         <div className="report-card diag-focus-card">
                           <div className="report-card-header">
                             <h3 className="report-card-title">
@@ -4569,7 +4709,7 @@ function TherapistDashboard({ onLogout }) {
                       )}
 
                       {/* Therapist Notes */}
-                      {diagComparisonData.notes && (
+                      {diagComparisonData.has_facility_data && diagComparisonData.notes && (
                         <div className="report-card">
                           <div className="report-card-header">
                             <h3 className="report-card-title">
@@ -4622,8 +4762,7 @@ function TherapistDashboard({ onLogout }) {
                           </div>
                         </div>
                       )}
-                    </>
-                  )}
+                  </>
                 </>
               )}
 

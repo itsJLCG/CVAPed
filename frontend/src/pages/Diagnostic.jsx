@@ -7,7 +7,7 @@ import { authService } from '../services/api';
 import { useToast } from '../components/ToastContext';
 import './Diagnostic.css';
 
-function Diagnostic({ onLogout }) {
+function Diagnostic({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -67,7 +67,7 @@ function Diagnostic({ onLogout }) {
   if (loading) {
     return (
       <div className="diagnostic-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="diagnostic-main">
           <div className="diagnostic-loading">Loading your diagnostic profile…</div>
         </main>
@@ -77,7 +77,7 @@ function Diagnostic({ onLogout }) {
 
   return (
     <div className="diagnostic-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       <main className="diagnostic-main">
         <div className="diagnostic-container">

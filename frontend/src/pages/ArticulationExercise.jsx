@@ -19,7 +19,7 @@ const soundMetadata = {
   th: { name: 'TH Sound', color: '#27ae60' }
 };
 
-function ArticulationExercise({ onLogout }) {
+function ArticulationExercise({ onLogout, onFacilityExit }) {
   const { soundId } = useParams();
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
@@ -394,7 +394,7 @@ function ArticulationExercise({ onLogout }) {
 
   const saveProgressToServer = async (completed = false) => {
     try {
-      await articulationService.saveProgress({
+      const progressPayload = {
         sound_id: soundId,
         level: currentLevel,
         item_index: currentItem,
@@ -409,7 +409,8 @@ function ArticulationExercise({ onLogout }) {
           fluency_score: d.fluency_score,
           transcription: d.transcription
         }))
-      });
+      };
+      await articulationService.saveProgress(progressPayload);
       console.log('Progress saved successfully');
     } catch (error) {
       console.error('Error saving progress:', error);
@@ -535,7 +536,7 @@ function ArticulationExercise({ onLogout }) {
   return (
     <div className="articulation-exercise-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="exercise-main">

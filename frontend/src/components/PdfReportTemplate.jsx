@@ -464,14 +464,17 @@ const renderPatientSeparator = (doc, nextPatientIndex, totalPatients, yPos) => {
  *     date:        string,    // pre-formatted display string
  *     problems:    string[],  // list of detected issue strings
  *     metricsRows: Array<object>  // row data matching metricsColumns
+ *     exerciseRows: Array<object> // row data matching exerciseColumns
  *   }
  * @param {Array}    config.metricsColumns  - Column definitions: [{ header, dataKey }]
+ * @param {Array}    config.exerciseColumns - Column definitions for exercise table
  * @param {string}   config.filename        - Output filename WITHOUT .pdf extension
  */
 export const generatePdfReport = async ({
   title = 'Report',
   patients = [],
   metricsColumns = [],
+  exerciseColumns = [],
   filename = 'CVAPed_Report',
 }) => {
   const [{ default: jsPDF }, { default: autoTable }, logoDataUrl] = await Promise.all([
@@ -492,10 +495,12 @@ export const generatePdfReport = async ({
     const estimatedCardHeight   = 44;
     const estimatedTableHeight  = patient.metricsRows?.length ? patient.metricsRows.length * 8 + 24 : 0;
     const estimatedIssuesHeight = patient.problems?.length ? 22 : 0;
+    const estimatedExerciseHeight = patient.exerciseRows?.length ? patient.exerciseRows.length * 8 + 24 : 0;
     const blockHeight =
       estimatedCardHeight +
       (patient.metricsRows?.length ? estimatedTableHeight : 0) +
       (patient.problems?.length ? estimatedIssuesHeight : 0) +
+      (patient.exerciseRows?.length ? estimatedExerciseHeight : 0) +
       16;
 
     if (yPos + blockHeight > pageHeight - 20 && idx > 0) {
@@ -508,11 +513,6 @@ export const generatePdfReport = async ({
 
     if (patient.metricsRows?.length > 0 && metricsColumns.length > 0) {
       yPos = renderSectionLabel(doc, 'Gait Metrics', yPos);
-      // Table styled to match .logs-table.gait-table:
-      //   thead: dark-slate (#1e293b), white uppercase text, primary bottom border
-      //   tbody: #334155 text, #f8fafc alt rows, #f1f5f9 row borders
-      //   metric col: #64748b bold (like .metric-label)
-      //   value col:  primary red bold (like .metric-value)
       autoTable(doc, {
         startY: yPos,
         head: [metricsColumns.map((c) => c.header)],
@@ -554,6 +554,48 @@ export const generatePdfReport = async ({
     if (patient.problems?.length > 0) {
       yPos = renderSectionLabel(doc, 'Detected Issues', yPos);
       yPos = renderDetectedIssues(doc, patient.problems, yPos);
+    }
+
+    if (patient.exerciseRows?.length > 0 && exerciseColumns.length > 0) {
+      yPos = renderSectionLabel(doc, 'Prescribed Exercises', yPos);
+      autoTable(doc, {
+        startY: yPos,
+        head: [exerciseColumns.map((c) => c.header)],
+        body: patient.exerciseRows.map((row) =>
+          exerciseColumns.map((c) => {
+            const val = row[c.dataKey];
+            return val !== undefined && val !== null ? String(val) : '—';
+          })
+        ),
+        margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+        styles: {
+          fontSize: 8,
+          cellPadding: { top: 3, bottom: 3, left: 5, right: 5 },
+          textColor: C.textBody,
+          lineColor: C.rowBorder,
+          lineWidth: 0.15,
+          valign: 'middle',
+        },
+        headStyles: {
+          fillColor: C.primary,
+          textColor: C.white,
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+          cellPadding: { top: 4, bottom: 4, left: 5, right: 5 },
+        },
+        alternateRowStyles: {
+          fillColor: C.rowAlt,
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', textColor: C.textMuted, halign: 'left' },
+          1: { halign: 'center', textColor: C.textMuted },
+          2: { halign: 'center', textColor: C.primary },
+          3: { halign: 'center', fontStyle: 'bold' },
+        },
+        theme: 'grid',
+      });
+      yPos = doc.lastAutoTable.finalY + 6;
     }
 
     if (idx < patients.length - 1) {
@@ -1127,4 +1169,459 @@ export const generatePreEvalPdf = async ({ patient, selfReport: r }) => {
 
   addPageFooters(doc);
   doc.save(`CVAPed_PreEval_${patientName.replace(/\s+/g, '_')}.pdf`);
+};
+
+// ─── Exercise Plan PDF ─────────────────────────────────────────────────────────
+const getDifficultyStyle = (difficulty) => {
+  const d = (difficulty || '').toLowerCase();
+  if (d === 'beginner') return { bg: C.mildBg, text: C.mildText };
+  if (d === 'intermediate') return { bg: C.scoreMidBg, text: C.scoreMidText };
+  if (d === 'advanced') return { bg: C.severeBg, text: C.severeText };
+  return { bg: C.unknownBg, text: C.unknownText };
+};
+
+const getStatusStyle = (status) => {
+  if (!status) return { bg: C.unknownBg, text: C.unknownText };
+  const s = status.toLowerCase();
+  // Green — positive statuses
+  if (['good', 'optimal', 'excellent', 'normal', 'stable', 'consistent', 'complete'].includes(s))
+    return { bg: C.mildBg, text: C.mildText };
+  // Yellow — borderline statuses
+  if (['fair', 'moderate', 'regular', 'fast', 'slow', 'long', 'short'].includes(s))
+    return { bg: C.scoreMidBg, text: C.scoreMidText };
+  // Red — problematic statuses
+  if (['poor', 'low', 'unstable', 'irregular'].includes(s))
+    return { bg: C.severeBg, text: C.severeText };
+  // N/A
+  if (s === 'n/a') return { bg: C.unknownBg, text: C.unknownText };
+  return { bg: C.unknownBg, text: C.unknownText };
+};
+
+const addEnhancedSectionLabel = (doc, label, yPos, color = C.primary) => {
+  const { width: pageWidth } = doc.internal.pageSize;
+
+  doc.setFillColor(...color);
+  doc.rect(PAGE_MARGIN, yPos, 3, 8, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...C.text);
+  doc.text(label.toUpperCase(), PAGE_MARGIN + 7, yPos + 5.5);
+
+  const labelWidth = doc.getTextWidth(label.toUpperCase());
+  doc.setDrawColor(...C.border);
+  doc.setLineWidth(0.3);
+  doc.line(PAGE_MARGIN + 10 + labelWidth, yPos + 4, pageWidth - PAGE_MARGIN, yPos + 4);
+
+  return yPos + 12;
+};
+
+const renderEnhancedExerciseCard = (doc, exercise, index, yPos, pageWidth, pageHeight, addBrandedHeader, logoDataUrl, onNewPage) => {
+  const cardWidth = pageWidth - 2 * PAGE_MARGIN;
+  const cardHeight = 45;
+  const accentW = 5;
+
+  if (yPos + cardHeight > pageHeight - 20) {
+    yPos = onNewPage();
+  }
+
+  doc.setFillColor(220, 220, 220);
+  doc.roundedRect(PAGE_MARGIN + 0.5, yPos + 0.5, cardWidth, cardHeight, 2, 2, 'F');
+
+  doc.setFillColor(...C.cardBg);
+  doc.roundedRect(PAGE_MARGIN, yPos, cardWidth, cardHeight, 2, 2, 'F');
+
+  doc.setDrawColor(...C.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(PAGE_MARGIN, yPos, cardWidth, cardHeight, 2, 2, 'S');
+
+  doc.setFillColor(...C.primary);
+  doc.roundedRect(PAGE_MARGIN, yPos, accentW, cardHeight, 2, 2, 'F');
+
+  doc.setFillColor(255, 255, 255);
+  doc.circle(PAGE_MARGIN + accentW + 10, yPos + 15, 7, 'F');
+  doc.setFillColor(...C.primary);
+  doc.circle(PAGE_MARGIN + accentW + 10, yPos + 15, 7, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...C.white);
+  doc.text(String(index + 1), PAGE_MARGIN + accentW + 10, yPos + 17.5, { align: 'center' });
+
+  const nameX = PAGE_MARGIN + accentW + 24;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...C.text);
+  const exerciseName = exercise.exercise_name.length > 35 ? exercise.exercise_name.substring(0, 32) + '...' : exercise.exercise_name;
+  doc.text(exerciseName, nameX, yPos + 10);
+
+  if (exercise.problem_targeted) {
+    const problemLabel = exercise.problem_targeted.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.textMuted);
+    doc.text(`Target: ${problemLabel}`, nameX, yPos + 18);
+  }
+
+  const difficultyStyle = getDifficultyStyle(exercise.difficulty);
+  const badgeW = 28;
+  const badgeH = 8;
+  const bX = pageWidth - PAGE_MARGIN - badgeW - 5;
+  const bY = yPos + 5;
+
+  doc.setFillColor(...difficultyStyle.bg);
+  doc.roundedRect(bX, bY, badgeW, badgeH, 1.5, 1.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(...difficultyStyle.text);
+  const diffText = exercise.difficulty ? exercise.difficulty.substring(0, 8) : 'N/A';
+  doc.text(diffText, bX + badgeW / 2, bY + 5.5, { align: 'center' });
+
+  if (exercise.duration) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.textBody);
+    doc.text(`Duration: ${exercise.duration}`, nameX, yPos + 26);
+  }
+
+  if (exercise.reps) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.textMuted);
+    doc.text(`Reps: ${exercise.reps}`, nameX + 55, yPos + 26);
+  }
+
+  doc.setDrawColor(...C.rowBorder);
+  doc.setLineWidth(0.2);
+  doc.line(nameX, yPos + 32, pageWidth - PAGE_MARGIN - 5, yPos + 32);
+
+  const descY = yPos + 36;
+  if (exercise.description) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...C.textBody);
+    const splitDesc = doc.splitTextToSize(exercise.description, cardWidth - accentW - 30);
+    const maxDescLines = 2;
+    const truncatedDesc = splitDesc.slice(0, maxDescLines);
+    doc.text(truncatedDesc, nameX, descY);
+  }
+
+  return yPos + cardHeight + 8;
+};
+
+const renderInstructions = (doc, instructions, yPos, pageWidth, pageHeight, addBrandedHeader, logoDataUrl, sectionLabel) => {
+  if (!instructions || instructions.length === 0) return yPos;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...C.primary);
+  doc.text('Step-by-Step Instructions:', PAGE_MARGIN + 5, yPos);
+  yPos += 5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...C.textBody);
+
+  instructions.forEach((instruction, idx) => {
+    if (yPos > pageHeight - 25) {
+      doc.addPage();
+      addBrandedHeader(doc, sectionLabel, logoDataUrl);
+      yPos = HEADER_HEIGHT + 6;
+    }
+
+    const bulletY = yPos + 2;
+    doc.setFillColor(...C.primary);
+    doc.circle(PAGE_MARGIN + 7, bulletY, 1.5, 'F');
+
+    const splitLine = doc.splitTextToSize(`${idx + 1}. ${instruction}`, pageWidth - 45);
+    doc.text(splitLine, PAGE_MARGIN + 12, yPos + 4);
+    yPos += splitLine.length * 4 + 3;
+  });
+
+  return yPos + 5;
+};
+
+const addExercisePlanMetaBar = (doc, patientName, exportDate, analysisDate, exerciseCount) => {
+  const { width: pageWidth } = doc.internal.pageSize;
+  const colW = (pageWidth - 2 * PAGE_MARGIN) / 4;
+
+  doc.setFillColor(...C.metaBg);
+  doc.rect(0, HEADER_HEIGHT, pageWidth, META_BAR_HEIGHT, 'F');
+  doc.setDrawColor(...C.border);
+  doc.setLineWidth(0.2);
+  doc.line(0, HEADER_HEIGHT + META_BAR_HEIGHT, pageWidth, HEADER_HEIGHT + META_BAR_HEIGHT);
+
+  const items = [
+    { label: 'PATIENT', value: patientName },
+    { label: 'EXPORT DATE', value: exportDate },
+    { label: 'ANALYSIS DATE', value: analysisDate },
+    { label: 'EXERCISES', value: String(exerciseCount) },
+  ];
+
+  items.forEach((item, i) => {
+    const x = PAGE_MARGIN + i * colW + colW / 2;
+    if (i > 0) {
+      doc.setDrawColor(...C.border);
+      doc.setLineWidth(0.2);
+      doc.line(
+        PAGE_MARGIN + i * colW, HEADER_HEIGHT + 3,
+        PAGE_MARGIN + i * colW, HEADER_HEIGHT + META_BAR_HEIGHT - 3
+      );
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...C.textMuted);
+    doc.text(item.label, x, HEADER_HEIGHT + 5.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.textBody);
+    doc.text(item.value, x, HEADER_HEIGHT + 11.5, { align: 'center' });
+  });
+};
+
+export const generateExercisePlanPdf = async ({
+  patientName,
+  patientEmail,
+  gaitMetrics,
+  gait_metrics,
+  detectedProblems,
+  exercises,
+  filename = 'CVAPed_ExercisePlan',
+}) => {
+  const metrics = gaitMetrics || gait_metrics || {};
+  const analysisDuration = metrics.analysis_duration || metrics.duration || null;
+  
+  const [{ default: jsPDF }, { default: autoTable }, logoDataUrl] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+    loadImageAsDataUrl(logo),
+  ]);
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const { height: pageHeight, width: pageWidth } = doc.internal.pageSize;
+
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const analysisDate = metrics?.created_at
+    ? new Date(metrics.created_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : 'N/A';
+
+  addBrandedHeader(doc, 'Exercise Plan Report', logoDataUrl);
+  addExercisePlanMetaBar(doc, patientName, exportDate, analysisDate, exercises.length);
+
+  let yPos = HEADER_HEIGHT + META_BAR_HEIGHT + 8;
+
+  // Patient info card - enhanced
+  const cardW = pageWidth - 2 * PAGE_MARGIN;
+  const cardH = 28;
+  
+  doc.setFillColor(220, 220, 220);
+  doc.roundedRect(PAGE_MARGIN + 0.8, yPos + 0.8, cardW, cardH, 3, 3, 'F');
+  doc.setFillColor(...C.cardBg);
+  doc.roundedRect(PAGE_MARGIN, yPos, cardW, cardH, 3, 3, 'F');
+  doc.setDrawColor(...C.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(PAGE_MARGIN, yPos, cardW, cardH, 3, 3, 'S');
+
+  doc.setFillColor(...C.primary);
+  doc.roundedRect(PAGE_MARGIN, yPos, 4, cardH, 2, 2, 'F');
+
+  const initials = (patientName || 'U').split(' ').slice(0, 2).map(n => n?.[0] || '').join('').toUpperCase();
+  doc.setFillColor(...C.primary);
+  doc.circle(PAGE_MARGIN + 14, yPos + 14, 7, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...C.white);
+  doc.text(initials, PAGE_MARGIN + 14, yPos + 16, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...C.text);
+  doc.text(patientName || 'Patient', PAGE_MARGIN + 26, yPos + 10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...C.textMuted);
+  if (patientEmail) {
+    doc.text(patientEmail, PAGE_MARGIN + 26, yPos + 17);
+  }
+  doc.text(`Analysis Date: ${analysisDate}`, PAGE_MARGIN + 26, yPos + 24);
+
+  yPos += cardH + 12;
+
+  // Gait Analysis Results Section - with enhanced styling
+  yPos = addEnhancedSectionLabel(doc, 'Gait Analysis Results', yPos, [71, 154, 195]);
+
+  const getCadenceStatus = (v) => v >= 100 ? 'Fast' : v >= 80 ? 'Normal' : 'Slow';
+  const getVelocityStatus = (v) => v >= 1.2 ? 'Fast' : v >= 0.8 ? 'Normal' : 'Slow';
+  const getSymmetryStatus = (v) => v >= 0.9 ? 'Excellent' : v >= 0.7 ? 'Good' : 'Fair';
+  const getStabilityStatus = (v) => v >= 0.8 ? 'Stable' : v >= 0.6 ? 'Moderate' : 'Unstable';
+  const getStrideStatus = (v) => v >= 1.2 ? 'Long' : v >= 0.8 ? 'Normal' : 'Short';
+  const getRegularityStatus = (v) => v >= 0.8 ? 'Consistent' : v >= 0.6 ? 'Regular' : 'Irregular';
+
+  const has = (v) => v != null && v !== '' && !Number.isNaN(v);
+  const gaitMetricsRows = [
+    ['Steps',     has(metrics?.step_count)    ? String(metrics.step_count) : '—',                               has(metrics?.step_count)    ? (metrics.step_count >= 30 ? 'Excellent' : metrics.step_count >= 15 ? 'Good' : 'Low') : 'N/A'],
+    ['Duration',  has(analysisDuration)       ? `${Number(analysisDuration).toFixed(0)}s` : '—',                has(analysisDuration)       ? 'Complete' : 'N/A'],
+    ['Cadence',   has(metrics?.cadence)       ? `${Number(metrics.cadence).toFixed(0)} spm` : '—',              has(metrics?.cadence)       ? getCadenceStatus(metrics.cadence) : 'N/A'],
+    ['Velocity',  has(metrics?.velocity)      ? `${Number(metrics.velocity).toFixed(2)} m/s` : '—',             has(metrics?.velocity)      ? getVelocityStatus(metrics.velocity) : 'N/A'],
+    ['Symmetry',  has(metrics?.gait_symmetry) ? `${(metrics.gait_symmetry * 100).toFixed(0)}%` : '—',           has(metrics?.gait_symmetry) ? getSymmetryStatus(metrics.gait_symmetry) : 'N/A'],
+    ['Stability', has(metrics?.stability_score) ? `${(metrics.stability_score * 100).toFixed(0)}%` : '—',       has(metrics?.stability_score) ? getStabilityStatus(metrics.stability_score) : 'N/A'],
+    ['Stride',    has(metrics?.stride_length) ? `${Number(metrics.stride_length).toFixed(2)}m` : '—',           has(metrics?.stride_length) ? getStrideStatus(metrics.stride_length) : 'N/A'],
+    ['Regularity',has(metrics?.step_regularity) ? `${(metrics.step_regularity * 100).toFixed(0)}%` : '—',      has(metrics?.step_regularity) ? getRegularityStatus(metrics.step_regularity) : 'N/A'],
+  ];
+
+  autoTable(doc, {
+    startY: yPos,
+    head: [['Metric', 'Value', 'Status']],
+    body: gaitMetricsRows,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+    styles: {
+      fontSize: 8,
+      cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+      textColor: C.textBody,
+      lineColor: C.rowBorder,
+      lineWidth: 0.15,
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [71, 154, 195],
+      textColor: C.white,
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+      cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+    },
+    alternateRowStyles: {
+      fillColor: C.rowAlt,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 30 },
+      1: { halign: 'center', fontStyle: 'bold', fontSize: 9, textColor: C.primary },
+      2: { halign: 'center' },
+    },
+    theme: 'grid',
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 2) {
+        const statusStyle = getStatusStyle(data.cell.raw);
+        data.cell.styles.fillColor = statusStyle.bg;
+        data.cell.styles.textColor = statusStyle.text;
+        data.cell.styles.fontStyle = 'bold';
+      }
+    },
+  });
+
+  yPos = doc.lastAutoTable.finalY + 14;
+
+  // Check for new page
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addBrandedHeader(doc, 'Exercise Plan Report', logoDataUrl);
+    yPos = HEADER_HEIGHT + 6;
+  }
+
+  // Detected Problems Section - enhanced with colored badges
+  yPos = addEnhancedSectionLabel(doc, 'Detected Gait Problems', yPos, C.primary);
+
+  if (detectedProblems && detectedProblems.length > 0) {
+    const problemsData = detectedProblems.map((problem, index) => [
+      String(index + 1),
+      problem.problem?.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()) || 'Unknown',
+      problem.severity || 'N/A',
+      problem.clinical_note || '—',
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['#', 'Problem', 'Severity', 'Clinical Notes']],
+      body: problemsData,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: C.primary,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: {
+        fillColor: C.rowAlt,
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 12 },
+        1: { fontStyle: 'bold', cellWidth: 45 },
+        2: { halign: 'center', cellWidth: 25 },
+        3: { cellWidth: 'auto' },
+      },
+      theme: 'grid',
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 2) {
+          const severityStyle = getSeverityStyle(data.cell.raw);
+          data.cell.styles.fillColor = severityStyle.bg;
+          data.cell.styles.textColor = severityStyle.text;
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+
+    yPos = doc.lastAutoTable.finalY + 14;
+  } else {
+    doc.setFillColor(...C.mildBg);
+    doc.roundedRect(PAGE_MARGIN, yPos, cardW - 40, 12, 2, 2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.mildText);
+    doc.text('No significant gait problems detected', PAGE_MARGIN + 5, yPos + 7.5);
+    yPos += 20;
+  }
+
+  // Check for new page
+  if (yPos > pageHeight - 60) {
+    doc.addPage();
+    addBrandedHeader(doc, 'Exercise Plan Report', logoDataUrl);
+    yPos = HEADER_HEIGHT + 6;
+  }
+
+  // Prescribed Exercises Section
+  yPos = addEnhancedSectionLabel(doc, `Prescribed Exercise Plan (${exercises.length} exercises)`, yPos, [232, 176, 78]);
+
+  const handleNewPage = () => {
+    doc.addPage();
+    addBrandedHeader(doc, 'Exercise Plan Report', logoDataUrl);
+    return HEADER_HEIGHT + 6;
+  };
+
+  exercises.forEach((exercise, index) => {
+    yPos = renderEnhancedExerciseCard(
+      doc, exercise, index, yPos, pageWidth, pageHeight,
+      addBrandedHeader, logoDataUrl, handleNewPage
+    );
+
+    yPos = renderInstructions(
+      doc, exercise.instructions, yPos, pageWidth, pageHeight,
+      addBrandedHeader, logoDataUrl, 'Exercise Plan Report'
+    );
+
+    yPos += 5;
+  });
+
+  // Footer on all pages
+  addPageFooters(doc);
+  doc.save(`${filename}.pdf`);
 };

@@ -47,7 +47,11 @@ function GaitProblems({ onLogout }) {
           },
           body: JSON.stringify({
             detected_problems: analysisResult.detected_problems,
-            gait_analysis_id: analysisResult.gait_id || null
+            gait_analysis_id: analysisResult.gait_id || null,
+            gait_metrics: {
+              ...(analysisResult.metrics || analysisResult.gait_metrics || {}),
+              analysis_duration: analysisResult.analysis_duration ?? analysisResult.metrics?.analysis_duration ?? null,
+            }
           })
         });
 

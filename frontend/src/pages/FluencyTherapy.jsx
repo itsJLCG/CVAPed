@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
+import { useVoiceSettings } from '../components/VoiceSettingsContext';
 import axios from 'axios';
 import { fluencyExerciseService } from '../services/api';
 import audioManager from '../services/audioManager';
@@ -12,6 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 function FluencyTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const { voiceSpeed, setVoiceSpeed } = useVoiceSettings();
 
   // Ensure the category is set to 'speech' when this page is loaded
   useEffect(() => {
@@ -179,7 +181,7 @@ function FluencyTherapy({ onLogout, onFacilityExit }) {
           
           setIsSpeaking(true);
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = 0.85;
+          utterance.rate = 0.85 * voiceSpeed;
           utterance.pitch = 1;
           utterance.volume = 1;
           
@@ -644,6 +646,26 @@ function FluencyTherapy({ onLogout, onFacilityExit }) {
               </div>
               <div className="target-text">"{currentExercise.target}"</div>
               <div className="target-hint">Expected duration: ~{currentExercise.expectedDuration} seconds</div>
+            </div>
+
+            {/* Voice Speed Control */}
+            <div className="voice-speed-control">
+              <span className="voice-speed-label">🔊 Voice Speed</span>
+              <div className="voice-speed-slider-row">
+                <span className="speed-tag">Slow</span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.1"
+                  value={voiceSpeed}
+                  onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                  className="voice-speed-slider"
+                  style={{ accentColor: levelData.color }}
+                />
+                <span className="speed-tag">Fast</span>
+              </div>
+              <span className="voice-speed-value">{voiceSpeed === 1.0 ? 'Normal' : voiceSpeed < 1.0 ? `${voiceSpeed}x (Slower)` : `${voiceSpeed}x (Faster)`}</span>
             </div>
 
             {/* Automatic Flow Status */}

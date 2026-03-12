@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/ToastContext';
 import { TherapyCategoryProvider } from './components/TherapyCategoryContext';
+import { VoiceSettingsProvider } from './components/VoiceSettingsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import audioManager from './services/audioManager';
 import Landing from './pages/Landing';
@@ -117,6 +118,7 @@ function App() {
   return (
     <ErrorBoundary>
     <ToastProvider>
+      <VoiceSettingsProvider>
       <TherapyCategoryProvider>
         <Router>
           <div className="App">
@@ -283,6 +285,7 @@ function App() {
         </div>
       </Router>
       </TherapyCategoryProvider>
+      </VoiceSettingsProvider>
     </ToastProvider>
     </ErrorBoundary>
   );

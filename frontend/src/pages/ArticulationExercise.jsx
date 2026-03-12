@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
+import { useVoiceSettings } from '../components/VoiceSettingsContext';
 import WaveSurfer from 'wavesurfer.js';
 import { articulationService, articulationExerciseService } from '../services/api';
 import audioManager from '../services/audioManager';
@@ -23,6 +24,7 @@ function ArticulationExercise({ onLogout, onFacilityExit }) {
   const { soundId } = useParams();
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const { voiceSpeed, setVoiceSpeed } = useVoiceSettings();
   
   // Ensure the category is set to 'speech' when this page is loaded
   useEffect(() => {
@@ -355,14 +357,15 @@ function ArticulationExercise({ onLogout, onFacilityExit }) {
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
       
       // For isolated sounds (level 1), use slower rate and emphasize the sound
+      // Multiply base rate by user-selected voice speed
       if (currentLevel === 1) {
-        utterance.rate = 0.6;  // Very slow for isolated sounds
-        utterance.pitch = 1.1;  // Slightly higher pitch for clarity
+        utterance.rate = 0.6 * voiceSpeed;
+        utterance.pitch = 1.1;
       } else if (currentLevel === 2) {
-        utterance.rate = 0.7;  // Slow for syllables
+        utterance.rate = 0.7 * voiceSpeed;
         utterance.pitch = 1.0;
       } else {
-        utterance.rate = 0.85;  // Near-normal for words/phrases/sentences
+        utterance.rate = 0.85 * voiceSpeed;
         utterance.pitch = 1.0;
       }
       
@@ -575,6 +578,24 @@ function ArticulationExercise({ onLogout, onFacilityExit }) {
                   <button className="model-btn" onClick={playModelAudio}>
                     <span className="btn-icon">▶</span> Play Model Audio
                   </button>
+                  <div className="voice-speed-control">
+                    <span className="voice-speed-label">🔊 Voice Speed</span>
+                    <div className="voice-speed-slider-row">
+                      <span className="speed-tag">Slow</span>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="1.5"
+                        step="0.1"
+                        value={voiceSpeed}
+                        onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                        className="voice-speed-slider"
+                        style={{ accentColor: soundData.color }}
+                      />
+                      <span className="speed-tag">Fast</span>
+                    </div>
+                    <span className="voice-speed-value">{voiceSpeed === 1.0 ? 'Normal' : voiceSpeed < 1.0 ? `${voiceSpeed}x (Slower)` : `${voiceSpeed}x (Faster)`}</span>
+                  </div>
                 </div>
 
                 {/* Recording Section - Shows after audio play */}

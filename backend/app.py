@@ -4675,6 +4675,9 @@ def hardware_gait_analyze(current_user):
         # Save to MongoDB (same collection as mobile uses: gaitprogresses)
         gait_progress_collection = db['gaitprogresses']
         
+        # Add analysis_duration to metrics for exercise plan
+        result['data']['metrics']['analysis_duration'] = result['data']['analysis_duration']
+        
         # Prepare document matching mobile's GaitProgress schema
         gait_document = {
             'user_id': str(current_user['_id']),
@@ -4736,6 +4739,7 @@ def hardware_gait_analyze(current_user):
                     plan = {
                         'user_id': str(current_user['_id']),
                         'gait_analysis_id': insert_result.inserted_id,
+                        'gait_metrics': result['data']['metrics'],
                         'detected_problems': result['data']['detected_problems'],
                         'exercises': exercises,
                         'total_exercises': len(exercises),
@@ -4823,6 +4827,10 @@ def save_gait_exercise_plan(current_user):
         data = request.json
         detected_problems = data.get('detected_problems', [])
         gait_analysis_id = data.get('gait_analysis_id')
+        # Convert to string if it's not None
+        if gait_analysis_id:
+            gait_analysis_id = str(gait_analysis_id)
+        gait_metrics = data.get('gait_metrics')
         
         if not detected_problems:
             return jsonify({
@@ -4852,6 +4860,7 @@ def save_gait_exercise_plan(current_user):
         plan = {
             'user_id': str(current_user['_id']),
             'gait_analysis_id': gait_analysis_id,
+            'gait_metrics': gait_metrics,
             'detected_problems': detected_problems,
             'exercises': exercises,
             'total_exercises': len(exercises),
@@ -4859,8 +4868,39 @@ def save_gait_exercise_plan(current_user):
             'updated_at': utc_now()
         }
         
-        result = exercise_plans_collection.insert_one(plan)
-        plan_id = str(result.inserted_id)
+        # Check if plan already exists for this gait_analysis_id
+        existing_plan = None
+        if gait_analysis_id:
+            existing_plan = exercise_plans_collection.find_one({'gait_analysis_id': gait_analysis_id})
+        
+        if existing_plan:
+            # Update existing plan (exclude _id from update)
+            update_data = {k: v for k, v in plan.items() if k != '_id'}
+            exercise_plans_collection.update_one(
+                {'_id': existing_plan['_id']},
+                {'$set': update_data}
+            )
+            plan_id = str(existing_plan['_id'])
+        else:
+            try:
+                # Try to insert new plan
+                result = exercise_plans_collection.insert_one(plan)
+                plan_id = str(result.inserted_id)
+            except Exception as dup_error:
+                if 'duplicate key' in str(dup_error).lower():
+                    # If duplicate key error, find and update the existing plan
+                    existing = exercise_plans_collection.find_one({'user_id': str(current_user['_id'])})
+                    if existing:
+                        update_data = {k: v for k, v in plan.items() if k != '_id'}
+                        exercise_plans_collection.update_one(
+                            {'_id': existing['_id']},
+                            {'$set': update_data}
+                        )
+                        plan_id = str(existing['_id'])
+                    else:
+                        raise dup_error
+                else:
+                    raise dup_error
         
         return jsonify({
             'success': True,
@@ -4968,6 +5008,9 @@ def save_demo_gait_data(current_user):
         # Prepare gait document for database
         gait_progress_collection = db['gaitprogresses']
         
+        # Add analysis_duration to metrics for exercise plan
+        metrics['analysis_duration'] = data.get('analysis_duration', 45)
+        
         gait_document = {
             'user_id': str(current_user['_id']),
             'session_id': f"demo_{int(datetime.datetime.utcnow().timestamp())}",
@@ -5030,6 +5073,7 @@ def save_demo_gait_data(current_user):
                     plan = {
                         'user_id': str(current_user['_id']),
                         'gait_analysis_id': insert_result.inserted_id,
+                        'gait_metrics': metrics,
                         'detected_problems': detected_problems,
                         'exercises': exercises,
                         'total_exercises': len(exercises),

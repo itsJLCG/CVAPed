@@ -2,10 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import Header from '../components/Header';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import CVAPedLogo from '../assets/CVAPed_Text.png';
-import CVACareLogo from '../assets/CVACare_Logo.png';
+import { generateExercisePlanPdf } from '../components/PdfReportTemplate';
 import './ExercisePlans.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -585,285 +582,43 @@ function ExercisePlans({ onLogout, onFacilityExit }) {
     fetchPlans();
   }, []);
 
-  // Export to PDF function
   const exportToPDF = async () => {
     if (!selectedPlan) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    let yPosition = 15;
-
-    // Get user info
     const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
     const userName = userInfo.fullName || userInfo.name || 'Patient';
 
-    // Header - Logos and Project Title
-    // Add CVACare Logo on the left (bigger)
-    doc.addImage(CVACareLogo, 'PNG', 15, yPosition - 7, 35, 35);
-    
-    // Add CVAPed Text Logo beside it (vertically centered with main logo)
-    doc.addImage(CVAPedLogo, 'PNG', 52, yPosition + 2, 35, 20);
-    
-    // Title and subtitle - left aligned beside logos
-    const titleX = 92;
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(206, 54, 48); // Brand red
-    const title = 'AI-Powered Rehabilitation Systems';
-    doc.text(title, titleX, yPosition + 8);
-    
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    const subtitle = 'for Stroke Physical Therapy and Pediatric Speech Development';
-    doc.text(subtitle, titleX, yPosition + 15);
-    
-    yPosition += 28;
-
-    // Divider line
-    doc.setDrawColor(206, 54, 48);
-    doc.setLineWidth(0.5);
-    doc.line(20, yPosition, pageWidth - 20, yPosition);
-    yPosition += 10;
-
-    // Patient Information
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Patient: ${userName}`, 20, yPosition);
-    yPosition += 6;
-    doc.text(`Export Date: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 20, yPosition);
-    yPosition += 6;
-    doc.text(`Analysis Date: ${new Date(selectedPlan.created_at).toLocaleDateString()} ${new Date(selectedPlan.created_at).toLocaleTimeString()}`, 20, yPosition);
-    yPosition += 12;
-
-    // Section 1: Gait Analysis Metrics
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(71, 154, 195); // Brand blue
-    doc.text('Gait Analysis Results', 20, yPosition);
-    yPosition += 8;
-
-    // Prepare gait metrics data
-    const gaitMetrics = [
-      ['Metric', 'Value', 'Status', 'Description'],
-      [
-        'Steps Detected',
-        String(selectedPlan.gait_metrics?.step_count || 'N/A'),
-        '-',
-        'Total number of steps recorded'
-      ],
-      [
-        'Duration',
-        selectedPlan.gait_metrics?.duration ? `${selectedPlan.gait_metrics.duration.toFixed(1)} sec` : 'N/A',
-        '-',
-        'Total walking duration'
-      ],
-      [
-        'Cadence',
-        selectedPlan.gait_metrics?.cadence ? `${selectedPlan.gait_metrics.cadence.toFixed(1)} steps/min` : 'N/A',
-        selectedPlan.gait_metrics?.cadence_status || 'N/A',
-        'Walking rhythm and pace indicator'
-      ],
-      [
-        'Velocity',
-        selectedPlan.gait_metrics?.velocity ? `${selectedPlan.gait_metrics.velocity.toFixed(2)} m/s` : 'N/A',
-        selectedPlan.gait_metrics?.velocity_status || 'N/A',
-        'Average walking speed measurement'
-      ],
-      [
-        'Symmetry',
-        selectedPlan.gait_metrics?.symmetry ? `${selectedPlan.gait_metrics.symmetry.toFixed(0)}%` : 'N/A',
-        selectedPlan.gait_metrics?.symmetry_status || 'N/A',
-        'Balance between left and right steps'
-      ],
-      [
-        'Stability',
-        selectedPlan.gait_metrics?.stability ? `${selectedPlan.gait_metrics.stability.toFixed(0)}%` : 'NaN%',
-        selectedPlan.gait_metrics?.stability_status || 'Unstable',
-        'Walking steadiness and control'
-      ],
-      [
-        'Stride Length',
-        selectedPlan.gait_metrics?.stride_length ? `${selectedPlan.gait_metrics.stride_length.toFixed(2)} m` : 'N/A',
-        selectedPlan.gait_metrics?.stride_length_status || 'N/A',
-        'Distance covered per complete step cycle'
-      ],
-      [
-        'Regularity',
-        selectedPlan.gait_metrics?.regularity ? `${selectedPlan.gait_metrics.regularity.toFixed(0)}%` : 'NaN%',
-        selectedPlan.gait_metrics?.regularity_status || 'Irregular',
-        'Consistency of step timing pattern'
-      ],
-      [
-        'Vertical Motion',
-        selectedPlan.gait_metrics?.vertical_motion ? `${selectedPlan.gait_metrics.vertical_motion.toFixed(1)} cm` : 'NaN cm',
-        selectedPlan.gait_metrics?.vertical_motion_status || 'Low',
-        'Vertical body movement during walking'
-      ]
-    ];
-
-    autoTable(doc, {
-      startY: yPosition,
-      head: [gaitMetrics[0]],
-      body: gaitMetrics.slice(1),
-      theme: 'striped',
-      headStyles: { fillColor: [71, 154, 195], textColor: 255, fontStyle: 'bold' },
-      columnStyles: {
-        0: { cellWidth: 35, fontStyle: 'bold' },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 25 },
-        3: { cellWidth: 'auto' }
-      },
-      styles: { fontSize: 9, cellPadding: 3 },
-      margin: { left: 20, right: 20 }
-    });
-
-    yPosition = doc.lastAutoTable.finalY + 12;
-
-    // Check if we need a new page
-    if (yPosition > pageHeight - 60) {
-      doc.addPage();
-      yPosition = 20;
-    }
-
-    // Section 2: Detected Problems
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(206, 54, 48);
-    doc.text('Detected Gait Problems', 20, yPosition);
-    yPosition += 8;
-
-    if (selectedPlan.detected_problems && selectedPlan.detected_problems.length > 0) {
-      const problemsData = selectedPlan.detected_problems.map((problem, index) => [
-        String(index + 1),
-        problem.problem?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown',
-        problem.severity || 'N/A',
-        problem.clinical_note || 'No additional notes'
-      ]);
-
-      autoTable(doc, {
-        startY: yPosition,
-        head: [['#', 'Problem', 'Severity', 'Clinical Note']],
-        body: problemsData,
-        theme: 'striped',
-        headStyles: { fillColor: [206, 54, 48], textColor: 255, fontStyle: 'bold' },
-        columnStyles: {
-          0: { cellWidth: 10 },
-          1: { cellWidth: 45 },
-          2: { cellWidth: 25 },
-          3: { cellWidth: 'auto' }
-        },
-        styles: { fontSize: 9, cellPadding: 3 },
-        margin: { left: 20, right: 20 }
-      });
-
-      yPosition = doc.lastAutoTable.finalY + 12;
-    } else {
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(100, 100, 100);
-      doc.text('No significant gait problems detected.', 20, yPosition);
-      yPosition += 12;
-    }
-
-    // Check if we need a new page
-    if (yPosition > pageHeight - 80) {
-      doc.addPage();
-      yPosition = 20;
-    }
-
-    // Section 3: Exercise Plans
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(232, 176, 78); // Brand accent
-    doc.text(`Prescribed Exercise Plan (${selectedPlan.exercises.length} exercises)`, 20, yPosition);
-    yPosition += 8;
-
-    selectedPlan.exercises.forEach((exercise, index) => {
-      // Check if we need a new page before adding exercise
-      if (yPosition > pageHeight - 50) {
-        doc.addPage();
-        yPosition = 20;
-      }
-
-      // Exercise header
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 0, 0);
-      doc.text(`${index + 1}. ${exercise.exercise_name}`, 20, yPosition);
-      yPosition += 6;
-
-      // Exercise details
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      
-      if (exercise.problem_targeted) {
-        const problemLabel = exercise.problem_targeted.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        doc.text(`Target: ${problemLabel}`, 25, yPosition);
-        yPosition += 5;
-      }
-
-      if (exercise.description) {
-        const splitDescription = doc.splitTextToSize(exercise.description, pageWidth - 50);
-        doc.text(splitDescription, 25, yPosition);
-        yPosition += splitDescription.length * 5;
-      }
-
-      if (exercise.duration) {
-        doc.text(`Duration: ${exercise.duration}`, 25, yPosition);
-        yPosition += 5;
-      }
-
-      if (exercise.difficulty) {
-        doc.text(`Difficulty: ${exercise.difficulty}`, 25, yPosition);
-        yPosition += 5;
-      }
-
-      // Find full exercise for instructions
-      const fullExercise = EXERCISES.find(ex => ex.name === exercise.exercise_name || ex.id === exercise.exercise_id);
-      if (fullExercise && fullExercise.instructions && fullExercise.instructions.length > 0) {
-        yPosition += 2;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Instructions:', 25, yPosition);
-        yPosition += 5;
-        doc.setFont('helvetica', 'normal');
-        
-        fullExercise.instructions.forEach((instruction, idx) => {
-          // Check page break
-          if (yPosition > pageHeight - 20) {
-            doc.addPage();
-            yPosition = 20;
-          }
-          const splitInstruction = doc.splitTextToSize(`${idx + 1}. ${instruction}`, pageWidth - 55);
-          doc.text(splitInstruction, 30, yPosition);
-          yPosition += splitInstruction.length * 5;
-        });
-      }
-
-      yPosition += 8; // Space between exercises
-    });
-
-    // Footer on last page
-    const totalPages = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(150, 150, 150);
-      doc.text(
-        `CVAPed Rehabilitation Report - Page ${i} of ${totalPages}`,
-        pageWidth / 2,
-        pageHeight - 10,
-        { align: 'center' }
+    const exerciseDetails = selectedPlan.exercises.map((exercise) => {
+      const fullExercise = EXERCISES.find(
+        (ex) => ex.name === exercise.exercise_name || ex.id === exercise.exercise_id
       );
-    }
+      return {
+        ...exercise,
+        instructions: fullExercise?.instructions || [],
+        targetMuscleOrFunction: fullExercise?.targetMuscleOrFunction || '',
+        reps: fullExercise?.reps || '',
+        duration: fullExercise?.duration || exercise.duration || '',
+        difficulty: fullExercise?.difficulty || exercise.difficulty || '',
+      };
+    });
 
-    // Save the PDF
-    const fileName = `CVAPed_Exercise_Plan_${userName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
+    const baseMetrics = selectedPlan.gait_metrics || selectedPlan.gaitMetrics || {};
+    const mergedMetrics = {
+      ...baseMetrics,
+      analysis_duration:
+        baseMetrics.analysis_duration ??
+        selectedPlan.analysis_duration ??
+        null,
+    };
+
+    await generateExercisePlanPdf({
+      patientName: userName,
+      patientEmail: userInfo.email || '',
+      gaitMetrics: mergedMetrics,
+      detectedProblems: selectedPlan.detected_problems || [],
+      exercises: exerciseDetails,
+      filename: `CVAPed_ExercisePlan_${userName.replace(/\s+/g, '_')}`,
+    });
   };
 
   // Mark exercise as complete - DISABLED: Hardware auto-detects completion

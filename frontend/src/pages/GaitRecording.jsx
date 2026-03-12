@@ -417,7 +417,10 @@ function GaitRecording({ onLogout, onFacilityExit }) {
       swing_time: Math.random() * 0.1 + 0.3, // 0.3-0.4 seconds (NUMBER)
       double_support_time: Math.random() * 0.05 + 0.15, // 0.15-0.20 seconds (NUMBER)
       step_length_variability: Math.random() * 5 + 3, // 3-8% (NUMBER)
-      step_time_variability: Math.random() * 5 + 3 // 3-8% (NUMBER)
+      step_time_variability: Math.random() * 5 + 3, // 3-8% (NUMBER)
+      stability_score: Math.random() * 0.25 + 0.65, // 0.65-0.90 decimal (NUMBER)
+      step_regularity: Math.random() * 0.25 + 0.65, // 0.65-0.90 decimal (NUMBER)
+      vertical_oscillation: Math.random() * 0.05 + 0.04 // 0.04-0.09 meters (NUMBER)
     };
 
     const demoPayload = {
@@ -935,13 +938,19 @@ function GaitRecording({ onLogout, onFacilityExit }) {
                     </div>
                     <div className="metric-main">
                       <span className="metric-label-small">Stability</span>
-                      <span className="metric-value-clinical">{(analysisResult.metrics.stability_score * 100).toFixed(0)}<small>%</small></span>
+                      <span className="metric-value-clinical">
+                        {analysisResult.metrics.stability_score != null
+                          ? <>{(analysisResult.metrics.stability_score * 100).toFixed(0)}<small>%</small></>
+                          : '—'}
+                      </span>
                     </div>
                     <div className={`metric-status-badge ${
+                      analysisResult.metrics.stability_score == null ? 'status-info' :
                       analysisResult.metrics.stability_score >= 0.8 ? 'status-excellent' :
                       analysisResult.metrics.stability_score >= 0.6 ? 'status-normal' : 'status-attention'
                     }`}>
-                      {analysisResult.metrics.stability_score >= 0.8 ? "Stable" :
+                      {analysisResult.metrics.stability_score == null ? 'N/A' :
+                       analysisResult.metrics.stability_score >= 0.8 ? "Stable" :
                        analysisResult.metrics.stability_score >= 0.6 ? "Moderate" : "Unstable"}
                     </div>
                   </div>
@@ -977,13 +986,19 @@ function GaitRecording({ onLogout, onFacilityExit }) {
                     </div>
                     <div className="metric-main">
                       <span className="metric-label-small">Regularity</span>
-                      <span className="metric-value-clinical">{(analysisResult.metrics.step_regularity * 100).toFixed(0)}<small>%</small></span>
+                      <span className="metric-value-clinical">
+                        {analysisResult.metrics.step_regularity != null
+                          ? <>{(analysisResult.metrics.step_regularity * 100).toFixed(0)}<small>%</small></>
+                          : '—'}
+                      </span>
                     </div>
                     <div className={`metric-status-badge ${
+                      analysisResult.metrics.step_regularity == null ? 'status-info' :
                       analysisResult.metrics.step_regularity >= 0.8 ? 'status-excellent' :
                       analysisResult.metrics.step_regularity >= 0.6 ? 'status-normal' : 'status-attention'
                     }`}>
-                      {analysisResult.metrics.step_regularity >= 0.8 ? "Consistent" :
+                      {analysisResult.metrics.step_regularity == null ? 'N/A' :
+                       analysisResult.metrics.step_regularity >= 0.8 ? "Consistent" :
                        analysisResult.metrics.step_regularity >= 0.6 ? "Regular" : "Irregular"}
                     </div>
                   </div>
@@ -998,13 +1013,19 @@ function GaitRecording({ onLogout, onFacilityExit }) {
                     </div>
                     <div className="metric-main">
                       <span className="metric-label-small">Vertical Motion</span>
-                      <span className="metric-value-clinical">{(analysisResult.metrics.vertical_oscillation * 100).toFixed(1)} <small>cm</small></span>
+                      <span className="metric-value-clinical">
+                        {analysisResult.metrics.vertical_oscillation != null
+                          ? <>{(analysisResult.metrics.vertical_oscillation * 100).toFixed(1)}<small> cm</small></>
+                          : '—'}
+                      </span>
                     </div>
                     <div className={`metric-status-badge ${
+                      analysisResult.metrics.vertical_oscillation == null ? 'status-info' :
                       analysisResult.metrics.vertical_oscillation >= 0.08 ? 'status-attention' :
                       analysisResult.metrics.vertical_oscillation >= 0.05 ? 'status-normal' : 'status-good'
                     }`}>
-                      {analysisResult.metrics.vertical_oscillation >= 0.08 ? "High" :
+                      {analysisResult.metrics.vertical_oscillation == null ? 'N/A' :
+                       analysisResult.metrics.vertical_oscillation >= 0.08 ? "High" :
                        analysisResult.metrics.vertical_oscillation >= 0.05 ? "Normal" : "Low"}
                     </div>
                   </div>
@@ -1020,14 +1041,21 @@ function GaitRecording({ onLogout, onFacilityExit }) {
                     <div className="metric-main">
                       <span className="metric-label-small">Data Quality</span>
                       <span className="metric-value-clinical">
-                        {Object.values(analysisResult.sensors_used).filter(v => v === true).length} <small>sensors</small>
+                        {Array.isArray(analysisResult.sensors_used)
+                          ? 'Demo'
+                          : `${Object.values(analysisResult.sensors_used).filter(v => v === true).length}`}
+                        {!Array.isArray(analysisResult.sensors_used) && <small> sensors</small>}
                       </span>
                     </div>
                     <div className="metric-status-badge status-info">
-                      Multi-Sensor
+                      {Array.isArray(analysisResult.sensors_used) ? 'Simulated' : 'Multi-Sensor'}
                     </div>
                   </div>
-                  <p className="metric-explanation">Accelerometer and gyroscope data used</p>
+                  <p className="metric-explanation">
+                    {Array.isArray(analysisResult.sensors_used)
+                      ? 'Simulated demo data — no physical sensors'
+                      : 'Accelerometer and gyroscope data used'}
+                  </p>
                 </div>
               </div>
 
@@ -1065,8 +1093,9 @@ function GaitRecording({ onLogout, onFacilityExit }) {
                           <i className="fas fa-shield-alt"></i>
                           <div className="finding-text">
                             <strong>Stability:</strong>{' '}
-                            {analysisResult.metrics.stability_score >= 0.8 ? "Strong stability maintained" :
-                             analysisResult.metrics.stability_score >= 0.6 ? "Moderate stability" : 
+                            {analysisResult.metrics.stability_score == null ? 'No data available' :
+                             analysisResult.metrics.stability_score >= 0.8 ? "Strong stability maintained" :
+                             analysisResult.metrics.stability_score >= 0.6 ? "Moderate stability" :
                              "Low stability - balance support recommended"}
                           </div>
                         </div>
@@ -1074,8 +1103,9 @@ function GaitRecording({ onLogout, onFacilityExit }) {
                           <i className="fas fa-heartbeat"></i>
                           <div className="finding-text">
                             <strong>Step Regularity:</strong>{' '}
-                            {analysisResult.metrics.step_regularity >= 0.8 ? "Highly consistent step pattern" :
-                             analysisResult.metrics.step_regularity >= 0.6 ? "Good consistency observed" : 
+                            {analysisResult.metrics.step_regularity == null ? 'No data available' :
+                             analysisResult.metrics.step_regularity >= 0.8 ? "Highly consistent step pattern" :
+                             analysisResult.metrics.step_regularity >= 0.6 ? "Good consistency observed" :
                              "Irregular pattern - consider gait training"}
                           </div>
                         </div>

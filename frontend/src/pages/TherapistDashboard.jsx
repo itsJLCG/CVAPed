@@ -4172,10 +4172,10 @@ function TherapistDashboard({ onLogout }) {
                               </div>
                             </div>
                             <div className="diag-insights-highlights">
-                              {diagComparisonData.summary_insights.strongest_area && (
+                              {diagComparisonData.summary_insights.strongest_area && diagComparisonData.summary_insights.strongest_area.delta > 0 && (
                                 <div className="diag-highlight diag-highlight-best">
                                   <span className="diag-highlight-icon">🌟</span>
-                                  <span>Most Improved: <strong>{diagComparisonData.summary_insights.strongest_area.metric}</strong> ({diagComparisonData.summary_insights.strongest_area.delta >= 0 ? '+' : ''}{diagComparisonData.summary_insights.strongest_area.delta}%)</span>
+                                  <span>Most Improved: <strong>{diagComparisonData.summary_insights.strongest_area.metric}</strong> (+{diagComparisonData.summary_insights.strongest_area.delta}%)</span>
                                 </div>
                               )}
                               {diagComparisonData.summary_insights.weakest_area && diagComparisonData.summary_insights.weakest_area.delta < 0 && (

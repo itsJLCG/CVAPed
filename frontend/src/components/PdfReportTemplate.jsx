@@ -732,11 +732,11 @@ export const generateDiagnosticComparisonPdf = async ({
     });
     yPos += insightH + 6;
 
-    if (si.strongest_area) {
+    if (si.strongest_area && si.strongest_area.delta > 0) {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(...C.mildText);
-      doc.text(`Most Improved: ${si.strongest_area.metric} (${si.strongest_area.delta >= 0 ? '+' : ''}${si.strongest_area.delta}%)`, PAGE_MARGIN, yPos);
+      doc.text(`Most Improved: ${si.strongest_area.metric} (+${si.strongest_area.delta}%)`, PAGE_MARGIN, yPos);
       yPos += 6;
     }
     if (si.weakest_area && si.weakest_area.delta < 0) {

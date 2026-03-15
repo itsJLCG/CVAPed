@@ -1,0 +1,840 @@
+/* ===================================
+   DASHBOARD OVERVIEW - 10 Chart Layout
+   Matches existing TherapistDashboard design system:
+   - Card: white bg, 16px radius, 1px solid #e2e8f0, soft shadow
+   - Typography: -apple-system stack, weights 600-800
+   - Transitions: cubic-bezier(0.4, 0, 0.2, 1)
+   - Colors: --color-primary (#ce3630), --color-secondary (#479ac3)
+   - Therapy: Articulation #f59e0b, Language #8b5cf6, Fluency #10b981
+   =================================== */
+
+/* ---- Container ---- */
+.do-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ===================================
+   METRIC CARDS ROW (Chart 1)
+   =================================== */
+.do-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.do-metric-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.do-metric-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-primary);
+  border-radius: 0 4px 4px 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.do-metric-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.do-metric-card:hover::before {
+  opacity: 1;
+}
+
+.do-metric-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.do-metric-emoji {
+  font-size: 1.5rem;
+}
+
+.do-metric-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.do-metric-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.do-metric-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+  margin: 2px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.do-metric-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(206, 54, 48, 0.08) 0%, rgba(206, 54, 48, 0.04) 100%);
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+
+.do-metric-filter {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px 8px;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.do-metric-filter:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.do-metric-filter:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(206, 54, 48, 0.12);
+}
+
+/* ===================================
+   CHARTS GRID
+   =================================== */
+.do-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas:
+    "trend         trend        distribution"
+    "scores        appointments engagement"
+    "weekly        weekly       scoredist"
+    "demographics  demographics activities";
+  gap: 20px;
+  align-items: stretch;
+}
+
+/* ===================================
+   SHARED CHART CARD
+   =================================== */
+.do-chart-card {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.do-chart-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.do-chart-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.do-chart-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.do-chart-icon {
+  font-size: 1.1rem;
+}
+
+.do-chart-body {
+  padding: 16px 16px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ===================================
+   TOOLTIP
+   =================================== */
+.do-tooltip {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-size: 0.82rem;
+}
+
+.do-tooltip-label {
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 4px;
+}
+
+.do-tooltip-value {
+  font-weight: 600;
+  margin: 2px 0;
+}
+
+/* ===================================
+   TREND LEGEND (Chart 2 & 8)
+   =================================== */
+.do-trend-legend {
+  display: flex;
+  gap: 16px;
+  padding: 0 4px 8px;
+  flex-wrap: wrap;
+}
+
+.do-trend-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.do-trend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ===================================
+   PIE/DONUT WRAPPER (Chart 3 & 6)
+   =================================== */
+.do-pie-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.do-pie-chart-area {
+  position: relative;
+  width: 100%;
+}
+
+.do-pie-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.do-pie-center-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #1f2937;
+  line-height: 1.1;
+}
+
+.do-pie-center-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.do-pie-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+
+.do-pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  transition: all 0.2s ease;
+}
+
+.do-pie-legend-item:hover {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.do-pie-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.do-pie-legend-name {
+  font-weight: 600;
+  color: #334155;
+}
+
+.do-pie-legend-value {
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.do-pie-legend-pct {
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: 0.75rem;
+}
+
+/* ===================================
+   ENGAGEMENT GAUGE (Chart 5)
+   =================================== */
+.do-engage-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.do-engage-ring {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
+.do-engage-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06));
+}
+
+.do-engage-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.do-engage-pct {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.do-engage-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 180px;
+}
+
+.do-engage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.do-engage-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.do-engage-label {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.do-engage-value {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.do-engage-total-row {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+/* ===================================
+   DEMOGRAPHICS (Chart 9)
+   =================================== */
+.do-demographics-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Age bar color legend */
+.do-age-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 4px;
+}
+
+.do-age-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.do-age-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.do-age-swatch-primary  { background: var(--color-primary); }
+.do-age-swatch-secondary { background: var(--color-secondary); }
+
+/* Gender section */
+.do-gender-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.do-gender-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin: 0;
+  padding: 0 2px;
+}
+
+.do-gender-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.do-gender-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.do-gender-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.do-gender-card-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.do-gender-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.do-gender-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+  flex: 1;
+}
+
+.do-gender-pct-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--gender-color, #64748b);
+  background: color-mix(in srgb, var(--gender-color, #64748b) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: 20px;
+}
+
+.do-gender-card-count {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1;
+}
+
+.do-gender-card-count span {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.do-gender-bar-track {
+  height: 5px;
+  background: #e2e8f0;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.do-gender-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--gender-color, #64748b);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===================================
+   RECENT ACTIVITIES (Chart 10)
+   =================================== */
+.do-activities-card .do-chart-body {
+  padding: 0;
+  overflow-y: auto;
+  max-height: 380px;
+}
+
+.do-activities-card .do-chart-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.do-activities-card .do-chart-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.do-activities-card .do-chart-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.do-activities-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.do-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s ease;
+}
+
+.do-activity-item:last-child {
+  border-bottom: none;
+}
+
+.do-activity-item:hover {
+  background: #f9fafb;
+}
+
+.do-activity-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.do-activity-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.do-activity-patient {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.do-activity-detail {
+  font-size: 0.78rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.do-activity-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.do-activity-score {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+.do-activity-score.score-high {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.do-activity-score.score-mid {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.do-activity-score.score-low {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.do-activity-time {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* ===================================
+   EMPTY STATE
+   =================================== */
+.do-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+  gap: 8px;
+  flex: 1;
+}
+
+.do-empty-state span {
+  font-size: 2rem;
+}
+
+.do-empty-state p {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* ===================================
+   RESPONSIVE: TABLET (max-width: 1200px)
+   =================================== */
+@media (max-width: 1200px) {
+  .do-metrics-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .do-charts-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "trend         trend"
+      "distribution  scores"
+      "appointments  engagement"
+      "weekly        scoredist"
+      "demographics  activities";
+  }
+}
+
+/* ===================================
+   RESPONSIVE: SMALL TABLET (max-width: 1024px)
+   =================================== */
+@media (max-width: 1024px) {
+  .do-container {
+    gap: 16px;
+  }
+
+  .do-charts-grid {
+    gap: 16px;
+  }
+
+  .do-chart-body {
+    padding: 12px 12px 16px;
+  }
+}
+
+/* ===================================
+   RESPONSIVE: MOBILE (max-width: 768px)
+   =================================== */
+@media (max-width: 768px) {
+  .do-metrics-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .do-metric-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .do-metric-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .do-metric-emoji {
+    font-size: 1.2rem;
+  }
+
+  .do-metric-value {
+    font-size: 1.35rem;
+  }
+
+  .do-charts-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "trend"
+      "distribution"
+      "scores"
+      "appointments"
+      "engagement"
+      "weekly"
+      "scoredist"
+      "demographics"
+      "activities";
+  }
+
+  .do-chart-header {
+    padding: 14px 16px;
+  }
+
+  .do-chart-title {
+    font-size: 0.92rem;
+  }
+}
+
+/* ===================================
+   RESPONSIVE: SMALL MOBILE (max-width: 480px)
+   =================================== */
+@media (max-width: 480px) {
+  .do-metrics-row {
+    grid-template-columns: 1fr;
+  }
+
+  .do-metric-card {
+    padding: 12px;
+  }
+
+  .do-metric-value {
+    font-size: 1.2rem;
+  }
+
+  .do-metric-label {
+    font-size: 0.75rem;
+  }
+
+  .do-pie-legend {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .do-gender-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ===================================
+   PRINT STYLES
+   =================================== */
+@media print {
+  .do-metric-filter {
+    display: none;
+  }
+
+  .do-chart-card {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+  }
+
+  .do-metric-card {
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+  }
+
+  .do-chart-card:hover,
+  .do-metric-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* ===================================
+   RECHARTS OVERRIDES
+   =================================== */
+.do-chart-body .recharts-wrapper {
+  font-family: inherit;
+}
+
+.do-chart-body .recharts-cartesian-axis-tick-value {
+  font-family: inherit;
+}
+
+.do-chart-body .recharts-default-tooltip {
+  display: none !important;
+}

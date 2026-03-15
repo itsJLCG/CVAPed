@@ -1960,6 +1960,109 @@ def get_therapist_stats(current_user):
             'completion_rate': round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0
         }
         
+        # ---- Enhanced chart data for dashboard ----
+
+        # 1. Session trend (daily trial counts by therapy type)
+        trend_days_count = 30
+        if days_param != 'all':
+            try:
+                trend_days_count = min(int(days_param), 90)
+            except ValueError:
+                trend_days_count = 30
+        trend_start = utc_now() - datetime.timedelta(days=trend_days_count)
+
+        def get_daily_trial_counts(collection, start_date):
+            pipeline = [
+                {'$match': {'timestamp': {'$gte': start_date}}},
+                {'$group': {
+                    '_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$timestamp'}},
+                    'count': {'$sum': 1}
+                }},
+                {'$sort': {'_id': 1}}
+            ]
+            return {doc['_id']: doc['count'] for doc in collection.aggregate(pipeline)}
+
+        art_daily = get_daily_trial_counts(articulation_trials_collection, trend_start)
+        lang_daily = get_daily_trial_counts(language_trials_collection, trend_start)
+        flu_daily = get_daily_trial_counts(db['fluency_trials'], trend_start)
+
+        session_trend = []
+        for offset in range(trend_days_count):
+            d = trend_start + datetime.timedelta(days=offset)
+            date_str = d.strftime('%Y-%m-%d')
+            a_count = art_daily.get(date_str, 0)
+            l_count = lang_daily.get(date_str, 0)
+            f_count = flu_daily.get(date_str, 0)
+            session_trend.append({
+                'date': date_str,
+                'articulation': a_count,
+                'language': l_count,
+                'fluency': f_count,
+                'total': a_count + l_count + f_count
+            })
+        stats['session_trend'] = session_trend
+
+        # 2. Score distribution across all therapy trials
+        def get_score_buckets(collection):
+            pipeline = [
+                {'$match': {'accuracy': {'$exists': True, '$ne': None}}},
+                {'$bucket': {
+                    'groupBy': '$accuracy',
+                    'boundaries': [0, 0.2001, 0.4001, 0.6001, 0.8001, 1.01],
+                    'default': 'other',
+                    'output': {'count': {'$sum': 1}}
+                }}
+            ]
+            try:
+                return list(collection.aggregate(pipeline))
+            except Exception:
+                return []
+
+        bucket_labels = ['0-20', '21-40', '41-60', '61-80', '81-100']
+        bucket_boundaries = [0, 0.2001, 0.4001, 0.6001, 0.8001]
+        score_dist = {label: 0 for label in bucket_labels}
+
+        for coll in [articulation_trials_collection, language_trials_collection, db['fluency_trials']]:
+            for doc in get_score_buckets(coll):
+                bid = doc.get('_id')
+                if bid in bucket_boundaries:
+                    idx = bucket_boundaries.index(bid)
+                    score_dist[bucket_labels[idx]] += doc['count']
+
+        stats['score_distribution'] = [
+            {'range': label, 'count': score_dist[label]}
+            for label in bucket_labels
+        ]
+
+        # 3. Weekly activity pattern (trials by day of week)
+        def get_weekly_counts(collection):
+            pipeline = [
+                {'$group': {
+                    '_id': {'$dayOfWeek': '$timestamp'},
+                    'count': {'$sum': 1}
+                }}
+            ]
+            return {doc['_id']: doc['count'] for doc in collection.aggregate(pipeline)}
+
+        day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        art_weekly = get_weekly_counts(articulation_trials_collection)
+        lang_weekly = get_weekly_counts(language_trials_collection)
+        flu_weekly = get_weekly_counts(db['fluency_trials'])
+
+        weekly_pattern = []
+        for day_num in range(1, 8):
+            aw = art_weekly.get(day_num, 0)
+            lw = lang_weekly.get(day_num, 0)
+            fw = flu_weekly.get(day_num, 0)
+            weekly_pattern.append({
+                'day': day_names[day_num - 1],
+                'articulation': aw,
+                'language': lw,
+                'fluency': fw,
+                'total': aw + lw + fw
+            })
+        stats['weekly_pattern'] = weekly_pattern
+
         print(f"✅ Therapist stats retrieved successfully")
         print(f"   Total Patients: {total_patients}")
         print(f"   Active Patients: {stats['active_patients']}")

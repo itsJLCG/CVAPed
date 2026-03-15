@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
-import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf } from '../components/PdfReportTemplate';
+import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf } from '../components/PdfReportTemplate';
 import DashboardOverview from '../components/DashboardOverview';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
@@ -130,6 +130,14 @@ function TherapistDashboard({ onLogout }) {
   // Reports state
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  // Speech therapy analytics state (for PDF export)
+  const [articulationAnalytics, setArticulationAnalytics] = useState(null);
+  const [fluencyAnalytics, setFluencyAnalytics] = useState(null);
+  const [languageAnalytics, setLanguageAnalytics] = useState(null);
+  const [exportingArticulation, setExportingArticulation] = useState(false);
+  const [exportingFluency, setExportingFluency] = useState(false);
+  const [exportingLanguage, setExportingLanguage] = useState(false);
 
   // Diagnostic Comparison state
   const [diagComparisonData, setDiagComparisonData] = useState(null);
@@ -895,7 +903,8 @@ function TherapistDashboard({ onLogout }) {
       score: analysis.overall_score,
       severity: analysis.severity,
       date: formatDate(analysis.created_at),
-      problems: analysis.problems ?? [],
+      problem_details: analysis.problem_details ?? [],
+      gait_score: analysis.gait_score ?? null,
       metricsRows: buildGaitMetricsRows(
         analysis.gait_metrics,
         analysis.analysis_duration,
@@ -910,13 +919,68 @@ function TherapistDashboard({ onLogout }) {
         : 'Multiple_Patients';
     const filename = `CVAPed_PhysicalTherapyReport_${namePart}`;
 
-    await generatePdfReport({
-      title: 'Physical Therapy Report',
-      patients,
-      metricsColumns: PHYSICAL_THERAPY_METRICS_COLUMNS,
-      filename,
-    });
+    await generatePhysicalTherapyPdf({ patients, filename });
   }, [selectedAnalysisIds, gaitAnalyses]);
+
+  const handleExportArticulationPdf = useCallback(async () => {
+    setExportingArticulation(true);
+    try {
+      let analytics = articulationAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getArticulationAnalytics(selectedDays);
+        setArticulationAnalytics(analytics);
+      }
+      await generateArticulationPdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Articulation_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Articulation PDF export failed:', error);
+    } finally {
+      setExportingArticulation(false);
+    }
+  }, [articulationAnalytics, selectedDays, user]);
+
+  const handleExportFluencyPdf = useCallback(async () => {
+    setExportingFluency(true);
+    try {
+      let analytics = fluencyAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getFluencyAnalytics(selectedDays);
+        setFluencyAnalytics(analytics);
+      }
+      await generateFluencyPdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Fluency_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Fluency PDF export failed:', error);
+    } finally {
+      setExportingFluency(false);
+    }
+  }, [fluencyAnalytics, selectedDays, user]);
+
+  const handleExportLanguagePdf = useCallback(async () => {
+    setExportingLanguage(true);
+    try {
+      let analytics = languageAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getLanguageAnalytics(selectedDays);
+        setLanguageAnalytics(analytics);
+      }
+      await generateLanguagePdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Language_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Language PDF export failed:', error);
+    } finally {
+      setExportingLanguage(false);
+    }
+  }, [languageAnalytics, selectedDays, user]);
 
   const handleExportDiagnosticPdf = useCallback(async () => {
     if (!selectedDiagPatient || !diagComparisonData) return;
@@ -1753,6 +1817,13 @@ function TherapistDashboard({ onLogout }) {
                     <button className="btn-primary" onClick={() => setShowArticulationModal(true)}>
                       ➕ New Exercise
                     </button>
+                    <button
+                      className="btn-primary"
+                      onClick={handleExportArticulationPdf}
+                      disabled={exportingArticulation}
+                    >
+                      {exportingArticulation ? '⏳ Generating...' : '📄 Export PDF'}
+                    </button>
                   </div>
                 </div>
 
@@ -2221,6 +2292,13 @@ function TherapistDashboard({ onLogout }) {
                   }}>
                     ➕ New Exercise
                   </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleExportLanguagePdf}
+                    disabled={exportingLanguage}
+                  >
+                    {exportingLanguage ? '⏳ Generating...' : '📄 Export PDF'}
+                  </button>
                 </div>
               </div>
 
@@ -2586,6 +2664,13 @@ function TherapistDashboard({ onLogout }) {
                   </button>
                   <button className="btn-primary" onClick={() => setShowExerciseModal(true)}>
                     ➕ New Exercise
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleExportFluencyPdf}
+                    disabled={exportingFluency}
+                  >
+                    {exportingFluency ? '⏳ Generating...' : '📄 Export PDF'}
                   </button>
                 </div>
               </div>

@@ -19,6 +19,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+SESSION_EXPIRY_HOURS = 3
+FACILITY_SESSION_EXPIRY_HOURS = 3
+
 # Import fluency CRUD blueprint
 from fluency_crud import fluency_bp, init_fluency_crud
 # Import language CRUD blueprint
@@ -169,17 +172,40 @@ def token_required(f):
             return jsonify({'message': 'Token is missing!'}), 401
         
         try:
-            # Remove 'Bearer ' prefix if present
             if token.startswith('Bearer '):
                 token = token[7:]
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            
+            data = jwt.decode(
+                token, 
+                app.config['SECRET_KEY'], 
+                algorithms=["HS256"],
+                options={"require_exp": True}
+            )
+            
+            issued_at = data.get('iat')
+            if issued_at:
+                issued_time = datetime.datetime.fromtimestamp(issued_at, tz=datetime.timezone.utc)
+                logger.info(f"Token check: user_id={data['user_id']}, issued_at={issued_at}, expires_in={SESSION_EXPIRY_HOURS}h")
+            
             g.token_data = data
             current_user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not current_user:
+                logger.warning(f"Token validation failed: user {data['user_id']} not found in database")
                 return jsonify({'message': 'User not found!'}), 401
-        except Exception as e:
+                
+        except jwt.ExpiredSignatureError:
+            logger.warning(f"Session expired: token has exceeded {SESSION_EXPIRY_HOURS}-hour expiration")
+            return jsonify({
+                'message': 'Session expired. Please log in again.',
+                'error': 'SESSION_EXPIRED',
+                'code': 'session/expired'
+            }), 401
+        except jwt.InvalidTokenError as e:
             logger.warning(f"Invalid token: {e}")
             return jsonify({'message': 'Token is invalid!'}), 401
+        except Exception as e:
+            logger.error(f"Token validation error: {e}", exc_info=True)
+            return jsonify({'message': 'Token validation failed!'}), 401
         
         return f(current_user, *args, **kwargs)
     
@@ -304,7 +330,8 @@ def register():
         token = jwt.encode({
             'user_id': str(result.inserted_id),
             'role': role,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
         return jsonify({
@@ -354,7 +381,8 @@ def login():
         token = jwt.encode({
             'user_id': str(user['_id']),
             'role': user.get('role', 'patient'),
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
         return jsonify({
@@ -417,7 +445,8 @@ def facility_login():
             'user_id': str(user['_id']),
             'role': user.get('role', 'patient'),
             'facility_mode': True,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=4)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=FACILITY_SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
 
         return jsonify({
@@ -510,7 +539,8 @@ def facility_firebase_auth():
             'user_id': str(user['_id']),
             'role': user.get('role', 'patient'),
             'facility_mode': True,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=4)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=FACILITY_SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
 
         return jsonify({
@@ -585,7 +615,8 @@ def firebase_auth():
             token = jwt.encode({
                 'user_id': str(user['_id']),
                 'role': user.get('role', 'patient'),
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+                'iat': datetime.datetime.utcnow()
             }, app.config['SECRET_KEY'], algorithm="HS256")
             
             return jsonify({
@@ -632,7 +663,8 @@ def firebase_auth():
                 token = jwt.encode({
                     'user_id': str(existing_user['_id']),
                     'role': existing_user.get('role', 'patient'),
-                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+                    'iat': datetime.datetime.utcnow()
                 }, app.config['SECRET_KEY'], algorithm="HS256")
                 
                 return jsonify({
@@ -668,7 +700,8 @@ def firebase_auth():
                 token = jwt.encode({
                     'user_id': str(existing_user['_id']),
                     'role': existing_user.get('role', 'patient'),
-                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+                    'iat': datetime.datetime.utcnow()
                 }, app.config['SECRET_KEY'], algorithm="HS256")
 
                 return jsonify({
@@ -708,7 +741,8 @@ def firebase_auth():
         token = jwt.encode({
             'user_id': str(result.inserted_id),
             'role': 'patient',
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
         return jsonify({

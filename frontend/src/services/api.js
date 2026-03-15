@@ -35,6 +35,17 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       const errorCode = error.response?.data?.code;
       const errorMessage = error.response?.data?.error;
+      const serverMessage = error.response?.data?.message;
+      
+      // Handle session expiration (our new 3-hour expiry)
+      if (errorCode === 'session/expired' || serverMessage?.includes('Session expired')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
       
       // Handle Firebase token errors
       if (errorCode?.includes('auth/') || 

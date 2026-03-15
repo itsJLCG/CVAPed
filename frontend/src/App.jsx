@@ -143,11 +143,7 @@ function App() {
             />
             <Route
               path="/facility-login"
-              element={
-                localStorage.getItem('therapistToken')
-                  ? <FacilityLogin onLogin={handleLogin} />
-                  : <Navigate to="/login" />
-              }
+              element={<FacilityLogin onLogin={handleLogin} />}
             />
             <Route 
               path="/register" 

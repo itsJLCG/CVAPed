@@ -275,6 +275,27 @@ export const therapistService = {
     const response = await api.get('/therapist/reports');
     return response.data;
   },
+
+  getArticulationAnalytics: async (days = 30) => {
+    const response = await api.get('/therapist/analytics/articulation', {
+      params: { days: days === 'all' ? 'all' : days }
+    });
+    return response.data;
+  },
+
+  getFluencyAnalytics: async (days = 30) => {
+    const response = await api.get('/therapist/analytics/fluency', {
+      params: { days: days === 'all' ? 'all' : days }
+    });
+    return response.data;
+  },
+
+  getLanguageAnalytics: async (days = 30) => {
+    const response = await api.get('/therapist/analytics/language', {
+      params: { days: days === 'all' ? 'all' : days }
+    });
+    return response.data;
+  },
 };
 
 // Fluency Exercise CRUD API

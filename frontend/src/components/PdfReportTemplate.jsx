@@ -618,16 +618,66 @@ export const buildGaitMetricsRows = (gaitMetrics, analysisDuration, dataQuality)
     val !== undefined && val !== null
       ? `${Number(val).toFixed(val % 1 === 0 ? 0 : 1)}${suffix}`
       : '—';
+  const has = (v) => v != null && v !== '' && !Number.isNaN(Number(v));
+
+  const getCadenceStatus  = (v) => v >= 100 ? 'Fast'      : v >= 80 ? 'Normal'    : 'Slow';
+  const getVelocityStatus = (v) => v >= 1.2  ? 'Fast'      : v >= 0.8 ? 'Normal'   : 'Slow';
+  // symmetry/stability/regularity arrive already ×100 from backend
+  const getSymmetryStatus  = (v) => v >= 90   ? 'Excellent' : v >= 70  ? 'Good'     : 'Fair';
+  const getStabilityStatus = (v) => v >= 80   ? 'Stable'    : v >= 60  ? 'Moderate' : 'Unstable';
+  const getStrideStatus    = (v) => v >= 1.2  ? 'Long'      : v >= 0.8 ? 'Normal'   : 'Short';
+  const getRegularityStatus = (v) => v >= 80  ? 'Consistent': v >= 60  ? 'Regular'  : 'Irregular';
+  const getStepsStatus     = (v) => v >= 30   ? 'Excellent' : v >= 15  ? 'Good'     : 'Low';
+
   return [
-    { metric: 'Steps',             value: gaitMetrics.step_count ?? '—' },
-    { metric: 'Cadence',           value: fmt(gaitMetrics.cadence, ' steps/min') },
-    { metric: 'Stride Length',     value: fmt(gaitMetrics.stride_length, ' m') },
-    { metric: 'Velocity',          value: fmt(gaitMetrics.velocity, ' m/s') },
-    { metric: 'Gait Symmetry',     value: fmt(gaitMetrics.gait_symmetry, '%') },
-    { metric: 'Stability Score',   value: fmt(gaitMetrics.stability_score, '%') },
-    { metric: 'Step Regularity',   value: fmt(gaitMetrics.step_regularity, '%') },
-    { metric: 'Analysis Duration', value: analysisDuration ? `${Number(analysisDuration).toFixed(0)}s` : '—' },
-    { metric: 'Data Quality',      value: dataQuality ?? '—' },
+    {
+      metric: 'Steps',
+      value: has(gaitMetrics.step_count) ? String(gaitMetrics.step_count) : '—',
+      status: has(gaitMetrics.step_count) ? getStepsStatus(gaitMetrics.step_count) : 'N/A',
+    },
+    {
+      metric: 'Cadence',
+      value: fmt(gaitMetrics.cadence, ' steps/min'),
+      status: has(gaitMetrics.cadence) ? getCadenceStatus(gaitMetrics.cadence) : 'N/A',
+    },
+    {
+      metric: 'Stride Length',
+      value: fmt(gaitMetrics.stride_length, ' m'),
+      status: has(gaitMetrics.stride_length) ? getStrideStatus(gaitMetrics.stride_length) : 'N/A',
+    },
+    {
+      metric: 'Velocity',
+      value: fmt(gaitMetrics.velocity, ' m/s'),
+      status: has(gaitMetrics.velocity) ? getVelocityStatus(gaitMetrics.velocity) : 'N/A',
+    },
+    {
+      metric: 'Gait Symmetry',
+      value: fmt(gaitMetrics.gait_symmetry, '%'),
+      status: has(gaitMetrics.gait_symmetry) ? getSymmetryStatus(gaitMetrics.gait_symmetry) : 'N/A',
+    },
+    {
+      metric: 'Stability Score',
+      value: fmt(gaitMetrics.stability_score, '%'),
+      status: has(gaitMetrics.stability_score) ? getStabilityStatus(gaitMetrics.stability_score) : 'N/A',
+    },
+    {
+      metric: 'Step Regularity',
+      value: fmt(gaitMetrics.step_regularity, '%'),
+      status: has(gaitMetrics.step_regularity) ? getRegularityStatus(gaitMetrics.step_regularity) : 'N/A',
+    },
+    {
+      metric: 'Analysis Duration',
+      value: analysisDuration ? `${Number(analysisDuration).toFixed(0)}s` : '—',
+      status: analysisDuration ? 'Complete' : 'N/A',
+    },
+    {
+      metric: 'Data Quality',
+      value: dataQuality ?? '—',
+      status: dataQuality
+        ? (['good', 'excellent'].includes(dataQuality.toLowerCase()) ? 'Good'
+          : dataQuality.toLowerCase() === 'fair' ? 'Fair' : 'Poor')
+        : 'N/A',
+    },
   ];
 };
 
@@ -1622,6 +1672,1079 @@ export const generateExercisePlanPdf = async ({
   });
 
   // Footer on all pages
+  addPageFooters(doc);
+  doc.save(`${filename}.pdf`);
+};
+
+// ─── Score band helper (mirrors getScoreBandLabel already defined above) ─────
+
+const getScoreBandStyle = (score) => {
+  if (score == null) return { bg: C.unknownBg, text: C.unknownText };
+  if (score >= 86) return { bg: C.mildBg,     text: C.mildText };
+  if (score >= 71) return { bg: C.scoreHighBg, text: C.scoreHighText };
+  if (score >= 51) return { bg: C.scoreMidBg,  text: C.scoreMidText };
+  if (score >= 31) return { bg: C.moderateBg,  text: C.moderateText };
+  return { bg: C.severeBg, text: C.severeText };
+};
+
+// ─── Shared analytics meta bar ───────────────────────────────────────────────
+const addAnalyticsMetaBar = (doc, reportType, totalTrials, totalPatients, period) => {
+  const { width: pageWidth } = doc.internal.pageSize;
+  const colW = (pageWidth - 2 * PAGE_MARGIN) / 3;
+
+  doc.setFillColor(...C.metaBg);
+  doc.rect(0, HEADER_HEIGHT, pageWidth, META_BAR_HEIGHT, 'F');
+  doc.setDrawColor(...C.border);
+  doc.setLineWidth(0.2);
+  doc.line(0, HEADER_HEIGHT + META_BAR_HEIGHT, pageWidth, HEADER_HEIGHT + META_BAR_HEIGHT);
+
+  const items = [
+    { label: 'REPORT TYPE',  value: reportType },
+    { label: 'TOTAL TRIALS', value: String(totalTrials) },
+    { label: 'PERIOD',       value: period },
+  ];
+
+  items.forEach((item, i) => {
+    const x = PAGE_MARGIN + i * colW + colW / 2;
+    if (i > 0) {
+      doc.setDrawColor(...C.border);
+      doc.setLineWidth(0.2);
+      doc.line(PAGE_MARGIN + i * colW, HEADER_HEIGHT + 3, PAGE_MARGIN + i * colW, HEADER_HEIGHT + META_BAR_HEIGHT - 3);
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...C.textMuted);
+    doc.text(item.label, x, HEADER_HEIGHT + 5.5, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...C.textBody);
+    doc.text(item.value, x, HEADER_HEIGHT + 11.5, { align: 'center' });
+  });
+};
+
+// ─── Shared summary stat card strip ─────────────────────────────────────────
+const renderStatStrip = (doc, stats, yPos) => {
+  const { width: pageWidth } = doc.internal.pageSize;
+  const contentW = pageWidth - 2 * PAGE_MARGIN;
+  const cardW = (contentW - (stats.length - 1) * 4) / stats.length;
+  const cardH = 22;
+
+  stats.forEach((stat, i) => {
+    const x = PAGE_MARGIN + i * (cardW + 4);
+    doc.setFillColor(220, 220, 220);
+    doc.roundedRect(x + 0.6, yPos + 0.8, cardW, cardH, 2, 2, 'F');
+    doc.setFillColor(...C.cardBg);
+    doc.roundedRect(x, yPos, cardW, cardH, 2, 2, 'F');
+    doc.setDrawColor(...C.border);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(x, yPos, cardW, cardH, 2, 2, 'S');
+    doc.setFillColor(...C.primary);
+    doc.rect(x, yPos, cardW, 2, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...C.textMuted);
+    doc.text(stat.label.toUpperCase(), x + cardW / 2, yPos + 7, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(...C.primary);
+    doc.text(String(stat.value), x + cardW / 2, yPos + 16, { align: 'center' });
+  });
+
+  return yPos + cardH + 10;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  generateArticulationPdf
+// ─────────────────────────────────────────────────────────────────────────────
+export const generateArticulationPdf = async ({
+  analytics,
+  generatedBy = 'Therapist',
+  filename = 'CVAPed_Articulation_Analytics',
+}) => {
+  const { data } = analytics;
+  const period = data.days === 'all' ? 'All Time' : `Last ${data.days} Days`;
+
+  const [{ default: jsPDF }, { default: autoTable }, logoDataUrl] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+    loadImageAsDataUrl(logo),
+  ]);
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const { height: pageHeight, width: pageWidth } = doc.internal.pageSize;
+
+  addBrandedHeader(doc, 'Articulation Therapy Analytics', logoDataUrl);
+  addAnalyticsMetaBar(doc, 'Articulation — Speech Therapy', data.total_trials, data.total_patients, period);
+
+  let yPos = HEADER_HEIGHT + META_BAR_HEIGHT + 8;
+
+  yPos = renderStatStrip(doc, [
+    { label: 'Total Trials',    value: data.total_trials },
+    { label: 'Patients Active', value: data.total_patients },
+    { label: 'Overall Avg Score', value: `${data.overall_avg_score ?? 0}%` },
+    { label: 'Sounds Tracked',  value: data.per_sound?.length ?? 0 },
+  ], yPos);
+
+  // Per-Sound Breakdown
+  yPos = renderSectionLabel(doc, 'Performance by Sound', yPos);
+
+  const soundRows = (data.per_sound ?? []).map((s) => [
+    s.label,
+    s.trial_count,
+    s.patient_count,
+    `${s.avg_score ?? 0}%`,
+    getScoreBandLabel(s.avg_score),
+  ]);
+
+  if (soundRows.length > 0) {
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Sound', 'Trials', 'Patients', 'Avg Score', 'Band']],
+      body: soundRows,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: C.slateDeep,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 40 },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        4: { halign: 'center' },
+      },
+      theme: 'grid',
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 4) {
+          const style = getScoreBandStyle(
+            parseFloat(soundRows[data.row.index]?.[3]) || 0
+          );
+          data.cell.styles.fillColor = style.bg;
+          data.cell.styles.textColor = style.text;
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  } else {
+    doc.setFillColor(...C.mildBg);
+    doc.roundedRect(PAGE_MARGIN, yPos, pageWidth - 2 * PAGE_MARGIN - 40, 12, 2, 2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.mildText);
+    doc.text('No articulation trial data for this period', PAGE_MARGIN + 5, yPos + 7.5);
+    yPos += 20;
+  }
+
+  // Per-Level Breakdown
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addBrandedHeader(doc, 'Articulation Therapy Analytics', logoDataUrl);
+    yPos = HEADER_HEIGHT + 6;
+  }
+
+  yPos = renderSectionLabel(doc, 'Performance by Level', yPos);
+
+  const levelRows = (data.per_level ?? []).map((lv) => [
+    lv.label,
+    lv.trial_count,
+    lv.patient_count,
+    `${lv.avg_score ?? 0}%`,
+    getScoreBandLabel(lv.avg_score),
+  ]);
+
+  if (levelRows.length > 0) {
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Level', 'Trials', 'Patients', 'Avg Score', 'Band']],
+      body: levelRows,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: C.slateDeep,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 50 },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        4: { halign: 'center' },
+      },
+      theme: 'grid',
+      didParseCell: (cellData) => {
+        if (cellData.section === 'body' && cellData.column.index === 4) {
+          const style = getScoreBandStyle(
+            parseFloat(levelRows[cellData.row.index]?.[3]) || 0
+          );
+          cellData.cell.styles.fillColor = style.bg;
+          cellData.cell.styles.textColor = style.text;
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  }
+
+  // Top / Bottom callout
+  if (data.top_sound || data.bottom_sound) {
+    if (yPos > pageHeight - 60) {
+      doc.addPage();
+      addBrandedHeader(doc, 'Articulation Therapy Analytics', logoDataUrl);
+      yPos = HEADER_HEIGHT + 6;
+    }
+    yPos = renderSectionLabel(doc, 'Highlights', yPos);
+
+    const highlights = [];
+    if (data.top_sound) highlights.push([
+      'Best Performing Sound', data.top_sound.label, `${data.top_sound.avg_score ?? 0}%`, getScoreBandLabel(data.top_sound.avg_score)
+    ]);
+    if (data.bottom_sound) highlights.push([
+      'Needs Most Attention', data.bottom_sound.label, `${data.bottom_sound.avg_score ?? 0}%`, getScoreBandLabel(data.bottom_sound.avg_score)
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Category', 'Sound', 'Avg Score', 'Band']],
+      body: highlights,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+      },
+      headStyles: {
+        fillColor: C.slateDeep,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        2: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        3: { halign: 'center' },
+      },
+      theme: 'grid',
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  }
+
+  addPageFooters(doc);
+  doc.save(`${filename}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  generateFluencyPdf
+// ─────────────────────────────────────────────────────────────────────────────
+export const generateFluencyPdf = async ({
+  analytics,
+  generatedBy = 'Therapist',
+  filename = 'CVAPed_Fluency_Analytics',
+}) => {
+  const { data } = analytics;
+  const period = data.days === 'all' ? 'All Time' : `Last ${data.days} Days`;
+
+  const [{ default: jsPDF }, { default: autoTable }, logoDataUrl] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+    loadImageAsDataUrl(logo),
+  ]);
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const { height: pageHeight, width: pageWidth } = doc.internal.pageSize;
+
+  addBrandedHeader(doc, 'Fluency Therapy Analytics', logoDataUrl);
+  addAnalyticsMetaBar(doc, 'Fluency — Speech Therapy', data.total_trials, data.total_patients, period);
+
+  let yPos = HEADER_HEIGHT + META_BAR_HEIGHT + 8;
+
+  yPos = renderStatStrip(doc, [
+    { label: 'Total Trials',      value: data.total_trials },
+    { label: 'Patients Active',   value: data.total_patients },
+    { label: 'Overall Avg Score', value: `${data.overall_avg_score ?? 0}%` },
+    { label: 'Levels Tracked',    value: data.per_level?.length ?? 0 },
+  ], yPos);
+
+  // Per-Level Breakdown
+  yPos = renderSectionLabel(doc, 'Performance by Level', yPos);
+
+  const levelRows = (data.per_level ?? []).map((lv) => [
+    lv.label,
+    lv.trial_count,
+    lv.patient_count,
+    `${lv.avg_score ?? 0}%`,
+    `${lv.avg_fluency_rate ?? 0}%`,
+    getScoreBandLabel(lv.avg_score),
+  ]);
+
+  if (levelRows.length > 0) {
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Level', 'Trials', 'Patients', 'Avg Score', 'Fluency Rate', 'Band']],
+      body: levelRows,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: C.slateDeep,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 40 },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        4: { halign: 'center' },
+        5: { halign: 'center' },
+      },
+      theme: 'grid',
+      didParseCell: (cellData) => {
+        if (cellData.section === 'body' && cellData.column.index === 5) {
+          const style = getScoreBandStyle(
+            parseFloat(levelRows[cellData.row.index]?.[3]) || 0
+          );
+          cellData.cell.styles.fillColor = style.bg;
+          cellData.cell.styles.textColor = style.text;
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  } else {
+    doc.setFillColor(...C.mildBg);
+    doc.roundedRect(PAGE_MARGIN, yPos, pageWidth - 2 * PAGE_MARGIN - 40, 12, 2, 2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.mildText);
+    doc.text('No fluency trial data for this period', PAGE_MARGIN + 5, yPos + 7.5);
+    yPos += 20;
+  }
+
+  // Mastery Distribution
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addBrandedHeader(doc, 'Fluency Therapy Analytics', logoDataUrl);
+    yPos = HEADER_HEIGHT + 6;
+  }
+
+  yPos = renderSectionLabel(doc, 'Patient Mastery Distribution', yPos);
+
+  const mastery = data.mastery_distribution ?? {};
+  const masteryRows = [
+    ['Mastered (≥ 86%)',    mastery.mastered ?? 0],
+    ['Functional (71-85%)', mastery.functional ?? 0],
+    ['Mild (51-70%)',       mastery.mild ?? 0],
+    ['Moderate (31-50%)',   mastery.moderate ?? 0],
+    ['Severe (< 31%)',      mastery.severe ?? 0],
+  ];
+
+  autoTable(doc, {
+    startY: yPos,
+    head: [['Mastery Band', 'Patient Count']],
+    body: masteryRows,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+    tableWidth: 100,
+    styles: {
+      fontSize: 8,
+      cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+      textColor: C.textBody,
+      lineColor: C.rowBorder,
+      lineWidth: 0.15,
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: C.slateDeep,
+      textColor: C.white,
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+      cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+    },
+    alternateRowStyles: { fillColor: C.rowAlt },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+    },
+    theme: 'grid',
+    didParseCell: (cellData) => {
+      if (cellData.section === 'body' && cellData.column.index === 0) {
+        const label = String(cellData.cell.raw ?? '').toLowerCase();
+        let style = { bg: C.unknownBg, text: C.unknownText };
+        if (label.startsWith('mastered'))   style = { bg: C.mildBg, text: C.mildText };
+        else if (label.startsWith('functional')) style = { bg: C.scoreHighBg, text: C.scoreHighText };
+        else if (label.startsWith('mild'))   style = { bg: C.scoreMidBg, text: C.scoreMidText };
+        else if (label.startsWith('moderate')) style = { bg: C.moderateBg, text: C.moderateText };
+        else if (label.startsWith('severe')) style = { bg: C.severeBg, text: C.severeText };
+        cellData.cell.styles.fillColor = style.bg;
+        cellData.cell.styles.textColor = style.text;
+      }
+    },
+  });
+  yPos = doc.lastAutoTable.finalY + 12;
+
+  addPageFooters(doc);
+  doc.save(`${filename}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  generateLanguagePdf
+// ─────────────────────────────────────────────────────────────────────────────
+export const generateLanguagePdf = async ({
+  analytics,
+  generatedBy = 'Therapist',
+  filename = 'CVAPed_Language_Analytics',
+}) => {
+  const { data } = analytics;
+  const period = data.days === 'all' ? 'All Time' : `Last ${data.days} Days`;
+
+  const [{ default: jsPDF }, { default: autoTable }, logoDataUrl] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+    loadImageAsDataUrl(logo),
+  ]);
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const { height: pageHeight, width: pageWidth } = doc.internal.pageSize;
+
+  addBrandedHeader(doc, 'Language Therapy Analytics', logoDataUrl);
+  addAnalyticsMetaBar(doc, 'Language — Speech Therapy', data.total_trials, data.total_patients, period);
+
+  let yPos = HEADER_HEIGHT + META_BAR_HEIGHT + 8;
+
+  const rec = data.receptive ?? { trial_count: 0, avg_accuracy: 0, per_level: [] };
+  const exp = data.expressive ?? { trial_count: 0, avg_accuracy: 0, per_level: [] };
+
+  yPos = renderStatStrip(doc, [
+    { label: 'Total Trials',         value: data.total_trials },
+    { label: 'Patients Active',      value: data.total_patients },
+    { label: 'Receptive Accuracy',   value: `${rec.avg_accuracy ?? 0}%` },
+    { label: 'Expressive Accuracy',  value: `${exp.avg_accuracy ?? 0}%` },
+  ], yPos);
+
+  // Receptive section
+  yPos = renderSectionLabel(doc, 'Receptive Language — Per Level', yPos);
+
+  const recRows = (rec.per_level ?? []).map((lv) => [
+    lv.label,
+    lv.trial_count,
+    lv.patient_count,
+    `${lv.accuracy ?? 0}%`,
+    getScoreBandLabel(lv.accuracy),
+  ]);
+
+  if (recRows.length > 0) {
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Level', 'Trials', 'Patients', 'Accuracy', 'Band']],
+      body: recRows,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: C.slateDeep,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 40 },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        4: { halign: 'center' },
+      },
+      theme: 'grid',
+      didParseCell: (cellData) => {
+        if (cellData.section === 'body' && cellData.column.index === 4) {
+          const style = getScoreBandStyle(
+            parseFloat(recRows[cellData.row.index]?.[3]) || 0
+          );
+          cellData.cell.styles.fillColor = style.bg;
+          cellData.cell.styles.textColor = style.text;
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  } else {
+    doc.setFillColor(...C.mildBg);
+    doc.roundedRect(PAGE_MARGIN, yPos, pageWidth - 2 * PAGE_MARGIN - 40, 12, 2, 2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.mildText);
+    doc.text('No receptive language data for this period', PAGE_MARGIN + 5, yPos + 7.5);
+    yPos += 20;
+  }
+
+  // Expressive section
+  if (yPos > pageHeight - 80) {
+    doc.addPage();
+    addBrandedHeader(doc, 'Language Therapy Analytics', logoDataUrl);
+    yPos = HEADER_HEIGHT + 6;
+  }
+
+  yPos = renderSectionLabel(doc, 'Expressive Language — Per Level', yPos);
+
+  const expRows = (exp.per_level ?? []).map((lv) => [
+    lv.label,
+    lv.trial_count,
+    lv.patient_count,
+    `${lv.accuracy ?? 0}%`,
+    getScoreBandLabel(lv.accuracy),
+  ]);
+
+  if (expRows.length > 0) {
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Level', 'Trials', 'Patients', 'Accuracy', 'Band']],
+      body: expRows,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: C.slateDeep,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 40 },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        4: { halign: 'center' },
+      },
+      theme: 'grid',
+      didParseCell: (cellData) => {
+        if (cellData.section === 'body' && cellData.column.index === 4) {
+          const style = getScoreBandStyle(
+            parseFloat(expRows[cellData.row.index]?.[3]) || 0
+          );
+          cellData.cell.styles.fillColor = style.bg;
+          cellData.cell.styles.textColor = style.text;
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+  } else {
+    doc.setFillColor(...C.mildBg);
+    doc.roundedRect(PAGE_MARGIN, yPos, pageWidth - 2 * PAGE_MARGIN - 40, 12, 2, 2, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.mildText);
+    doc.text('No expressive language data for this period', PAGE_MARGIN + 5, yPos + 7.5);
+    yPos += 20;
+  }
+
+  // Combined summary
+  if (yPos > pageHeight - 60) {
+    doc.addPage();
+    addBrandedHeader(doc, 'Language Therapy Analytics', logoDataUrl);
+    yPos = HEADER_HEIGHT + 6;
+  }
+
+  yPos = renderSectionLabel(doc, 'Mode Comparison Summary', yPos);
+
+  autoTable(doc, {
+    startY: yPos,
+    head: [['Mode', 'Total Trials', 'Avg Accuracy', 'Band']],
+    body: [
+      ['Receptive', rec.trial_count ?? 0, `${rec.avg_accuracy ?? 0}%`, getScoreBandLabel(rec.avg_accuracy)],
+      ['Expressive', exp.trial_count ?? 0, `${exp.avg_accuracy ?? 0}%`, getScoreBandLabel(exp.avg_accuracy)],
+    ],
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+    tableWidth: 120,
+    styles: {
+      fontSize: 8,
+      cellPadding: { top: 5, bottom: 5, left: 8, right: 8 },
+      textColor: C.textBody,
+      lineColor: C.rowBorder,
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: C.slateDeep,
+      textColor: C.white,
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+    },
+    alternateRowStyles: { fillColor: C.rowAlt },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      1: { halign: 'center' },
+      2: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+      3: { halign: 'center' },
+    },
+    theme: 'grid',
+    didParseCell: (cellData) => {
+      if (cellData.section === 'body' && cellData.column.index === 3) {
+        const style = getScoreBandStyle(
+          parseFloat(
+            cellData.row.index === 0 ? rec.avg_accuracy : exp.avg_accuracy
+          ) || 0
+        );
+        cellData.cell.styles.fillColor = style.bg;
+        cellData.cell.styles.textColor = style.text;
+        cellData.cell.styles.fontStyle = 'bold';
+      }
+    },
+  });
+
+  addPageFooters(doc);
+  doc.save(`${filename}.pdf`);
+};
+
+// ─── Physical Therapy Enhanced PDF ───────────────────────────────────────────
+/**
+ * generatePhysicalTherapyPdf
+ *
+ * Enhanced Physical Therapy report with:
+ *  - Multi-patient summary strip + score distribution + most common problems
+ *  - Per-patient card with score band label + gait_score pill
+ *  - 3-column gait metrics table (Metric | Value | Status) with colour coding
+ *  - Problems table (Problem | Severity | Clinical Note) with colour-coded severity
+ *
+ * @param {object} config
+ * @param {Array}  config.patients     - Array of patient objects
+ * @param {string} [config.filename]   - Output filename without .pdf
+ * @param {string} [config.generatedBy] - Therapist name for meta bar
+ */
+export const generatePhysicalTherapyPdf = async ({
+  patients = [],
+  filename = 'CVAPed_PhysicalTherapyReport',
+  generatedBy = 'Therapist',
+}) => {
+  const [{ default: jsPDF }, { default: autoTable }, logoDataUrl] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+    loadImageAsDataUrl(logo),
+  ]);
+
+  const TITLE   = 'Physical Therapy Report';
+  const PT_BLUE = [71, 154, 195];
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const { width: pageWidth, height: pageHeight } = doc.internal.pageSize;
+
+  addBrandedHeader(doc, TITLE, logoDataUrl);
+
+  const totalAnalyses  = patients.length;
+  const uniquePatients = new Set(patients.map(p => p.email)).size;
+  const avgScore       = totalAnalyses
+    ? Math.round(patients.reduce((s, p) => s + (p.score ?? 0), 0) / totalAnalyses)
+    : 0;
+  const totalIssues    = patients.reduce((s, p) => s + (p.problem_details?.length ?? 0), 0);
+  const dateNow        = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  addAnalyticsMetaBar(doc, 'Physical Therapy', totalAnalyses, uniquePatients, dateNow);
+
+  let yPos = HEADER_HEIGHT + META_BAR_HEIGHT + 8;
+
+  // ── Summary section (only when ≥ 2 analyses) ──────────────────────────────
+  if (totalAnalyses >= 2) {
+    yPos = renderSectionLabel(doc, 'Summary Overview', yPos);
+
+    yPos = renderStatStrip(doc, [
+      { label: 'Total Analyses',  value: String(totalAnalyses) },
+      { label: 'Unique Patients', value: String(uniquePatients) },
+      { label: 'Avg Score',       value: `${avgScore}%` },
+      { label: 'Total Issues',    value: String(totalIssues) },
+    ], yPos);
+    yPos += 28;
+
+    // Score distribution table
+    const bandCounts = {};
+    patients.forEach(p => {
+      const band = getScoreBandLabel(p.score);
+      bandCounts[band] = (bandCounts[band] ?? 0) + 1;
+    });
+    const bandOrder = ['Mastered', 'Functional', 'Mild', 'Moderate', 'Severe'];
+    const distRows = bandOrder
+      .filter(b => bandCounts[b])
+      .map(b => [b, bandCounts[b], `${Math.round((bandCounts[b] / totalAnalyses) * 100)}%`]);
+
+    if (distRows.length) {
+      if (yPos > pageHeight - 80) {
+        doc.addPage();
+        addBrandedHeader(doc, TITLE, logoDataUrl);
+        yPos = HEADER_HEIGHT + 6;
+      }
+      yPos = renderSectionLabel(doc, 'Score Distribution', yPos);
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Band', 'Count', 'Share']],
+        body: distRows,
+        margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+        tableWidth: 80,
+        styles: {
+          fontSize: 8,
+          cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+          textColor: C.textBody,
+          lineColor: C.rowBorder,
+          lineWidth: 0.15,
+          valign: 'middle',
+        },
+        headStyles: {
+          fillColor: PT_BLUE,
+          textColor: C.white,
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+          cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+        },
+        alternateRowStyles: { fillColor: C.rowAlt },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'center' },
+          2: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        },
+        theme: 'grid',
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 0) {
+            const fakeScore = data.cell.raw === 'Mastered' ? 90
+              : data.cell.raw === 'Functional' ? 75
+              : data.cell.raw === 'Mild' ? 60
+              : data.cell.raw === 'Moderate' ? 40 : 20;
+            const style = getScoreBandStyle(fakeScore);
+            data.cell.styles.fillColor = style.bg;
+            data.cell.styles.textColor = style.text;
+          }
+        },
+      });
+      yPos = doc.lastAutoTable.finalY + 12;
+    }
+
+    // Most common problems table
+    const problemFreq = {};
+    patients.forEach(p => {
+      (p.problem_details ?? []).forEach(pd => {
+        const key = pd.problem ?? 'Unknown';
+        problemFreq[key] = (problemFreq[key] ?? 0) + 1;
+      });
+    });
+    const topProblems = Object.entries(problemFreq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([prob, cnt]) => [
+        prob.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        cnt,
+        `${Math.round((cnt / totalAnalyses) * 100)}%`,
+      ]);
+
+    if (topProblems.length) {
+      if (yPos > pageHeight - 80) {
+        doc.addPage();
+        addBrandedHeader(doc, TITLE, logoDataUrl);
+        yPos = HEADER_HEIGHT + 6;
+      }
+      yPos = renderSectionLabel(doc, 'Most Common Problems', yPos);
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Problem', 'Occurrences', 'Prevalence']],
+        body: topProblems,
+        margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+        tableWidth: 120,
+        styles: {
+          fontSize: 8,
+          cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+          textColor: C.textBody,
+          lineColor: C.rowBorder,
+          lineWidth: 0.15,
+          valign: 'middle',
+        },
+        headStyles: {
+          fillColor: C.primary,
+          textColor: C.white,
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+          cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+        },
+        alternateRowStyles: { fillColor: C.rowAlt },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'center' },
+          2: { halign: 'center', fontStyle: 'bold', textColor: C.primary },
+        },
+        theme: 'grid',
+      });
+      yPos = doc.lastAutoTable.finalY + 14;
+    }
+  }
+
+  // ── Per-patient sections ───────────────────────────────────────────────────
+  patients.forEach((patient, idx) => {
+    const problemCount = patient.problem_details?.length ?? 0;
+    const metricsCount = patient.metricsRows?.length ?? 0;
+    const estimatedH   = 54 + metricsCount * 8 + 24 + (problemCount ? problemCount * 8 + 24 : 18);
+
+    if (yPos + estimatedH > pageHeight - 20 && (idx > 0 || totalAnalyses >= 2)) {
+      doc.addPage();
+      addBrandedHeader(doc, TITLE, logoDataUrl);
+      yPos = HEADER_HEIGHT + 6;
+    }
+
+    // ── Enhanced patient card ─────────────────────────────────────────────
+    const cardW  = pageWidth - 2 * PAGE_MARGIN;
+    const cardH  = 44;
+    const avatarCx = PAGE_MARGIN + 14;
+    const avatarCy = yPos + 18;
+
+    doc.setFillColor(220, 220, 220);
+    doc.roundedRect(PAGE_MARGIN + 0.6, yPos + 0.8, cardW, cardH, 2, 2, 'F');
+    doc.setFillColor(...C.cardBg);
+    doc.roundedRect(PAGE_MARGIN, yPos, cardW, cardH, 2, 2, 'F');
+    doc.setDrawColor(...C.border);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(PAGE_MARGIN, yPos, cardW, cardH, 2, 2, 'S');
+
+    doc.setFillColor(...PT_BLUE);
+    doc.rect(PAGE_MARGIN, yPos, 4, cardH, 'F');
+
+    doc.setFillColor(...C.slateDeep);
+    doc.circle(avatarCx, avatarCy, 10, 'F');
+    const initials = (patient.name ?? '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.white);
+    doc.text(initials, avatarCx, avatarCy + 3.5, { align: 'center' });
+
+    const textX = PAGE_MARGIN + 29;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(...C.text);
+    doc.text(patient.name ?? 'Patient', textX, yPos + 10);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...C.textMuted);
+    if (patient.email) doc.text(patient.email, textX, yPos + 17);
+    doc.text(`Analysis: ${patient.date ?? '—'}`, textX, yPos + 24);
+
+    // Score badge
+    const scoreStyle = getScoreStyle(patient.score ?? 0);
+    const scoreBadgeX = pageWidth - PAGE_MARGIN - 52;
+    doc.setFillColor(...scoreStyle.bg);
+    doc.roundedRect(scoreBadgeX, yPos + 6, 22, 11, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...scoreStyle.text);
+    doc.text(`${patient.score ?? '—'}%`, scoreBadgeX + 11, yPos + 13, { align: 'center' });
+
+    // Score band label
+    const bandLabel = getScoreBandLabel(patient.score);
+    const bandStyle = getScoreBandStyle(patient.score);
+    doc.setFillColor(...bandStyle.bg);
+    doc.roundedRect(scoreBadgeX, yPos + 20, 22, 9, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...bandStyle.text);
+    doc.text(bandLabel, scoreBadgeX + 11, yPos + 25.5, { align: 'center' });
+
+    // gait_score pill (if present)
+    if (patient.gait_score != null) {
+      const gsPillX = scoreBadgeX - 28;
+      doc.setFillColor(...C.scoreMidBg);
+      doc.roundedRect(gsPillX, yPos + 6, 24, 11, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...C.scoreMidText);
+      doc.text(`Gait: ${Number(patient.gait_score).toFixed(1)}`, gsPillX + 12, yPos + 13, { align: 'center' });
+    }
+
+    // Severity badge
+    const sevStyle = getSeverityStyle(patient.severity);
+    doc.setFillColor(...sevStyle.bg);
+    doc.roundedRect(scoreBadgeX, yPos + 32, 22, 8, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...sevStyle.text);
+    doc.text((patient.severity ?? 'unknown').toUpperCase(), scoreBadgeX + 11, yPos + 37, { align: 'center' });
+
+    yPos += cardH + 10;
+
+    // ── Gait Metrics Table (Metric | Value | Status) ──────────────────────
+    if (yPos > pageHeight - 80) {
+      doc.addPage();
+      addBrandedHeader(doc, TITLE, logoDataUrl);
+      yPos = HEADER_HEIGHT + 6;
+    }
+
+    yPos = addEnhancedSectionLabel(doc, 'Gait Analysis Metrics', yPos, PT_BLUE);
+
+    const metricsBody = (patient.metricsRows ?? []).map(r => [r.metric, r.value, r.status ?? 'N/A']);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Metric', 'Value', 'Status']],
+      body: metricsBody,
+      margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+      styles: {
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+        textColor: C.textBody,
+        lineColor: C.rowBorder,
+        lineWidth: 0.15,
+        valign: 'middle',
+      },
+      headStyles: {
+        fillColor: PT_BLUE,
+        textColor: C.white,
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+      },
+      alternateRowStyles: { fillColor: C.rowAlt },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 38 },
+        1: { halign: 'center', fontStyle: 'bold', fontSize: 9, textColor: C.primary },
+        2: { halign: 'center' },
+      },
+      theme: 'grid',
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 2) {
+          const style = getStatusStyle(data.cell.raw);
+          data.cell.styles.fillColor = style.bg;
+          data.cell.styles.textColor = style.text;
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    yPos = doc.lastAutoTable.finalY + 12;
+
+    // ── Problems Table (Problem | Severity | Clinical Notes) ─────────────
+    if (yPos > pageHeight - 80) {
+      doc.addPage();
+      addBrandedHeader(doc, TITLE, logoDataUrl);
+      yPos = HEADER_HEIGHT + 6;
+    }
+
+    yPos = addEnhancedSectionLabel(doc, 'Detected Gait Problems', yPos, C.primary);
+
+    const problemDetails = patient.problem_details ?? [];
+    if (problemDetails.length > 0) {
+      const problemBody = problemDetails.map((pd, i) => [
+        String(i + 1),
+        (pd.problem ?? 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        (pd.severity ?? 'mild').charAt(0).toUpperCase() + (pd.severity ?? 'mild').slice(1),
+        pd.clinical_note ?? '—',
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['#', 'Problem', 'Severity', 'Clinical Notes']],
+        body: problemBody,
+        margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+        styles: {
+          fontSize: 8,
+          cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+          textColor: C.textBody,
+          lineColor: C.rowBorder,
+          lineWidth: 0.15,
+          valign: 'middle',
+        },
+        headStyles: {
+          fillColor: C.primary,
+          textColor: C.white,
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+          cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+        },
+        alternateRowStyles: { fillColor: C.rowAlt },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12 },
+          1: { fontStyle: 'bold', cellWidth: 50 },
+          2: { halign: 'center', cellWidth: 28 },
+          3: { cellWidth: 'auto' },
+        },
+        theme: 'grid',
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 2) {
+            const style = getSeverityStyle(data.cell.raw);
+            data.cell.styles.fillColor = style.bg;
+            data.cell.styles.textColor = style.text;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+      });
+      yPos = doc.lastAutoTable.finalY + 14;
+    } else {
+      doc.setFillColor(...C.mildBg);
+      doc.roundedRect(PAGE_MARGIN, yPos, cardW - 40, 12, 2, 2, 'F');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...C.mildText);
+      doc.text('No gait problems detected', PAGE_MARGIN + 5, yPos + 7.5);
+      yPos += 22;
+    }
+
+    yPos += 4;
+  });
+
   addPageFooters(doc);
   doc.save(`${filename}.pdf`);
 };

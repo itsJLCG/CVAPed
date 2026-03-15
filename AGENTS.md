@@ -1,130 +1,62 @@
 # CVAPed Web - Agent Guidelines
 
-Healthcare application with React frontend, Node.js backend, and Python ML services.
+Healthcare application (CVA patient rehabilitation) with a React frontend and Python Flask backend.
 
 ## Project Structure
 
 ```
 CVAPed Web/
-├── frontend/          # React + Vite web app (port 3000)
-├── backend/           # Python Flask API (ML services)
-└── mobile-guide/      # Optional: React Native + Express (separate module)
+├── frontend/          # React 18 + Vite (port 3000, plain JS/JSX - no TypeScript)
+└── backend/           # Python Flask API + ML services (port 5000)
 ```
+
+> Note: `mobile-guide/` is referenced in legacy docs but does NOT exist in this repo.
+
+---
 
 ## Build & Development Commands
 
-### Frontend
+### Frontend (React + Vite)
 ```bash
 cd frontend
 npm install
-npm run dev       # Start dev server (port 3000)
-npm run build     # Production build
-npm run lint      # Run ESLint
-npm run preview   # Preview production build
+npm run dev        # Dev server on port 3000
+npm run build      # Production build → dist/
+npm run lint       # ESLint across all .js/.jsx files
+npm run preview    # Preview production build
 ```
 
-### Python Backend (ML Services)
+### Python Backend (Flask + ML)
 ```bash
 cd backend
-source venv/Scripts/activate  # Windows
-# source venv/bin/activate    # Mac/Linux
+source venv/Scripts/activate   # Windows
+# source venv/bin/activate     # Mac/Linux
 pip install -r requirements.txt
-python app.py
+python app.py                  # Starts Flask on port 5000
 ```
 
-### Mobile Guide (Optional)
+### Running a Single ESLint Check
 ```bash
-cd mobile-guide/backend && npm install && npm run dev
-cd mobile-guide/frontend && npm install && npm start
+cd frontend && npx eslint src/components/Header.jsx
 ```
 
----
-
-## Code Style Guidelines
-
-### General Principles
-- **No comments** unless explaining complex business logic
-- Use functional components with hooks in React
-- Keep components small and focused (single responsibility)
-- Use meaningful variable/function names
-
-### Imports
-- Use absolute imports when possible (via Vite/TypeScript paths)
-- Order: external libraries → internal modules → local components
-- Group React imports: `{ useState, useEffect } from 'react'`
-
-### JavaScript Conventions
-- Use `const` over `let`, avoid `var`
-- Prefer arrow functions for callbacks
-- Use template literals over string concatenation
-- Destructure objects and arrays when possible
-- Use optional chaining (`?.`) and nullish coalescing (`??`)
-- Avoid inline styles; use CSS modules or Tailwind classes
-
-### Naming Conventions
-- **Components**: PascalCase (e.g., `PatientForm.jsx`)
-- **Hooks**: camelCase starting with `use` (e.g., `useAuth`)
-- **Functions**: camelCase (e.g., `handleSubmit`)
-- **Constants**: SCREAMING_SNAKE_CASE (e.g., `MAX_RETRIES`)
-- **Files**: kebab-case for non-components (e.g., `api-utils.js`)
-
-### Error Handling
-- Always wrap async operations in try/catch
-- Use meaningful error messages for debugging
-- Implement proper error boundaries in React
-- Return appropriate HTTP status codes in API responses
-- Never expose internal error details to clients
-
-### React Patterns
-- Use `useMemo` for expensive computations
-- Use `useCallback` for function props passed to children
-- Keep `useEffect` dependencies exhaustive
-- Prefer controlled components over uncontrolled
-- Extract reusable logic into custom hooks
-
-### API Design (Node.js)
-- Follow RESTful conventions
-- Use middleware for cross-cutting concerns
-- Validate all input with express-validator
-- Return consistent response format
-- Use async/await over callbacks
-
-### Database (MongoDB)
-- Use Mongoose schemas with proper validation
-- Index frequently queried fields
-- Use lean() for read-only queries
-- Implement soft deletes where appropriate
-
-### Security
-- Never commit secrets to version control
-- Use environment variables for configuration
-- Sanitize user inputs to prevent injection
-- Implement proper authentication/authorization
-
----
-
-## Testing
-
-No test framework configured. To add Vitest:
+### Testing
+No test framework is currently configured. To add Vitest:
 ```bash
+cd frontend
 npm install -D vitest @testing-library/react @testing-library/jest-dom
-npx vitest run src/components/PatientForm.test.jsx  # Run single test
+npx vitest run src/components/MyComponent.test.jsx   # Run single test
+npx vitest run                                        # Run all tests
 ```
+Python backend tests (if added): `pytest backend/tests/test_auth.py` (single) or `pytest backend/` (all).
 
 ---
 
 ## Linting
 
-ESLint is configured for the frontend. Run linting:
-```bash
-cd frontend && npm run lint
-```
-
-ESLint rules:
-- React hooks exhaustive deps disabled
-- PropTypes disabled
-- No console warnings
-- JSX runtime enabled
+ESLint is configured via `frontend/.eslintrc.json`. Active rules:
+- Extends: `eslint:recommended`, `plugin:react/recommended`, `plugin:react/jsx-runtime`, `plugin:react-hooks/recommended`, `plugin:jsx-a11y/recommended`
+- **Disabled**: `react/prop-types`, `no-unused-vars`, `react/no-unescaped-entities`, `no-undef`, `no-console`, `react-hooks/exhaustive-deps`
 
 ---
 
@@ -132,29 +64,161 @@ ESLint rules:
 
 ```bash
 # frontend/.env
-VITE_API_URL=http://localhost:5000
+VITE_API_URL=http://localhost:5000/api
 
-# mobile-guide/backend/.env
+# backend/.env
+SECRET_KEY=your-jwt-secret
+MONGO_URI=mongodb://localhost:27017/cvacare
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/cvacare
-JWT_SECRET=your-secret-key
-FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-key.json
+FIREBASE_SERVICE_ACCOUNT_PATH=./cvaped-firebase-adminsdk.json
 ```
+
+---
+
+## Code Style Guidelines
+
+### General Principles
+- No comments unless explaining non-obvious business logic
+- Keep components small and focused (<300 lines); split if larger
+- Prefer clarity over cleverness
+- No inline styles — use co-located `.css` files per component (e.g., `Header.jsx` + `Header.css`)
+
+### Imports — Frontend
+Order: external libraries → internal services → local components → CSS
+```jsx
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/api';
+import Header from '../components/Header';
+import './PageName.css';
+```
+
+### JavaScript Conventions
+- `const` over `let`; never `var`
+- Arrow functions for callbacks and event handlers
+- Template literals over string concatenation
+- Destructure objects/arrays when possible
+- Optional chaining (`?.`) and nullish coalescing (`??`)
+- Always `async/await` with `try/catch`; never raw `.then()/.catch()` chains
+
+### Naming Conventions
+- **React components**: PascalCase files and exports (`TherapyPage.jsx`)
+- **Hooks**: camelCase with `use` prefix (`useAuth`, `useFetchPatient`)
+- **Event handlers**: `handle` prefix (`handleSubmit`, `handleLogout`)
+- **Utility files**: kebab-case (`api-utils.js`, `audio-manager.js`)
+- **Constants**: SCREAMING_SNAKE_CASE (`MAX_RETRIES`, `API_TIMEOUT`)
+
+### React Patterns
+- Functional components with hooks only (class components only for `ErrorBoundary`)
+- `useMemo` for expensive computations; `useCallback` for stable function refs passed as props
+- Controlled form components; use `react-hook-form` for complex forms
+- Route guards via `isAuthenticated` + `userRole` checks in `App.jsx`
+- Context for cross-cutting concerns (Toast, VoiceSettings, TherapyCategory)
+
+### React Component Template
+```jsx
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { someService } from '../services/api';
+import './ComponentName.css';
+
+function ComponentName({ propA, onAction }) {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+
+  const handleAction = async () => {
+    setLoading(true);
+    try {
+      const response = await someService.doSomething();
+      onAction(response.data);
+    } catch (error) {
+      console.error('Action failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="component-name">
+      <button onClick={handleAction} disabled={loading}>Submit</button>
+    </div>
+  );
+}
+
+export default ComponentName;
+```
+
+### API Service Pattern (frontend/src/services/api.js)
+All services use a shared Axios instance with a Bearer token interceptor. Follow existing pattern:
+```javascript
+export const myService = {
+  getAll: () => api.get('/my-resource'),
+  getById: (id) => api.get(`/my-resource/${id}`),
+  create: (data) => api.post('/my-resource', data),
+  update: (id, data) => api.put(`/my-resource/${id}`, data),
+  delete: (id) => api.delete(`/my-resource/${id}`),
+};
+```
+
+### Python Flask Backend
+
+- All routes use `@token_required` decorator for auth
+- Consistent response format: `{ "success": True, "data": ... }` or `{ "error": "message" }`
+- Use `ObjectId()` from `bson` for MongoDB IDs; convert to `str()` before returning
+- Use `utc_now()` helper for timestamps
+- Log errors with `logger.error(f'...: {e}')` — never expose raw exceptions to clients
+- Blueprints for modular route organization
+
+```python
+@app.route('/api/resource', methods=['POST'])
+@token_required
+def create_resource(user_id):
+    try:
+        data = request.get_json()
+        if not data.get('required_field'):
+            return jsonify({'error': 'required_field is required'}), 400
+        result = collection.insert_one({**data, 'user_id': ObjectId(user_id), 'created_at': utc_now()})
+        return jsonify({'success': True, 'id': str(result.inserted_id)}), 201
+    except Exception as e:
+        logger.error(f'create_resource failed: {e}')
+        return jsonify({'error': 'Internal server error'}), 500
+```
+
+### Database (MongoDB via PyMongo)
+- Use `ObjectId` from `bson`; convert to `str` in responses
+- `.find_one()` for single docs; `.find()` with projections for lists
+- Handle missing documents with 404 responses
+- No Mongoose — this is PyMongo directly; no ORM schemas
+
+### Security
+- Never commit secrets or Firebase service account JSON files
+- All sensitive routes protected by `@token_required`
+- Validate and sanitize inputs before DB operations
+- Role-based access: `patient`, `therapist`, `admin`
+- Patient data isolation: always filter by `user_id`
 
 ---
 
 ## Key Dependencies
 
-**Frontend:** React 18, React Router 6, React Hook Form, Axios, Firebase, Framer Motion, Wavesurfer.js
+**Frontend:** React 18, React Router 6, React Hook Form, Axios, Firebase 12, Framer Motion, Wavesurfer.js 7, jsPDF, React Icons
 
-**Backend (Node.js):** Express, Mongoose, JWT, Express-validator, Multer, Firebase Admin, Cloudinary
-
-**ML Backend (Python):** Flask, NumPy, Pandas, TensorFlow/PyTorch
+**Backend:** Flask 3, PyMongo, PyJWT, Flask-CORS, Flask-Bcrypt, Flask-Limiter, Firebase Admin SDK, Librosa, XGBoost, Scikit-learn, Pandas, NumPy, Cloudinary
 
 ---
 
 ## Common Tasks
 
-**Adding API endpoint:** Create route in `routes/`, add validation middleware, register in `app.js`
+**Add a React page:** Create `frontend/src/pages/MyPage.jsx` + `MyPage.css`, add route in `App.jsx`, add nav link in `Header.jsx` if needed.
 
-**Adding React component:** Create in `components/`, use functional component with hooks, export as default
+**Add a Flask endpoint:** Add route in `backend/app.py` (or a blueprint module), protect with `@token_required`, add corresponding service method in `frontend/src/services/api.js`.
+
+**Add an ML predictor:** Follow patterns in `articulation_mastery_predictor.py` — load XGBoost model, expose via Flask route, integrate with frontend prediction service.
+
+## Prohibited Practices
+- Using `var` or class components (except `ErrorBoundary`)
+- Hardcoding secrets, tokens, or MongoDB URIs
+- Inline styles (use `.css` files)
+- Exposing raw exception messages to API clients
+- Components exceeding ~300 lines without splitting
+- Using `console.log` for production logging (use `logger` in Python; `console.error` only for genuine errors in JS)

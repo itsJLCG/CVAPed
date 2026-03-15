@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
-import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf } from '../components/PdfReportTemplate';
+import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf } from '../components/PdfReportTemplate';
+import DashboardOverview from '../components/DashboardOverview';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
@@ -130,6 +131,14 @@ function TherapistDashboard({ onLogout }) {
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
 
+  // Speech therapy analytics state (for PDF export)
+  const [articulationAnalytics, setArticulationAnalytics] = useState(null);
+  const [fluencyAnalytics, setFluencyAnalytics] = useState(null);
+  const [languageAnalytics, setLanguageAnalytics] = useState(null);
+  const [exportingArticulation, setExportingArticulation] = useState(false);
+  const [exportingFluency, setExportingFluency] = useState(false);
+  const [exportingLanguage, setExportingLanguage] = useState(false);
+
   // Diagnostic Comparison state
   const [diagComparisonData, setDiagComparisonData] = useState(null);
   const [diagPatientDiagnostics, setDiagPatientDiagnostics] = useState([]);
@@ -221,6 +230,7 @@ function TherapistDashboard({ onLogout }) {
     let cancelled = false;
     if (activeTab === 'overview' && user) {
       loadOverviewStats();
+      if (!reportsData) loadReports();
     }
     return () => { cancelled = true; };
   }, [activeTab, user, selectedDays]);
@@ -893,7 +903,8 @@ function TherapistDashboard({ onLogout }) {
       score: analysis.overall_score,
       severity: analysis.severity,
       date: formatDate(analysis.created_at),
-      problems: analysis.problems ?? [],
+      problem_details: analysis.problem_details ?? [],
+      gait_score: analysis.gait_score ?? null,
       metricsRows: buildGaitMetricsRows(
         analysis.gait_metrics,
         analysis.analysis_duration,
@@ -908,13 +919,68 @@ function TherapistDashboard({ onLogout }) {
         : 'Multiple_Patients';
     const filename = `CVAPed_PhysicalTherapyReport_${namePart}`;
 
-    await generatePdfReport({
-      title: 'Physical Therapy Report',
-      patients,
-      metricsColumns: PHYSICAL_THERAPY_METRICS_COLUMNS,
-      filename,
-    });
+    await generatePhysicalTherapyPdf({ patients, filename });
   }, [selectedAnalysisIds, gaitAnalyses]);
+
+  const handleExportArticulationPdf = useCallback(async () => {
+    setExportingArticulation(true);
+    try {
+      let analytics = articulationAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getArticulationAnalytics(selectedDays);
+        setArticulationAnalytics(analytics);
+      }
+      await generateArticulationPdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Articulation_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Articulation PDF export failed:', error);
+    } finally {
+      setExportingArticulation(false);
+    }
+  }, [articulationAnalytics, selectedDays, user]);
+
+  const handleExportFluencyPdf = useCallback(async () => {
+    setExportingFluency(true);
+    try {
+      let analytics = fluencyAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getFluencyAnalytics(selectedDays);
+        setFluencyAnalytics(analytics);
+      }
+      await generateFluencyPdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Fluency_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Fluency PDF export failed:', error);
+    } finally {
+      setExportingFluency(false);
+    }
+  }, [fluencyAnalytics, selectedDays, user]);
+
+  const handleExportLanguagePdf = useCallback(async () => {
+    setExportingLanguage(true);
+    try {
+      let analytics = languageAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getLanguageAnalytics(selectedDays);
+        setLanguageAnalytics(analytics);
+      }
+      await generateLanguagePdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Language_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Language PDF export failed:', error);
+    } finally {
+      setExportingLanguage(false);
+    }
+  }, [languageAnalytics, selectedDays, user]);
 
   const handleExportDiagnosticPdf = useCallback(async () => {
     if (!selectedDiagPatient || !diagComparisonData) return;
@@ -1732,444 +1798,13 @@ function TherapistDashboard({ onLogout }) {
 
         <div className="admin-content">
           {activeTab === 'overview' && (
-            <div className="overview-section">
-              {loadingStats ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading statistics...</p>
-                </div>
-              ) : overviewStats ? (
-                <>
-                  {/* Primary Stats Row */}
-                  <div className="overview-stats-row">
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                        <span className="stat-icon-emoji">👥</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.total_patients || 0}</h3>
-                        <p className="stat-label">Total Patients</p>
-                        <span className="stat-badge">Registered</span>
-                      </div>
-                    </div>
-
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-                        <span className="stat-icon-emoji">📋</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.total_sessions || 0}</h3>
-                        <p className="stat-label">Total Sessions</p>
-                        <div className="stat-filter-inline">
-                          <select
-                            className="stat-filter-dropdown"
-                            value={selectedDays}
-                            onChange={(e) => setSelectedDays(e.target.value)}
-                          >
-                            <option value="30">Last 30 Days</option>
-                            <option value="90">Last 90 Days</option>
-                            <option value="180">Last 6 Months</option>
-                            <option value="365">Last Year</option>
-                            <option value="all">All Time</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
-                        <span className="stat-icon-emoji">✅</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.active_patients || 0}</h3>
-                        <p className="stat-label">Active Patients</p>
-                        <span className="stat-badge">Last 30 Days</span>
-                      </div>
-                    </div>
-
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>
-                        <span className="stat-icon-emoji">🎯</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.total_exercises || 0}</h3>
-                        <p className="stat-label">Total Exercises</p>
-                        <span className="stat-badge">Available</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Appointments Stats Row */}
-                  {overviewStats.appointments && (
-                    <div className="overview-stats-row">
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' }}>
-                          <span className="stat-icon-emoji">📅</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.today || 0}</h3>
-                          <p className="stat-label">Today's Appointments</p>
-                          <span className="stat-badge">Scheduled</span>
-                        </div>
-                      </div>
-
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
-                          <span className="stat-icon-emoji">📆</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.upcoming || 0}</h3>
-                          <p className="stat-label">Upcoming</p>
-                          <span className="stat-badge">Next 7 Days</span>
-                        </div>
-                      </div>
-
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' }}>
-                          <span className="stat-icon-emoji">✔️</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.completed || 0}</h3>
-                          <p className="stat-label">Completed</p>
-                          <span className="stat-badge">{overviewStats.appointments.completion_rate || 0}% Rate</span>
-                        </div>
-                      </div>
-
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' }}>
-                          <span className="stat-icon-emoji">📊</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.total || 0}</h3>
-                          <p className="stat-label">Total Appointments</p>
-                          <span className="stat-badge">All Time</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Unified Dashboard Grid */}
-                  <div className="overview-unified-grid">
-                    {/* 1 - Therapy Sessions Distribution */}
-                    <div className="overview-card overview-chart-card" style={{ gridArea: 'sessions' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">📊</span>
-                          Therapy Sessions Distribution
-                        </h3>
-                      </div>
-                      <div className="overview-chart-body">
-                        {/* Donut Chart */}
-                        <div className="overview-donut-wrapper">
-                          <svg className="donut-chart" viewBox="0 0 200 200">
-                            <defs>
-                              <linearGradient id="articulation-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style={{ stopColor: '#f59e0b', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: '#d97706', stopOpacity: 1 }} />
-                              </linearGradient>
-                              <linearGradient id="language-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style={{ stopColor: '#8b5cf6', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: '#7c3aed', stopOpacity: 1 }} />
-                              </linearGradient>
-                              <linearGradient id="fluency-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style={{ stopColor: '#10b981', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: '#059669', stopOpacity: 1 }} />
-                              </linearGradient>
-                              <filter id="shadow">
-                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15"/>
-                              </filter>
-                              <filter id="shadow-hover">
-                                <feDropShadow dx="0" dy="8" stdDeviation="12" floodOpacity="0.3"/>
-                              </filter>
-                            </defs>
-                            {(() => {
-                              const total = overviewStats.total_sessions || 1;
-                              const articulationCount = overviewStats.articulation_sessions || 0;
-                              const languageCount = overviewStats.language_sessions || 0;
-                              const fluencyCount = overviewStats.fluency_sessions || 0;
-                              
-                              const therapyData = [];
-                              
-                              if (articulationCount > 0) {
-                                therapyData.push({
-                                  name: 'Articulation', count: articulationCount,
-                                  percentage: (articulationCount / total) * 100,
-                                  color: 'url(#articulation-gradient)', className: 'articulation-slice'
-                                });
-                              }
-                              if (languageCount > 0) {
-                                therapyData.push({
-                                  name: 'Language', count: languageCount,
-                                  percentage: (languageCount / total) * 100,
-                                  color: 'url(#language-gradient)', className: 'language-slice'
-                                });
-                              }
-                              if (fluencyCount > 0) {
-                                therapyData.push({
-                                  name: 'Fluency', count: fluencyCount,
-                                  percentage: (fluencyCount / total) * 100,
-                                  color: 'url(#fluency-gradient)', className: 'fluency-slice'
-                                });
-                              }
-                              
-                              const createPieSlice = (startAngle, endAngle, radius = 85) => {
-                                const start = (startAngle - 90) * Math.PI / 180;
-                                const end = (endAngle - 90) * Math.PI / 180;
-                                const x1 = 100 + radius * Math.cos(start);
-                                const y1 = 100 + radius * Math.sin(start);
-                                const x2 = 100 + radius * Math.cos(end);
-                                const y2 = 100 + radius * Math.sin(end);
-                                const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-                                return `M 100 100 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-                              };
-                              
-                              let currentAngle = 0;
-                              
-                              return (
-                                <g className="pie-chart-group">
-                                  {therapyData.length === 0 ? (
-                                    <>
-                                      <circle cx="100" cy="100" r="85" fill="#f1f5f9" opacity="0.5" />
-                                      <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">No Data</text>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {therapyData.map((therapy) => {
-                                        const angle = (therapy.percentage / 100) * 360;
-                                        const sliceStartAngle = currentAngle;
-                                        const sliceEndAngle = currentAngle + angle;
-                                        currentAngle += angle;
-                                        return (
-                                          <path
-                                            key={therapy.name}
-                                            className={`pie-slice ${therapy.className}`}
-                                            d={createPieSlice(sliceStartAngle, sliceEndAngle)}
-                                            fill={therapy.color}
-                                            filter="url(#shadow)"
-                                            style={{ transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'pointer', transformOrigin: '100px 100px' }}
-                                            onMouseEnter={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow-hover)'); e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                            onMouseLeave={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow)'); e.currentTarget.style.transform = 'scale(1)'; }}
-                                          >
-                                            <title>{therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
-                                          </path>
-                                        );
-                                      })}
-                                      {therapyData.map((therapy, index) => {
-                                        let cumulativeAngle = 0;
-                                        for (let i = 0; i < index; i++) {
-                                          cumulativeAngle += (therapyData[i].percentage / 100) * 360;
-                                        }
-                                        const angle = (cumulativeAngle - 90) * Math.PI / 180;
-                                        return (
-                                          <line key={`sep-${index}`} x1="100" y1="100"
-                                            x2={index === 0 ? 100 : 100 + 85 * Math.cos(angle)}
-                                            y2={index === 0 ? 15 : 100 + 85 * Math.sin(angle)}
-                                            stroke="white" strokeWidth="2" opacity="0.8" />
-                                        );
-                                      })}
-                                      <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">{total}</text>
-                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">TOTAL</text>
-                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">SESSIONS</text>
-                                    </>
-                                  )}
-                                </g>
-                              );
-                            })()}
-                          </svg>
-                        </div>
-
-                        {/* Legend */}
-                        <div className="overview-chart-legend">
-                          {[
-                            { key: 'articulation', label: 'Articulation', icon: '🗣️', desc: 'Sound pronunciation', sessions: overviewStats.articulation_sessions || 0, gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', sliceClass: 'articulation-slice', fillClass: 'articulation-fill' },
-                            { key: 'language', label: 'Language', icon: '💬', desc: 'Receptive & expressive', sessions: overviewStats.language_sessions || 0, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', sliceClass: 'language-slice', fillClass: 'language-fill' },
-                            { key: 'fluency', label: 'Fluency', icon: '⚡', desc: 'Speech flow & rhythm', sessions: overviewStats.fluency_sessions || 0, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', sliceClass: 'fluency-slice', fillClass: 'fluency-fill' },
-                          ].filter(t => t.sessions > 0).map(t => (
-                            <div key={t.key} className="overview-legend-item"
-                              onMouseEnter={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow-hover)'); s.style.transform = 'scale(1.05)'; } }}
-                              onMouseLeave={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow)'); s.style.transform = 'scale(1)'; } }}
-                            >
-                              <div className="overview-legend-left">
-                                <div className="overview-legend-color" style={{ background: t.gradient }}>
-                                  <span>{t.icon}</span>
-                                </div>
-                                <div className="overview-legend-info">
-                                  <span className="overview-legend-label">{t.label}</span>
-                                  <span className="overview-legend-desc">{t.desc}</span>
-                                </div>
-                              </div>
-                              <div className="overview-legend-right">
-                                <span className="overview-legend-count">{t.sessions}</span>
-                                <div className="overview-legend-bar">
-                                  <div className={`overview-legend-bar-fill ${t.fillClass}`}
-                                    style={{ width: `${overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%` }}
-                                  ></div>
-                                </div>
-                                <span className="overview-legend-pct">
-                                  {overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                          {(overviewStats.articulation_sessions || 0) === 0 && (overviewStats.language_sessions || 0) === 0 && (overviewStats.fluency_sessions || 0) === 0 && (
-                            <div className="overview-legend-empty">
-                              <span>📭</span>
-                              <p>No session data available</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 2 - Average Scores */}
-                    <div className="overview-card overview-avg-scores-card" style={{ gridArea: 'scores' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">📈</span>
-                          Average Scores
-                        </h3>
-                      </div>
-                      <div className="overview-avg-scores-body">
-                        {[
-                          { key: 'articulation', label: 'Articulation', icon: '🗣️', color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', score: overviewStats.average_scores?.articulation || 0 },
-                          { key: 'language', label: 'Language', icon: '💬', color: '#8b5cf6', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', score: overviewStats.average_scores?.language || 0 },
-                          { key: 'fluency', label: 'Fluency', icon: '⚡', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', score: overviewStats.average_scores?.fluency || 0 },
-                        ].map(t => (
-                          <div key={t.key} className="avg-score-row">
-                            <div className="avg-score-label">
-                              <span className="avg-score-icon">{t.icon}</span>
-                              <span className="avg-score-name">{t.label}</span>
-                            </div>
-                            <div className="avg-score-bar-wrapper">
-                              <div className="avg-score-bar-track">
-                                <div
-                                  className="avg-score-bar-fill"
-                                  style={{ width: `${t.score}%`, background: t.gradient }}
-                                ></div>
-                              </div>
-                              <span className={`avg-score-value ${t.score >= 80 ? 'score-high' : t.score >= 50 ? 'score-mid' : 'score-low'}`}>
-                                {t.score}%
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                        {(!overviewStats.average_scores || (overviewStats.average_scores.articulation === 0 && overviewStats.average_scores.language === 0 && overviewStats.average_scores.fluency === 0)) && (
-                          <div className="avg-scores-empty">
-                            <span>📭</span>
-                            <p>No score data available</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 3 - Patient Engagement */}
-                    <div className="overview-card overview-engagement-card" style={{ gridArea: 'engage' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">💡</span>
-                          Patient Engagement
-                        </h3>
-                      </div>
-                      <div className="overview-engagement-body">
-                        {(() => {
-                          const active = overviewStats.active_patients || 0;
-                          const total = overviewStats.total_patients || 0;
-                          const rate = total > 0 ? Math.round((active / total) * 100) : 0;
-                          const circumference = 2 * Math.PI * 54;
-                          const offset = circumference - (rate / 100) * circumference;
-                          const rateColor = rate >= 70 ? '#10b981' : rate >= 40 ? '#f59e0b' : '#ef4444';
-                          return (
-                            <div className="engagement-ring-container">
-                              <div className="engagement-ring-wrapper">
-                                <svg className="engagement-ring-svg" viewBox="0 0 128 128">
-                                  <circle cx="64" cy="64" r="54" fill="none" stroke="#f1f5f9" strokeWidth="10" />
-                                  <circle cx="64" cy="64" r="54" fill="none" stroke={rateColor} strokeWidth="10"
-                                    strokeDasharray={circumference} strokeDashoffset={offset}
-                                    strokeLinecap="round" transform="rotate(-90 64 64)"
-                                    style={{ transition: 'stroke-dashoffset 1s ease-out' }}
-                                  />
-                                </svg>
-                                <div className="engagement-ring-center">
-                                  <span className="engagement-ring-pct" style={{ color: rateColor }}>{rate}%</span>
-                                </div>
-                              </div>
-                              <div className="engagement-ring-details">
-                                <div className="engagement-detail-row">
-                                  <span className="engagement-detail-dot" style={{ background: rateColor }}></span>
-                                  <span className="engagement-detail-label">Active</span>
-                                  <span className="engagement-detail-value">{active}</span>
-                                </div>
-                                <div className="engagement-detail-row">
-                                  <span className="engagement-detail-dot" style={{ background: '#e2e8f0' }}></span>
-                                  <span className="engagement-detail-label">Inactive</span>
-                                  <span className="engagement-detail-value">{total - active}</span>
-                                </div>
-                                <div className="engagement-detail-row engagement-detail-total">
-                                  <span className="engagement-detail-label">Total</span>
-                                  <span className="engagement-detail-value">{total}</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* 4 - Recent Activities (spans 2 rows on right) */}
-                    <div className="overview-card overview-activities-card" style={{ gridArea: 'activity' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">🕑</span>
-                          Recent Activities
-                        </h3>
-                      </div>
-                      <div className="overview-activities-body">
-                        {overviewStats.recent_activities && overviewStats.recent_activities.length > 0 ? (
-                          <div className="overview-activities-list">
-                            {overviewStats.recent_activities.map((activity, index) => (
-                              <div className="overview-activity-item" key={index}>
-                                <div className="overview-activity-icon">
-                                  {activity.therapy_type === 'Articulation' && '🗣️'}
-                                  {activity.therapy_type === 'Language' && '📖'}
-                                  {activity.therapy_type === 'Fluency' && '💬'}
-                                </div>
-                                <div className="overview-activity-info">
-                                  <span className="overview-activity-patient">{activity.patient_name}</span>
-                                  <span className="overview-activity-detail">
-                                    {activity.therapy_type}{activity.detail ? ` — ${activity.detail}` : ''}
-                                  </span>
-                                </div>
-                                <div className="overview-activity-meta">
-                                  <span className={`overview-activity-score ${activity.score >= 80 ? 'score-high' : activity.score >= 50 ? 'score-mid' : 'score-low'}`}>
-                                    {activity.score != null ? `${activity.score}%` : '—'}
-                                  </span>
-                                  <span className="overview-activity-time">
-                                    {activity.timestamp ? new Date(activity.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="overview-activities-empty">
-                            <span>📭</span>
-                            <p>No recent activities yet</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="no-data-message">
-                  <span className="no-data-icon">📊</span>
-                  <h3>No Statistics Available</h3>
-                  <p>Unable to load dashboard statistics. Please try again later.</p>
-                </div>
-              )}
-            </div>
+            <DashboardOverview
+              overviewStats={overviewStats}
+              reportsData={reportsData}
+              selectedDays={selectedDays}
+              setSelectedDays={setSelectedDays}
+              loadingStats={loadingStats}
+            />
           )}
 
           {activeTab === 'articulation' && (
@@ -2181,6 +1816,13 @@ function TherapistDashboard({ onLogout }) {
                     </button>
                     <button className="btn-primary" onClick={() => setShowArticulationModal(true)}>
                       ➕ New Exercise
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={handleExportArticulationPdf}
+                      disabled={exportingArticulation}
+                    >
+                      {exportingArticulation ? '⏳ Generating...' : '📄 Export PDF'}
                     </button>
                   </div>
                 </div>
@@ -2650,6 +2292,13 @@ function TherapistDashboard({ onLogout }) {
                   }}>
                     ➕ New Exercise
                   </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleExportLanguagePdf}
+                    disabled={exportingLanguage}
+                  >
+                    {exportingLanguage ? '⏳ Generating...' : '📄 Export PDF'}
+                  </button>
                 </div>
               </div>
 
@@ -3015,6 +2664,13 @@ function TherapistDashboard({ onLogout }) {
                   </button>
                   <button className="btn-primary" onClick={() => setShowExerciseModal(true)}>
                     ➕ New Exercise
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleExportFluencyPdf}
+                    disabled={exportingFluency}
+                  >
+                    {exportingFluency ? '⏳ Generating...' : '📄 Export PDF'}
                   </button>
                 </div>
               </div>

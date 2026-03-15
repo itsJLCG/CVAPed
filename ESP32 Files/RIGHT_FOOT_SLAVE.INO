@@ -27,14 +27,19 @@
 #include "soc/rtc_cntl_reg.h"
 
 // ═══════════════════════════════════════════════════════════════════════
-// ESP-NOW Channel Configuration
+// WiFi SSID (for auto-detecting the channel - does NOT connect!)
 // ═══════════════════════════════════════════════════════════════════════
-// ⚠️  IMPORTANT: This MUST match the WiFi channel the WAIST Master is on!
-//     1. Upload & run WAIST_MASTER first.
-//     2. Check its Serial Monitor for "WiFi Channel: X".
-//     3. Set ESPNOW_CHANNEL to that value, then upload this file.
+// The slave scans for this SSID at boot to discover which WiFi channel
+// the hotspot (and therefore the WAIST Master) is on. No hardcoded
+// channel needed — just make sure this matches the hotspot SSID.
 // ═══════════════════════════════════════════════════════════════════════
-#define ESPNOW_CHANNEL 11  // Change to match WAIST Master's WiFi channel
+const char* TARGET_SSID = "hey";
+
+#define CHANNEL_SCAN_RETRIES 5       // How many times to re-scan before giving up
+#define CHANNEL_SCAN_DELAY_MS 2000   // Delay between scan retries
+#define FALLBACK_CHANNEL 1           // Last-resort channel if scan fails
+
+int espnowChannel = 0;  // Will be set dynamically
 
 // ═══════════════════════════════════════════════════════════════════════
 // WAIST ESP32 MAC Address
@@ -117,19 +122,39 @@ void setup() {
   Serial.println("╚════════════════════════════════════════╝");
 
   // ─────────────────────────────────────────────────────────────────────
-  // WiFi Mode (NO CONNECTION - ESP-NOW only!)
+  // Auto-Detect WiFi Channel (scan only, NO connection)
   // ─────────────────────────────────────────────────────────────────────
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
-  // Force the radio onto the same channel the WAIST Master's WiFi uses.
-  // Without this, the slave defaults to channel 1 while the master may
-  // be on a different channel, causing packets to never arrive.
-  esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
-  
   Serial.println("\nMy MAC Address:");
   Serial.print("   ");
   Serial.println(WiFi.macAddress());
+
+  Serial.printf("\nScanning for hotspot \"%s\" to auto-detect channel...\n", TARGET_SSID);
+
+  for (int retry = 0; retry < CHANNEL_SCAN_RETRIES; retry++) {
+    int n = WiFi.scanNetworks();
+    for (int i = 0; i < n; i++) {
+      if (strcmp(WiFi.SSID(i).c_str(), TARGET_SSID) == 0) {
+        espnowChannel = WiFi.channel(i);
+        Serial.printf("   Found \"%s\" on channel %d (RSSI: %d dBm)\n",
+                      TARGET_SSID, espnowChannel, WiFi.RSSI(i));
+        break;
+      }
+    }
+    WiFi.scanDelete();
+    if (espnowChannel > 0) break;
+    Serial.printf("   Scan attempt %d/%d - not found, retrying...\n", retry + 1, CHANNEL_SCAN_RETRIES);
+    delay(CHANNEL_SCAN_DELAY_MS);
+  }
+
+  if (espnowChannel == 0) {
+    espnowChannel = FALLBACK_CHANNEL;
+    Serial.printf("   SSID not found! Using fallback channel %d\n", FALLBACK_CHANNEL);
+  }
+
+  esp_wifi_set_channel(espnowChannel, WIFI_SECOND_CHAN_NONE);
 
   uint8_t primaryCh;
   wifi_second_chan_t secondCh;
@@ -187,7 +212,7 @@ void setup() {
   esp_now_peer_info_t peerInfo;
   memset(&peerInfo, 0, sizeof(peerInfo));
   memcpy(peerInfo.peer_addr, waistMacAddress, 6);
-  peerInfo.channel = ESPNOW_CHANNEL;
+  peerInfo.channel = espnowChannel;
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {

@@ -1960,6 +1960,109 @@ def get_therapist_stats(current_user):
             'completion_rate': round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0
         }
         
+        # ---- Enhanced chart data for dashboard ----
+
+        # 1. Session trend (daily trial counts by therapy type)
+        trend_days_count = 30
+        if days_param != 'all':
+            try:
+                trend_days_count = min(int(days_param), 90)
+            except ValueError:
+                trend_days_count = 30
+        trend_start = utc_now() - datetime.timedelta(days=trend_days_count)
+
+        def get_daily_trial_counts(collection, start_date):
+            pipeline = [
+                {'$match': {'timestamp': {'$gte': start_date}}},
+                {'$group': {
+                    '_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$timestamp'}},
+                    'count': {'$sum': 1}
+                }},
+                {'$sort': {'_id': 1}}
+            ]
+            return {doc['_id']: doc['count'] for doc in collection.aggregate(pipeline)}
+
+        art_daily = get_daily_trial_counts(articulation_trials_collection, trend_start)
+        lang_daily = get_daily_trial_counts(language_trials_collection, trend_start)
+        flu_daily = get_daily_trial_counts(db['fluency_trials'], trend_start)
+
+        session_trend = []
+        for offset in range(trend_days_count):
+            d = trend_start + datetime.timedelta(days=offset)
+            date_str = d.strftime('%Y-%m-%d')
+            a_count = art_daily.get(date_str, 0)
+            l_count = lang_daily.get(date_str, 0)
+            f_count = flu_daily.get(date_str, 0)
+            session_trend.append({
+                'date': date_str,
+                'articulation': a_count,
+                'language': l_count,
+                'fluency': f_count,
+                'total': a_count + l_count + f_count
+            })
+        stats['session_trend'] = session_trend
+
+        # 2. Score distribution across all therapy trials
+        def get_score_buckets(collection):
+            pipeline = [
+                {'$match': {'accuracy': {'$exists': True, '$ne': None}}},
+                {'$bucket': {
+                    'groupBy': '$accuracy',
+                    'boundaries': [0, 0.2001, 0.4001, 0.6001, 0.8001, 1.01],
+                    'default': 'other',
+                    'output': {'count': {'$sum': 1}}
+                }}
+            ]
+            try:
+                return list(collection.aggregate(pipeline))
+            except Exception:
+                return []
+
+        bucket_labels = ['0-20', '21-40', '41-60', '61-80', '81-100']
+        bucket_boundaries = [0, 0.2001, 0.4001, 0.6001, 0.8001]
+        score_dist = {label: 0 for label in bucket_labels}
+
+        for coll in [articulation_trials_collection, language_trials_collection, db['fluency_trials']]:
+            for doc in get_score_buckets(coll):
+                bid = doc.get('_id')
+                if bid in bucket_boundaries:
+                    idx = bucket_boundaries.index(bid)
+                    score_dist[bucket_labels[idx]] += doc['count']
+
+        stats['score_distribution'] = [
+            {'range': label, 'count': score_dist[label]}
+            for label in bucket_labels
+        ]
+
+        # 3. Weekly activity pattern (trials by day of week)
+        def get_weekly_counts(collection):
+            pipeline = [
+                {'$group': {
+                    '_id': {'$dayOfWeek': '$timestamp'},
+                    'count': {'$sum': 1}
+                }}
+            ]
+            return {doc['_id']: doc['count'] for doc in collection.aggregate(pipeline)}
+
+        day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        art_weekly = get_weekly_counts(articulation_trials_collection)
+        lang_weekly = get_weekly_counts(language_trials_collection)
+        flu_weekly = get_weekly_counts(db['fluency_trials'])
+
+        weekly_pattern = []
+        for day_num in range(1, 8):
+            aw = art_weekly.get(day_num, 0)
+            lw = lang_weekly.get(day_num, 0)
+            fw = flu_weekly.get(day_num, 0)
+            weekly_pattern.append({
+                'day': day_names[day_num - 1],
+                'articulation': aw,
+                'language': lw,
+                'fluency': fw,
+                'total': aw + lw + fw
+            })
+        stats['weekly_pattern'] = weekly_pattern
+
         print(f"✅ Therapist stats retrieved successfully")
         print(f"   Total Patients: {total_patients}")
         print(f"   Active Patients: {stats['active_patients']}")
@@ -2119,6 +2222,379 @@ def get_therapist_reports(current_user):
             'success': False,
             'message': 'Failed to fetch therapist reports'
         }), 500
+
+
+# ========================================
+# THERAPIST ANALYTICS ENDPOINTS (PDF EXPORT)
+# ========================================
+
+@app.route('/api/therapist/analytics/articulation', methods=['GET'])
+@token_required
+def get_therapist_articulation_analytics(current_user):
+    """
+    Get articulation therapy analytics for the therapist PDF report.
+    Returns per-sound and per-level breakdowns across all patients.
+    Query params: ?days=30|90|180|365|all (default: 30)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
+
+        sound_labels = {'r': '/r/ Sound', 's': '/s/ Sound', 'l': '/l/ Sound', 'th': '/th/ Sound', 'k': '/k/ Sound'}
+        level_labels = {1: 'Sound Isolation', 2: 'Syllable', 3: 'Word', 4: 'Phrase', 5: 'Sentence'}
+
+        per_sound_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': '$sound_id',
+                'trial_count': {'$sum': 1},
+                'avg_score': {'$avg': {
+                    '$cond': [
+                        {'$lte': ['$scores.computed_score', 1]},
+                        {'$multiply': ['$scores.computed_score', 100]},
+                        '$scores.computed_score'
+                    ]
+                }},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'sound_id': '$_id',
+                'trial_count': 1,
+                'avg_score': {'$round': ['$avg_score', 1]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'avg_score': -1}}
+        ]
+        sound_results = list(articulation_trials_collection.aggregate(per_sound_pipeline))
+
+        per_level_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': '$level',
+                'trial_count': {'$sum': 1},
+                'avg_score': {'$avg': {
+                    '$cond': [
+                        {'$lte': ['$scores.computed_score', 1]},
+                        {'$multiply': ['$scores.computed_score', 100]},
+                        '$scores.computed_score'
+                    ]
+                }},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'level': '$_id',
+                'trial_count': 1,
+                'avg_score': {'$round': ['$avg_score', 1]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'level': 1}}
+        ]
+        level_results = list(articulation_trials_collection.aggregate(per_level_pipeline))
+
+        total_trials = articulation_trials_collection.count_documents(
+            {'timestamp': {'$gte': time_filter}} if time_filter else {}
+        )
+        total_patients = len(articulation_trials_collection.distinct(
+            'user_id', {'timestamp': {'$gte': time_filter}} if time_filter else {}
+        ))
+
+        overall_avg_result = list(articulation_trials_collection.aggregate([
+            match_stage,
+            {'$group': {'_id': None, 'avg': {'$avg': {
+                '$cond': [
+                    {'$lte': ['$scores.computed_score', 1]},
+                    {'$multiply': ['$scores.computed_score', 100]},
+                    '$scores.computed_score'
+                ]
+            }}}}
+        ]))
+        overall_avg = round(overall_avg_result[0]['avg'], 1) if overall_avg_result and overall_avg_result[0].get('avg') else 0
+
+        sounds_formatted = []
+        for s in sound_results:
+            sid = s.get('sound_id') or s.get('_id', '')
+            sounds_formatted.append({
+                'sound_id': sid,
+                'label': sound_labels.get(sid, f'/{sid}/ Sound'),
+                'trial_count': s.get('trial_count', 0),
+                'avg_score': s.get('avg_score') or 0,
+                'patient_count': s.get('patient_count', 0)
+            })
+
+        levels_formatted = []
+        for lv in level_results:
+            lvl = lv.get('level') or lv.get('_id', 0)
+            levels_formatted.append({
+                'level': lvl,
+                'label': level_labels.get(lvl, f'Level {lvl}'),
+                'trial_count': lv.get('trial_count', 0),
+                'avg_score': lv.get('avg_score') or 0,
+                'patient_count': lv.get('patient_count', 0)
+            })
+
+        top_sound = sounds_formatted[0] if sounds_formatted else None
+        bottom_sound = sounds_formatted[-1] if len(sounds_formatted) > 1 else None
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'days': days_param,
+                'total_trials': total_trials,
+                'total_patients': total_patients,
+                'overall_avg_score': overall_avg,
+                'per_sound': sounds_formatted,
+                'per_level': levels_formatted,
+                'top_sound': top_sound,
+                'bottom_sound': bottom_sound
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_articulation_analytics failed: {e}')
+        return jsonify({'success': False, 'message': 'Failed to fetch articulation analytics'}), 500
+
+
+@app.route('/api/therapist/analytics/fluency', methods=['GET'])
+@token_required
+def get_therapist_fluency_analytics(current_user):
+    """
+    Get fluency therapy analytics for the therapist PDF report.
+    Returns per-level breakdowns and overall mastery distribution across all patients.
+    Query params: ?days=30|90|180|365|all (default: 30)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        fluency_trials = db['fluency_trials']
+        fluency_progress = db['fluency_progress']
+
+        match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
+        match_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
+
+        level_labels = {1: 'Single Words', 2: 'Short Phrases', 3: 'Sentences', 4: 'Paragraphs', 5: 'Conversation'}
+
+        per_level_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': '$level',
+                'trial_count': {'$sum': 1},
+                'avg_score': {'$avg': {
+                    '$cond': [
+                        {'$lte': ['$scores.computed_score', 1]},
+                        {'$multiply': ['$scores.computed_score', 100]},
+                        '$scores.computed_score'
+                    ]
+                }},
+                'avg_fluency_rate': {'$avg': '$scores.fluency_score'},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'level': '$_id',
+                'trial_count': 1,
+                'avg_score': {'$round': ['$avg_score', 1]},
+                'avg_fluency_rate': {'$round': ['$avg_fluency_rate', 1]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'level': 1}}
+        ]
+        level_results = list(fluency_trials.aggregate(per_level_pipeline))
+
+        total_trials = fluency_trials.count_documents(match_filter)
+        total_patients = len(fluency_trials.distinct('user_id', match_filter))
+
+        overall_avg_result = list(fluency_trials.aggregate([
+            match_stage,
+            {'$group': {'_id': None, 'avg': {'$avg': {
+                '$cond': [
+                    {'$lte': ['$scores.computed_score', 1]},
+                    {'$multiply': ['$scores.computed_score', 100]},
+                    '$scores.computed_score'
+                ]
+            }}}}
+        ]))
+        overall_avg = round(overall_avg_result[0]['avg'], 1) if overall_avg_result and overall_avg_result[0].get('avg') else 0
+
+        mastery_buckets = {'mastered': 0, 'functional': 0, 'mild': 0, 'moderate': 0, 'severe': 0}
+        progress_docs = list(fluency_progress.find({}, {'overall_mastery': 1}))
+        for doc in progress_docs:
+            mastery = doc.get('overall_mastery', 0)
+            if mastery >= 86:
+                mastery_buckets['mastered'] += 1
+            elif mastery >= 71:
+                mastery_buckets['functional'] += 1
+            elif mastery >= 51:
+                mastery_buckets['mild'] += 1
+            elif mastery >= 31:
+                mastery_buckets['moderate'] += 1
+            else:
+                mastery_buckets['severe'] += 1
+
+        levels_formatted = []
+        for lv in level_results:
+            lvl = lv.get('level') or lv.get('_id', 0)
+            levels_formatted.append({
+                'level': lvl,
+                'label': level_labels.get(lvl, f'Level {lvl}'),
+                'trial_count': lv.get('trial_count', 0),
+                'avg_score': lv.get('avg_score') or 0,
+                'avg_fluency_rate': lv.get('avg_fluency_rate') or 0,
+                'patient_count': lv.get('patient_count', 0)
+            })
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'days': days_param,
+                'total_trials': total_trials,
+                'total_patients': total_patients,
+                'overall_avg_score': overall_avg,
+                'per_level': levels_formatted,
+                'mastery_distribution': mastery_buckets
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_fluency_analytics failed: {e}')
+        return jsonify({'success': False, 'message': 'Failed to fetch fluency analytics'}), 500
+
+
+@app.route('/api/therapist/analytics/language', methods=['GET'])
+@token_required
+def get_therapist_language_analytics(current_user):
+    """
+    Get language therapy analytics for the therapist PDF report.
+    Returns receptive and expressive breakdowns per level across all patients.
+    Query params: ?days=30|90|180|365|all (default: 30)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
+        match_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
+
+        level_labels = {1: 'Basic', 2: 'Elementary', 3: 'Intermediate', 4: 'Advanced', 5: 'Expert'}
+
+        per_mode_level_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': {'mode': '$mode', 'level': '$level'},
+                'trial_count': {'$sum': 1},
+                'correct_count': {'$sum': {'$cond': ['$is_correct', 1, 0]}},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'mode': '$_id.mode',
+                'level': '$_id.level',
+                'trial_count': 1,
+                'accuracy': {'$round': [
+                    {'$multiply': [
+                        {'$cond': [
+                            {'$gt': ['$trial_count', 0]},
+                            {'$divide': ['$correct_count', '$trial_count']},
+                            0
+                        ]},
+                        100
+                    ]},
+                    1
+                ]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'mode': 1, 'level': 1}}
+        ]
+        mode_level_results = list(language_trials_collection.aggregate(per_mode_level_pipeline))
+
+        total_trials = language_trials_collection.count_documents(match_filter)
+        total_patients = len(language_trials_collection.distinct('user_id', match_filter))
+
+        receptive_filter = {**match_filter, 'mode': 'receptive'}
+        expressive_filter = {**match_filter, 'mode': 'expressive'}
+        receptive_trials = language_trials_collection.count_documents(receptive_filter)
+        expressive_trials = language_trials_collection.count_documents(expressive_filter)
+
+        rec_avg_result = list(language_trials_collection.aggregate([
+            {'$match': receptive_filter},
+            {'$group': {'_id': None, 'avg': {'$avg': {'$cond': ['$is_correct', 100, 0]}}}}
+        ]))
+        exp_avg_result = list(language_trials_collection.aggregate([
+            {'$match': expressive_filter},
+            {'$group': {'_id': None, 'avg': {'$avg': {'$cond': ['$is_correct', 100, 0]}}}}
+        ]))
+        receptive_avg = round(rec_avg_result[0]['avg'], 1) if rec_avg_result and rec_avg_result[0].get('avg') is not None else 0
+        expressive_avg = round(exp_avg_result[0]['avg'], 1) if exp_avg_result and exp_avg_result[0].get('avg') is not None else 0
+
+        receptive_levels = []
+        expressive_levels = []
+        for row in mode_level_results:
+            mode = row.get('mode') or row.get('_id', {}).get('mode', '')
+            lvl = row.get('level') or row.get('_id', {}).get('level', 0)
+            entry = {
+                'level': lvl,
+                'label': level_labels.get(lvl, f'Level {lvl}'),
+                'trial_count': row.get('trial_count', 0),
+                'accuracy': row.get('accuracy') or 0,
+                'patient_count': row.get('patient_count', 0)
+            }
+            if mode == 'receptive':
+                receptive_levels.append(entry)
+            elif mode == 'expressive':
+                expressive_levels.append(entry)
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'days': days_param,
+                'total_trials': total_trials,
+                'total_patients': total_patients,
+                'receptive': {
+                    'trial_count': receptive_trials,
+                    'avg_accuracy': receptive_avg,
+                    'per_level': receptive_levels
+                },
+                'expressive': {
+                    'trial_count': expressive_trials,
+                    'avg_accuracy': expressive_avg,
+                    'per_level': expressive_levels
+                }
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_language_analytics failed: {e}')
+        return jsonify({'success': False, 'message': 'Failed to fetch language analytics'}), 500
 
 
 # ========================================
@@ -5229,6 +5705,14 @@ def get_physical_therapy_patients(current_user):
                 # Extract detected problems
                 detected_problems = analysis.get('detected_problems', [])
                 problem_names = [p.get('problem', 'Unknown') for p in detected_problems]
+                problem_details = [
+                    {
+                        'problem': p.get('problem', 'Unknown'),
+                        'severity': p.get('severity', 'mild'),
+                        'clinical_note': p.get('clinical_note', ''),
+                    }
+                    for p in detected_problems
+                ]
                 
                 # Extract metrics
                 metrics = analysis.get('metrics', {})
@@ -5256,6 +5740,7 @@ def get_physical_therapy_patients(current_user):
                     'created_at': analysis.get('created_at', datetime.datetime.utcnow()).isoformat() if analysis.get('created_at') else datetime.datetime.utcnow().isoformat(),
                     'problems_count': len(detected_problems),
                     'problems': problem_names,
+                    'problem_details': problem_details,
                     'gait_metrics': {
                         'step_count': metrics.get('step_count', 0),
                         'cadence': metrics.get('cadence', 0),
@@ -5265,6 +5750,7 @@ def get_physical_therapy_patients(current_user):
                         'stability_score': metrics.get('stability_score', 0) * 100,  # Convert to percentage
                         'step_regularity': metrics.get('step_regularity', 0) * 100  # Convert to percentage
                     },
+                    'gait_score': analysis.get('gait_score'),
                     'overall_score': overall_score,
                     'severity': problem_summary.get('risk_level', 'unknown').lower() if problem_summary else 'unknown',
                     'data_quality': analysis.get('data_quality', 'fair'),

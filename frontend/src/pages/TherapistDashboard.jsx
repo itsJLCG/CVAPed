@@ -1252,7 +1252,7 @@ function TherapistDashboard({ onLogout }) {
       const response = await detectionProblemsService.seed();
       if (response.success) { loadDetectionProblems(); alert(`Seeded ${response.count} problems!`); }
     } catch (e) {
-      alert(e.response?.data?.error || 'Seed failed');
+      alert(e.response?.data?.message || e.response?.data?.error || 'Seed failed');
     }
   };
 
@@ -1355,7 +1355,7 @@ function TherapistDashboard({ onLogout }) {
       const response = await exerciseRecommendationsService.seed();
       if (response.success) { loadExerciseRecs(); alert(`Seeded ${response.count} exercises!`); }
     } catch (e) {
-      alert(e.response?.data?.error || 'Seed failed');
+      alert(e.response?.data?.message || e.response?.data?.error || 'Seed failed');
     }
   };
 
@@ -2895,7 +2895,7 @@ function TherapistDashboard({ onLogout }) {
           )}
 
           {activeTab === 'detection-problems' && (
-            <div className="success-stories-section">
+            <div className="success-stories-section physical-therapy-section">
               <div className="section-header">
                 <div className="header-left">
                   <h2>Detection Problems</h2>
@@ -3107,7 +3107,7 @@ function TherapistDashboard({ onLogout }) {
           )}
 
           {activeTab === 'exercise-recommendations' && (
-            <div className="success-stories-section">
+            <div className="success-stories-section physical-therapy-section">
               <div className="section-header">
                 <div className="header-left">
                   <h2>Exercise Recommendations</h2>

@@ -911,21 +911,57 @@ export const diagnosticComparisonService = {
 };
 
 export const detectionProblemsService = {
-  getAll: () => api.get('/physical/detection-problems'),
-  create: (data) => api.post('/physical/detection-problems', data),
-  update: (id, data) => api.put(`/physical/detection-problems/${id}`, data),
-  delete: (id) => api.delete(`/physical/detection-problems/${id}`),
-  toggle: (id) => api.patch(`/physical/detection-problems/${id}/toggle`),
-  seed: () => api.post('/physical/detection-problems/seed'),
+  getAll: async () => {
+    const response = await api.get('/physical/detection-problems');
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('/physical/detection-problems', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.put(`/physical/detection-problems/${id}`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`/physical/detection-problems/${id}`);
+    return response.data;
+  },
+  toggle: async (id) => {
+    const response = await api.patch(`/physical/detection-problems/${id}/toggle`);
+    return response.data;
+  },
+  seed: async () => {
+    const response = await api.post('/physical/detection-problems/seed');
+    return response.data;
+  },
 };
 
 export const exerciseRecommendationsService = {
-  getAll: () => api.get('/physical/exercise-recommendations'),
-  create: (data) => api.post('/physical/exercise-recommendations', data),
-  update: (id, data) => api.put(`/physical/exercise-recommendations/${id}`, data),
-  delete: (id) => api.delete(`/physical/exercise-recommendations/${id}`),
-  toggle: (id) => api.patch(`/physical/exercise-recommendations/${id}/toggle`),
-  seed: () => api.post('/physical/exercise-recommendations/seed'),
+  getAll: async () => {
+    const response = await api.get('/physical/exercise-recommendations');
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('/physical/exercise-recommendations', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.put(`/physical/exercise-recommendations/${id}`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`/physical/exercise-recommendations/${id}`);
+    return response.data;
+  },
+  toggle: async (id) => {
+    const response = await api.patch(`/physical/exercise-recommendations/${id}/toggle`);
+    return response.data;
+  },
+  seed: async () => {
+    const response = await api.post('/physical/exercise-recommendations/seed');
+    return response.data;
+  },
 };
 
 export default api;

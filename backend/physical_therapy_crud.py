@@ -142,7 +142,7 @@ def update_detection_problem(current_user, problem_id):
         update_data['updated_at'] = datetime.datetime.utcnow()
 
         result = detection_problems_collection.update_one(
-            {'_id': ObjectId(problem_id)},
+            {'problem_id': problem_id},
             {'$set': update_data}
         )
         if result.matched_count == 0:
@@ -159,7 +159,7 @@ def update_detection_problem(current_user, problem_id):
 def delete_detection_problem(current_user, problem_id):
     """Delete a detection problem (therapist only)."""
     try:
-        result = detection_problems_collection.delete_one({'_id': ObjectId(problem_id)})
+        result = detection_problems_collection.delete_one({'problem_id': problem_id})
         if result.deleted_count == 0:
             return jsonify({'error': 'Detection problem not found'}), 404
         return jsonify({'success': True, 'message': 'Detection problem deleted successfully'}), 200
@@ -174,12 +174,12 @@ def delete_detection_problem(current_user, problem_id):
 def toggle_detection_problem(current_user, problem_id):
     """Toggle active status of a detection problem (therapist only)."""
     try:
-        problem = detection_problems_collection.find_one({'_id': ObjectId(problem_id)})
+        problem = detection_problems_collection.find_one({'problem_id': problem_id})
         if not problem:
             return jsonify({'error': 'Detection problem not found'}), 404
         new_status = not problem.get('is_active', True)
         detection_problems_collection.update_one(
-            {'_id': ObjectId(problem_id)},
+            {'problem_id': problem_id},
             {'$set': {'is_active': new_status, 'updated_at': datetime.datetime.utcnow()}}
         )
         return jsonify({'success': True, 'message': f'Problem {"activated" if new_status else "deactivated"} successfully', 'is_active': new_status}), 200
@@ -354,7 +354,7 @@ def update_exercise_recommendation(current_user, exercise_id):
         update_data['updated_at'] = datetime.datetime.utcnow()
 
         result = exercise_recommendations_collection.update_one(
-            {'_id': ObjectId(exercise_id)},
+            {'exercise_id': exercise_id},
             {'$set': update_data}
         )
         if result.matched_count == 0:
@@ -371,7 +371,7 @@ def update_exercise_recommendation(current_user, exercise_id):
 def delete_exercise_recommendation(current_user, exercise_id):
     """Delete an exercise recommendation (therapist only)."""
     try:
-        result = exercise_recommendations_collection.delete_one({'_id': ObjectId(exercise_id)})
+        result = exercise_recommendations_collection.delete_one({'exercise_id': exercise_id})
         if result.deleted_count == 0:
             return jsonify({'error': 'Exercise recommendation not found'}), 404
         return jsonify({'success': True, 'message': 'Exercise recommendation deleted successfully'}), 200
@@ -386,12 +386,12 @@ def delete_exercise_recommendation(current_user, exercise_id):
 def toggle_exercise_recommendation(current_user, exercise_id):
     """Toggle active status of an exercise recommendation (therapist only)."""
     try:
-        exercise = exercise_recommendations_collection.find_one({'_id': ObjectId(exercise_id)})
+        exercise = exercise_recommendations_collection.find_one({'exercise_id': exercise_id})
         if not exercise:
             return jsonify({'error': 'Exercise recommendation not found'}), 404
         new_status = not exercise.get('is_active', True)
         exercise_recommendations_collection.update_one(
-            {'_id': ObjectId(exercise_id)},
+            {'exercise_id': exercise_id},
             {'$set': {'is_active': new_status, 'updated_at': datetime.datetime.utcnow()}}
         )
         return jsonify({'success': True, 'message': f'Exercise {"activated" if new_status else "deactivated"} successfully', 'is_active': new_status}), 200

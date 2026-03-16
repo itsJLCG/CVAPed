@@ -3297,6 +3297,173 @@
   margin: 0;
 }
 
+.recommended-exercises-section .recommended-table td {
+  vertical-align: middle;
+}
+
+.recommended-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.recommended-table th,
+.recommended-table td {
+  padding: 10px 8px;
+}
+
+.recommended-table th:nth-child(1),
+.recommended-table td:nth-child(1) {
+  width: 28%;
+}
+
+.recommended-table th:nth-child(2),
+.recommended-table td:nth-child(2) {
+  width: 22%;
+}
+
+.recommended-table th:nth-child(3),
+.recommended-table td:nth-child(3) {
+  width: 50%;
+}
+
+.recommended-table.status-visible th:nth-child(1),
+.recommended-table.status-visible td:nth-child(1) {
+  width: 24%;
+}
+
+.recommended-table.status-visible th:nth-child(2),
+.recommended-table.status-visible td:nth-child(2) {
+  width: 18%;
+}
+
+.recommended-table.status-visible th:nth-child(3),
+.recommended-table.status-visible td:nth-child(3) {
+  width: 34%;
+}
+
+.recommended-table.status-visible th:nth-child(4),
+.recommended-table.status-visible td:nth-child(4) {
+  width: 24%;
+}
+
+.recommended-status-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.recommended-status-toggle-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.recommended-patient-name {
+  display: inline-block;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.recommended-main-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recommended-main-title {
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recommended-main-meta {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.recommended-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 22px;
+}
+
+.recommended-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.recommended-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #d1d5db;
+  border-radius: 999px;
+  transition: 0.2s ease;
+}
+
+.recommended-toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  top: 3px;
+  background-color: #fff;
+  border-radius: 50%;
+  transition: 0.2s ease;
+}
+
+.recommended-toggle-switch input:checked + .recommended-toggle-slider {
+  background-color: #059669;
+}
+
+.recommended-toggle-switch input:checked + .recommended-toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.recommended-toggle-switch input:disabled + .recommended-toggle-slider {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.recommended-select {
+  width: 100%;
+  min-width: 90px;
+  padding: 7px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.recommended-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(206, 54, 48, 0.12);
+}
+
+.recommended-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 /* Speech Therapy Sections */
 
 /* Articulation Section */

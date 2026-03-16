@@ -282,6 +282,24 @@ export const therapistService = {
     return response.data;
   },
 
+  getRecommendedExercises: async () => {
+    const response = await api.get('/therapist/physical/recommended-exercises');
+    return response.data;
+  },
+
+  updateRecommendedExercise: async (planId, updateData) => {
+    const response = await api.patch(`/therapist/physical/recommended-exercises/${planId}`, updateData);
+    return response.data;
+  },
+
+  updateRecommendedExercisesVisibility: async (visibility, planIds = []) => {
+    const response = await api.patch('/therapist/physical/recommended-exercises/visibility', {
+      visibility,
+      plan_ids: planIds,
+    });
+    return response.data;
+  },
+
   getReports: async () => {
     const response = await api.get('/therapist/reports');
     return response.data;

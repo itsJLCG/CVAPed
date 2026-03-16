@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
+import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
 import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf } from '../components/PdfReportTemplate';
@@ -11,6 +12,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL
 
 function TherapistDashboard({ onLogout }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
@@ -113,6 +115,14 @@ function TherapistDashboard({ onLogout }) {
   const [currentGaitPage, setCurrentGaitPage] = useState(1);
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
   const [selectedAnalysisIds, setSelectedAnalysisIds] = useState(new Set());
+  const [recommendedExercises, setRecommendedExercises] = useState([]);
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
+  const [recommendedSearchTerm, setRecommendedSearchTerm] = useState('');
+  const [currentRecommendedPage, setCurrentRecommendedPage] = useState(1);
+  const [recommendedEntriesPerPage, setRecommendedEntriesPerPage] = useState(10);
+  const [updatingRecommendedIds, setUpdatingRecommendedIds] = useState(new Set());
+  const [showRecommendedStatusControls, setShowRecommendedStatusControls] = useState(false);
+  const [bulkUpdatingRecommendedVisibility, setBulkUpdatingRecommendedVisibility] = useState(false);
 
   // Success Stories state
   const [successStories, setSuccessStories] = useState([]);
@@ -777,6 +787,7 @@ function TherapistDashboard({ onLogout }) {
       loadFluencyExercises(); // Always load exercises for fluency
     }
     if (activeTab === 'physical') loadPhysical();
+    if (activeTab === 'recommended-exercises') loadRecommendedExercises();
     if (activeTab === 'success-stories') loadSuccessStories();
     if (activeTab === 'reports') loadReports();
     if (activeTab === 'appointments') {
@@ -864,6 +875,86 @@ function TherapistDashboard({ onLogout }) {
       setGaitAnalyses([]);
     } finally {
       if (!cancelled) setLoadingPhysical(false);
+    }
+  };
+
+  const loadRecommendedExercises = async () => {
+    let cancelled = false;
+    setLoadingRecommended(true);
+    try {
+      const response = await therapistService.getRecommendedExercises();
+      if (!cancelled && response.success) {
+        const rows = response.data || [];
+        setRecommendedExercises(rows);
+        setShowRecommendedStatusControls(rows.length > 0 && rows.every(row => (row.visibility || 'active') === 'active'));
+      }
+    } catch (e) {
+      console.error('Failed to load recommended exercises', e);
+      if (!cancelled) setRecommendedExercises([]);
+    } finally {
+      if (!cancelled) setLoadingRecommended(false);
+    }
+  };
+
+  const handleUpdateRecommendedField = async (planId, field, value) => {
+    const previousRows = recommendedExercises;
+    setUpdatingRecommendedIds(prev => new Set([...prev, planId]));
+    setRecommendedExercises(prev =>
+      prev.map(row => (row.id === planId ? { ...row, [field]: value } : row))
+    );
+
+    try {
+      const response = await therapistService.updateRecommendedExercise(planId, { [field]: value });
+      if (!response.success) {
+        setRecommendedExercises(previousRows);
+        toast.error('Update failed. Please try again.');
+      } else {
+        toast.success(`${field === 'status' ? 'Status' : 'Visibility'} updated successfully.`);
+      }
+    } catch (error) {
+      console.error(`Failed to update ${field}:`, error);
+      setRecommendedExercises(previousRows);
+      toast.error('Update failed. Please check your connection.');
+    } finally {
+      setUpdatingRecommendedIds(prev => {
+        const next = new Set(prev);
+        next.delete(planId);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleRecommendedStatusControls = async (checked) => {
+    const previousRows = recommendedExercises;
+    const previousToggle = showRecommendedStatusControls;
+    const nextVisibility = checked ? 'active' : 'hidden';
+    const planIds = recommendedExercises.map(plan => plan.id);
+
+    setShowRecommendedStatusControls(checked);
+    setBulkUpdatingRecommendedVisibility(true);
+    setRecommendedExercises(prev => prev.map(plan => ({ ...plan, visibility: nextVisibility })));
+
+    if (!planIds.length) {
+      setBulkUpdatingRecommendedVisibility(false);
+      return;
+    }
+
+    try {
+      const response = await therapistService.updateRecommendedExercisesVisibility(nextVisibility, planIds);
+      if (!response.success) {
+        setRecommendedExercises(previousRows);
+        setShowRecommendedStatusControls(previousToggle);
+        toast.error('Failed to update status display setting.');
+      } else {
+        toast.success(`Status display ${checked ? 'enabled' : 'hidden'} for recommended exercises.`);
+      }
+    } catch (error) {
+      console.error('Failed to bulk update recommended exercise visibility:', error);
+      setRecommendedExercises(previousRows);
+      setShowRecommendedStatusControls(previousToggle);
+      toast.error('Failed to update status display setting.');
+    } finally {
+      setBulkUpdatingRecommendedVisibility(false);
     }
   };
 
@@ -2214,6 +2305,212 @@ function TherapistDashboard({ onLogout }) {
                               className="pagination-btn" 
                               onClick={() => setCurrentGaitPage(totalPages)}
                               disabled={currentGaitPage === totalPages}
+                            >
+                              »
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'recommended-exercises' && (
+            <div className="physical-section recommended-exercises-section">
+              {loadingRecommended ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading recommended exercises...</p>
+                </div>
+              ) : recommendedExercises.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🧩</span>
+                    <h3>No Recommended Exercises Yet</h3>
+                    <p>Recommended exercises will appear after gait analyses create exercise plans.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group">
+                      <div className="search-container">
+                        <input
+                          type="text"
+                          placeholder="Search by patient name or email..."
+                          value={recommendedSearchTerm}
+                          onChange={(e) => {
+                            setRecommendedSearchTerm(e.target.value);
+                            setCurrentRecommendedPage(1);
+                          }}
+                          className="search-input"
+                        />
+                      </div>
+                      <div className="pagination-controls">
+                        <label className="entries-label">
+                          Show:
+                          <select
+                            value={recommendedEntriesPerPage}
+                            onChange={(e) => {
+                              setRecommendedEntriesPerPage(Number(e.target.value));
+                              setCurrentRecommendedPage(1);
+                            }}
+                            className="entries-select"
+                          >
+                            <option value={5}>5</option>
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                          entries
+                        </label>
+                      </div>
+                      <div className="stats-summary">
+                        <span className="stat-item">
+                          <strong>{recommendedExercises.length}</strong> Total Plans
+                        </span>
+                      </div>
+                      <div className="recommended-status-toggle-bar" title="Status controls visibility">
+                        <span className="recommended-status-toggle-label">Status Mode</span>
+                        <label className="recommended-toggle-switch">
+                          <input
+                            type="checkbox"
+                            checked={showRecommendedStatusControls}
+                            disabled={bulkUpdatingRecommendedVisibility}
+                            onChange={(e) => handleToggleRecommendedStatusControls(e.target.checked)}
+                          />
+                          <span className="recommended-toggle-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="datatable-container">
+                    <table className={`logs-table gait-table recommended-table ${showRecommendedStatusControls ? 'status-visible' : ''}`}>
+                      <thead>
+                        <tr>
+                          <th>Patient</th>
+                          <th>Session</th>
+                          <th>Recommended</th>
+                          {showRecommendedStatusControls && <th>Status</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const filteredPlans = recommendedExercises.filter(plan =>
+                            !recommendedSearchTerm ||
+                            plan.user_name.toLowerCase().includes(recommendedSearchTerm.toLowerCase()) ||
+                            plan.user_email.toLowerCase().includes(recommendedSearchTerm.toLowerCase())
+                          );
+
+                          const indexOfLastEntry = currentRecommendedPage * recommendedEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - recommendedEntriesPerPage;
+                          const currentEntries = filteredPlans.slice(indexOfFirstEntry, indexOfLastEntry);
+
+                          return currentEntries.map((plan) => {
+                            const isUpdating = updatingRecommendedIds.has(plan.id);
+                            const exercises = Array.isArray(plan.exercises) ? plan.exercises : [];
+                            const primaryExercise = exercises[0]?.exercise_name || 'No exercise';
+                            return (
+                              <tr key={plan.id}>
+                                <td>
+                                  <span className="recommended-patient-name">{plan.user_name}</span>
+                                </td>
+                                <td><span className="date-cell">{formatDate(plan.session_created_at)}</span></td>
+                                <td>
+                                  <div className="recommended-main-cell">
+                                    <span className="recommended-main-title">{primaryExercise}</span>
+                                    <span className="recommended-main-meta">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</span>
+                                  </div>
+                                </td>
+                                {showRecommendedStatusControls && (
+                                <td>
+                                  <select
+                                    className="recommended-select"
+                                    value={plan.status || 'ongoing'}
+                                    disabled={isUpdating}
+                                    onChange={(e) => handleUpdateRecommendedField(plan.id, 'status', e.target.value)}
+                                  >
+                                    <option value="ongoing">Ongoing</option>
+                                    <option value="done">Done</option>
+                                  </select>
+                                </td>
+                                )}
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+
+                    {(() => {
+                      const filteredPlans = recommendedExercises.filter(plan =>
+                        !recommendedSearchTerm ||
+                        plan.user_name.toLowerCase().includes(recommendedSearchTerm.toLowerCase()) ||
+                        plan.user_email.toLowerCase().includes(recommendedSearchTerm.toLowerCase())
+                      );
+                      const totalPages = Math.ceil(filteredPlans.length / recommendedEntriesPerPage);
+                      if (totalPages <= 1) return null;
+
+                      const indexOfLastEntry = currentRecommendedPage * recommendedEntriesPerPage;
+                      const indexOfFirstEntry = indexOfLastEntry - recommendedEntriesPerPage + 1;
+                      const actualLastEntry = Math.min(indexOfLastEntry, filteredPlans.length);
+
+                      return (
+                        <div className="pagination-footer">
+                          <div className="pagination-info">
+                            Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredPlans.length} entries
+                          </div>
+                          <div className="pagination-buttons">
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(1)}
+                              disabled={currentRecommendedPage === 1}
+                            >
+                              «
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentRecommendedPage === 1}
+                            >
+                              ‹
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentRecommendedPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentRecommendedPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentRecommendedPage - 2 + i;
+                              }
+                              return (
+                                <button
+                                  key={pageNum}
+                                  className={`pagination-btn ${currentRecommendedPage === pageNum ? 'active' : ''}`}
+                                  onClick={() => setCurrentRecommendedPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentRecommendedPage === totalPages}
+                            >
+                              ›
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(totalPages)}
+                              disabled={currentRecommendedPage === totalPages}
                             >
                               »
                             </button>

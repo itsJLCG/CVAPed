@@ -39,6 +39,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
     { id: 'overview', icon: '📊', label: 'Overview' },
     { id: 'speech', icon: '🎤', label: 'Speech Therapy', hasDropdown: true },
     { id: 'physical', icon: '🏃', label: 'Physical Therapy' },
+    { id: 'recommended-exercises', icon: '🧩', label: 'Recommended Exercise' },
     { id: 'appointments', icon: '📅', label: 'Appointments' },
     { id: 'success-stories', icon: '⭐', label: 'Success Stories' },
     { id: 'reports', icon: '📈', label: 'Reports' },

@@ -1204,6 +1204,8 @@ def get_health_logs(current_user):
                     'planId': str(associated_plan['_id']),
                     'totalExercises': associated_plan.get('total_exercises', 0),
                     'exercises': associated_plan.get('exercises', []),
+                    'status': associated_plan.get('status', 'ongoing'),
+                    'visibility': associated_plan.get('visibility', 'active'),
                     'createdAt': associated_plan.get('created_at', datetime.datetime.utcnow()).isoformat() if isinstance(associated_plan.get('created_at'), datetime.datetime) else str(associated_plan.get('created_at', ''))
                 }
             
@@ -5253,6 +5255,8 @@ def hardware_gait_analyze(current_user):
                         'detected_problems': result['data']['detected_problems'],
                         'exercises': exercises,
                         'total_exercises': len(exercises),
+                        'status': 'ongoing',
+                        'visibility': 'active',
                         'created_at': utc_now(),
                         'updated_at': utc_now()
                     }
@@ -5374,6 +5378,8 @@ def save_gait_exercise_plan(current_user):
             'detected_problems': detected_problems,
             'exercises': exercises,
             'total_exercises': len(exercises),
+            'status': 'ongoing',
+            'visibility': 'active',
             'created_at': utc_now(),
             'updated_at': utc_now()
         }
@@ -5587,6 +5593,8 @@ def save_demo_gait_data(current_user):
                         'detected_problems': detected_problems,
                         'exercises': exercises,
                         'total_exercises': len(exercises),
+                        'status': 'ongoing',
+                        'visibility': 'active',
                         'created_at': utc_now(),
                         'updated_at': utc_now()
                     }
@@ -5807,6 +5815,197 @@ def get_physical_therapy_patients(current_user):
         return jsonify({
             'success': False,
             'message': 'Failed to fetch gait analyses'
+        }), 500
+
+
+@app.route('/api/therapist/physical/recommended-exercises', methods=['GET'])
+@token_required
+@therapist_required
+def get_therapist_recommended_exercises(current_user):
+    """Get recommended physical therapy exercises from exercise plans (therapist only)."""
+    try:
+        exercise_plans_collection = db['exerciseplans']
+        gait_progress_collection = db['gaitprogresses']
+
+        plans = list(exercise_plans_collection.find({}).sort('created_at', -1))
+        recommended_rows = []
+
+        for plan in plans:
+            user_id = plan.get('user_id')
+            if not user_id or not isinstance(user_id, str) or len(user_id) != 24:
+                continue
+
+            try:
+                user = users_collection.find_one({'_id': ObjectId(user_id)})
+            except Exception:
+                user = None
+
+            if not user:
+                continue
+
+            raw_gait_analysis_id = plan.get('gait_analysis_id')
+            gait_analysis_id = str(raw_gait_analysis_id) if raw_gait_analysis_id is not None else None
+            gait_record = None
+            if gait_analysis_id:
+                try:
+                    gait_record = gait_progress_collection.find_one({'_id': ObjectId(gait_analysis_id)})
+                except Exception:
+                    gait_record = None
+
+            session_created_at = gait_record.get('created_at') if gait_record else plan.get('created_at')
+            session_created_at_iso = (
+                session_created_at.isoformat()
+                if isinstance(session_created_at, datetime.datetime)
+                else str(session_created_at or '')
+            )
+
+            exercises = plan.get('exercises', []) if isinstance(plan.get('exercises', []), list) else []
+            normalized_exercises = []
+            for ex in exercises:
+                if not isinstance(ex, dict):
+                    continue
+                normalized_exercises.append({
+                    'exercise_id': ex.get('exercise_id'),
+                    'exercise_name': ex.get('exercise_name') or ex.get('name') or 'Unnamed Exercise',
+                    'problem_targeted': ex.get('problem_targeted'),
+                    'severity': ex.get('severity'),
+                    'duration': ex.get('duration'),
+                    'difficulty': ex.get('difficulty')
+                })
+
+            recommended_rows.append({
+                'id': str(plan.get('_id')),
+                'user_id': str(user.get('_id')),
+                'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                'user_email': user.get('email', 'N/A'),
+                'gait_analysis_id': gait_analysis_id,
+                'session_created_at': session_created_at_iso,
+                'exercises': normalized_exercises,
+                'total_exercises': plan.get('total_exercises', len(normalized_exercises)),
+                'status': plan.get('status', 'ongoing'),
+                'visibility': plan.get('visibility', 'active'),
+                'updated_at': (
+                    plan.get('updated_at').isoformat()
+                    if isinstance(plan.get('updated_at'), datetime.datetime)
+                    else str(plan.get('updated_at', ''))
+                )
+            })
+
+        return jsonify({
+            'success': True,
+            'data': recommended_rows,
+            'total': len(recommended_rows)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching recommended exercises: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch recommended exercises'
+        }), 500
+
+
+@app.route('/api/therapist/physical/recommended-exercises/<plan_id>', methods=['PATCH'])
+@token_required
+@therapist_required
+def update_therapist_recommended_exercise(current_user, plan_id):
+    """Update recommended exercise entry fields like status and visibility."""
+    try:
+        data = request.get_json() or {}
+        exercise_plans_collection = db['exerciseplans']
+
+        update_doc = {'updated_at': utc_now()}
+
+        if 'status' in data:
+            status = str(data.get('status', '')).strip().lower()
+            if status not in ['ongoing', 'done']:
+                return jsonify({'success': False, 'message': 'Invalid status. Use ongoing or done.'}), 400
+            update_doc['status'] = status
+
+        if 'visibility' in data:
+            visibility = str(data.get('visibility', '')).strip().lower()
+            if visibility not in ['active', 'hidden']:
+                return jsonify({'success': False, 'message': 'Invalid visibility. Use active or hidden.'}), 400
+            update_doc['visibility'] = visibility
+
+        if len(update_doc.keys()) == 1:
+            return jsonify({'success': False, 'message': 'No updatable fields provided'}), 400
+
+        result = exercise_plans_collection.update_one(
+            {'_id': ObjectId(plan_id)},
+            {'$set': update_doc}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Recommended exercise entry not found'}), 404
+
+        updated = exercise_plans_collection.find_one({'_id': ObjectId(plan_id)})
+        return jsonify({
+            'success': True,
+            'message': 'Recommended exercise updated successfully',
+            'data': {
+                'id': str(updated.get('_id')),
+                'status': updated.get('status', 'ongoing'),
+                'visibility': updated.get('visibility', 'active'),
+                'updated_at': (
+                    updated.get('updated_at').isoformat()
+                    if isinstance(updated.get('updated_at'), datetime.datetime)
+                    else str(updated.get('updated_at', ''))
+                )
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating recommended exercise entry: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update recommended exercise entry'
+        }), 500
+
+
+@app.route('/api/therapist/physical/recommended-exercises/visibility', methods=['PATCH'])
+@token_required
+@therapist_required
+def bulk_update_recommended_exercise_visibility(current_user):
+    """Bulk update visibility for recommended exercise entries."""
+    try:
+        data = request.get_json() or {}
+        visibility = str(data.get('visibility', '')).strip().lower()
+        if visibility not in ['active', 'hidden']:
+            return jsonify({'success': False, 'message': 'Invalid visibility. Use active or hidden.'}), 400
+
+        plan_ids = data.get('plan_ids') or []
+        exercise_plans_collection = db['exerciseplans']
+
+        query = {}
+        if plan_ids:
+            object_ids = []
+            for plan_id in plan_ids:
+                try:
+                    object_ids.append(ObjectId(plan_id))
+                except Exception:
+                    continue
+            if not object_ids:
+                return jsonify({'success': False, 'message': 'No valid plan IDs provided'}), 400
+            query = {'_id': {'$in': object_ids}}
+
+        result = exercise_plans_collection.update_many(
+            query,
+            {'$set': {'visibility': visibility, 'updated_at': utc_now()}}
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Recommended exercise visibility updated successfully',
+            'updated_count': result.modified_count,
+            'visibility': visibility
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error bulk updating recommended exercise visibility: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to bulk update recommended exercise visibility'
         }), 500
 
 # Serve uploaded files

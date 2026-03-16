@@ -154,6 +154,26 @@ function HealthLogs({ onLogout, onFacilityExit }) {
   };
 
   const getFilteredLogs = () => {
+    if (selectedFilter === 'gait-exercises') {
+      const gaitExerciseLogs = healthLogs
+        .filter(log => log.therapyType === 'gait' && log.exercisePlan?.exercises?.length)
+        .flatMap(log => {
+          const planStatus = log.exercisePlan?.status || 'ongoing';
+          const planVisibility = log.exercisePlan?.visibility || 'active';
+          return (log.exercisePlan?.exercises || []).map((exercise, index) => ({
+            _id: `${log._id}_exercise_${index}`,
+            therapyType: 'gait-exercises',
+            exerciseName: exercise.exercise_name || `Exercise ${index + 1}`,
+            exerciseTarget: exercise.problem_targeted,
+            status: planVisibility === 'active' ? planStatus : null,
+            visibility: planVisibility,
+            createdAt: log.createdAt,
+            sessionDate: log.createdAt
+          }));
+        });
+      return showFullHistory ? gaitExerciseLogs : gaitExerciseLogs.slice(0, 20);
+    }
+
     if (selectedFilter === 'all') {
       return showFullHistory ? healthLogs : healthLogs.slice(0, 20);
     }
@@ -186,7 +206,8 @@ function HealthLogs({ onLogout, onFacilityExit }) {
       receptive: '#2196F3',
       expressive: '#2196F3',
       fluency: '#FF9800',
-      gait: '#4CAF50'
+      gait: '#4CAF50',
+      'gait-exercises': '#0ea5a4'
     };
     return colors[type] || '#666';
   };
@@ -198,7 +219,8 @@ function HealthLogs({ onLogout, onFacilityExit }) {
       receptive: '👂',
       expressive: '🗣️',
       fluency: '💬',
-      gait: '🚶'
+      gait: '🚶',
+      'gait-exercises': '🏋️'
     };
     return icons[type] || '📊';
   };
@@ -550,14 +572,14 @@ function HealthLogs({ onLogout, onFacilityExit }) {
             <div className="section-header">
               <h2 className="section-title">Recent Activity</h2>
               <div className="filter-container">
-                {['all', 'articulation', 'language', 'fluency', 'gait'].map(filter => (
+                {['all', 'articulation', 'language', 'fluency', 'gait', 'gait-exercises'].map(filter => (
                   <button
                     key={filter}
                     className={`filter-button ${selectedFilter === filter ? 'active' : ''}`}
                     onClick={() => setSelectedFilter(filter)}
                   >
                     <span className="filter-icon">{filter === 'all' ? '📊' : getTherapyIcon(filter)}</span>
-                    {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    {filter === 'all' ? 'All' : filter === 'gait-exercises' ? 'Gait Exercises' : filter.charAt(0).toUpperCase() + filter.slice(1)}
                   </button>
                 ))}
               </div>
@@ -571,18 +593,67 @@ function HealthLogs({ onLogout, onFacilityExit }) {
               </div>
             ) : (
               <div className="table-wrapper">
-                <table className="logs-table">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Therapy</th>
-                      <th>Level</th>
-                      <th>Score</th>
-                      <th>Date & Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getFilteredLogs().map(log => (
+                {selectedFilter === 'gait-exercises' ? (
+                  (() => {
+                    const gaitExerciseLogs = getFilteredLogs();
+                    const showStatusColumn = gaitExerciseLogs.some(log => Boolean(log.status));
+
+                    return (
+                      <table className={`logs-table gait-exercises-table ${showStatusColumn ? 'status-visible' : ''}`}>
+                        <thead>
+                          <tr>
+                            <th>Exercise</th>
+                            <th>Target</th>
+                            {showStatusColumn && <th>Status</th>}
+                            <th>Date & Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {gaitExerciseLogs.map(log => (
+                        <tr key={log._id}>
+                          <td>
+                            <div className="therapy-cell">
+                              <span className="therapy-type">{log.exerciseName}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="therapy-detail">
+                              {log.exerciseTarget ? log.exerciseTarget.replace(/_/g, ' ') : 'General gait exercise'}
+                            </span>
+                          </td>
+                          {showStatusColumn && (
+                          <td>
+                            {log.status ? (
+                              <span className={`gait-exercise-status-badge ${log.status}`}>
+                                {log.status === 'done' ? 'Completed' : 'Ongoing'}
+                              </span>
+                            ) : (
+                              <span className="gait-exercise-status-hidden">Hidden</span>
+                            )}
+                          </td>
+                          )}
+                          <td>
+                            <span className="date-cell">{formatDate(log.createdAt)}</span>
+                          </td>
+                        </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                ) : (
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Therapy</th>
+                        <th>Level</th>
+                        <th>Score</th>
+                        <th>Date & Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getFilteredLogs().map(log => (
                       <React.Fragment key={log._id}>
                         <tr className={log.therapyType === 'gait' ? 'gait-row' : ''}>
                           <td>
@@ -746,9 +817,10 @@ function HealthLogs({ onLogout, onFacilityExit }) {
                           </tr>
                         )}
                       </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
 

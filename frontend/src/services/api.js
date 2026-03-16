@@ -910,4 +910,22 @@ export const diagnosticComparisonService = {
   },
 };
 
+export const detectionProblemsService = {
+  getAll: () => api.get('/physical/detection-problems'),
+  create: (data) => api.post('/physical/detection-problems', data),
+  update: (id, data) => api.put(`/physical/detection-problems/${id}`, data),
+  delete: (id) => api.delete(`/physical/detection-problems/${id}`),
+  toggle: (id) => api.patch(`/physical/detection-problems/${id}/toggle`),
+  seed: () => api.post('/physical/detection-problems/seed'),
+};
+
+export const exerciseRecommendationsService = {
+  getAll: () => api.get('/physical/exercise-recommendations'),
+  create: (data) => api.post('/physical/exercise-recommendations', data),
+  update: (id, data) => api.put(`/physical/exercise-recommendations/${id}`, data),
+  delete: (id) => api.delete(`/physical/exercise-recommendations/${id}`),
+  toggle: (id) => api.patch(`/physical/exercise-recommendations/${id}/toggle`),
+  seed: () => api.post('/physical/exercise-recommendations/seed'),
+};
+
 export default api;

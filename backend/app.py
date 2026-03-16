@@ -34,6 +34,8 @@ from articulation_crud import articulation_bp, init_articulation_crud
 from admin.AdminManagement import admin_bp, init_admin_management
 # Import success story CRUD blueprint
 from success_story_crud import success_story_bp, init_success_story_crud
+# Import physical therapy CRUD blueprint
+from physical_therapy_crud import physical_therapy_bp, init_physical_therapy_crud
 
 # Load environment variables from .env file
 load_dotenv()
@@ -127,6 +129,10 @@ init_admin_management(db)
 # Register success story CRUD blueprint
 app.register_blueprint(success_story_bp, url_prefix='/api')
 init_success_story_crud(db)
+
+# Register physical therapy CRUD blueprint
+app.register_blueprint(physical_therapy_bp)
+init_physical_therapy_crud(db)
 
 # Initialize XGBoost Prediction Service (Standalone - all 5 predictors)
 print("\n🤖 Initializing XGBoost Prediction Models...")

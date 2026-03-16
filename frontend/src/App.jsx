@@ -19,6 +19,8 @@ import GaitAnalysis from './pages/GaitAnalysis';
 import GaitRecording from './pages/GaitRecording';
 import GaitProblems from './pages/GaitProblems';
 import ExercisePlans from './pages/ExercisePlans';
+import DetectionProblems from './pages/DetectionProblems';
+import ExerciseRecommendations from './pages/ExerciseRecommendations';
 import SpeechTherapy from './pages/SpeechTherapy';
 import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
@@ -210,6 +212,18 @@ function App() {
               element={
                 isAuthenticated ? <ExercisePlans onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
+            />
+            <Route
+              path="/detection-problems"
+              element={
+                isAuthenticated ? <DetectionProblems onLogout={handleLogout} /> : <Navigate to="/login" />
+              }
+            />
+            <Route
+              path="/exercise-recommendations"
+              element={
+                isAuthenticated ? <ExerciseRecommendations onLogout={handleLogout} /> : <Navigate to="/login" />
+              }
             />
             <Route 
               path="/speech-therapy" 

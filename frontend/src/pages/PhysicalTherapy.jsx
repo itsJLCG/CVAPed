@@ -92,6 +92,63 @@ function PhysicalTherapy({ onLogout, onFacilityExit }) {
                 </div>
               </div>
             </div>
+
+            {/* Detection Problems & Exercise Recommendations */}
+            <div className="therapy-page-card" style={{ marginTop: '2rem' }}>
+              <h2>🩺 Assessment & Exercises</h2>
+              <p style={{ marginBottom: '2rem' }}>
+                Review common physical problems detected in stroke patients and browse tailored exercise 
+                recommendations for your rehabilitation programme.
+              </p>
+              <div className="therapy-page-features" style={{ gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                <div
+                  className="therapy-feature-card"
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: 'pointer', border: '2px solid #2196F3', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                  onClick={() => navigate('/detection-problems')}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate('/detection-problems')}
+                >
+                  <div className="therapy-feature-icon" style={{ fontSize: '3rem' }}>🔍</div>
+                  <h3>Detection Problems</h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Explore a catalogue of gait and physical problems commonly detected in CVA patients, 
+                    with severity levels, indicators, and affected areas.
+                  </p>
+                  <button
+                    className="therapy-page-cta-btn"
+                    style={{ width: '100%', padding: '0.75rem' }}
+                    onClick={(e) => { e.stopPropagation(); navigate('/detection-problems'); }}
+                  >
+                    View Detection Problems
+                  </button>
+                </div>
+
+                <div
+                  className="therapy-feature-card"
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: 'pointer', border: '2px solid #4CAF50', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                  onClick={() => navigate('/exercise-recommendations')}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate('/exercise-recommendations')}
+                >
+                  <div className="therapy-feature-icon" style={{ fontSize: '3rem' }}>💪</div>
+                  <h3>Exercise Recommendations</h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Browse therapist-curated exercises with step-by-step instructions, difficulty ratings, 
+                    equipment needs, and precautions tailored to your condition.
+                  </p>
+                  <button
+                    className="therapy-page-cta-btn"
+                    style={{ width: '100%', padding: '0.75rem' }}
+                    onClick={(e) => { e.stopPropagation(); navigate('/exercise-recommendations'); }}
+                  >
+                    View Exercise Recommendations
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </main>

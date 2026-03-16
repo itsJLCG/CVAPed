@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService, detectionProblemsService, exerciseRecommendationsService } from '../services/api';
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
@@ -17,6 +17,7 @@ function TherapistDashboard({ onLogout }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
   const [speechDropdownOpen, setSpeechDropdownOpen] = useState(false);
+  const [physicalDropdownOpen, setPhysicalDropdownOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSub, setActiveSub] = useState('receptive');
   const [therapyData, setTherapyData] = useState([]);
@@ -222,6 +223,33 @@ function TherapistDashboard({ onLogout }) {
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchingPatients, setSearchingPatients] = useState(false);
+
+  // Detection Problems state
+  const [detectionProblems, setDetectionProblems] = useState([]);
+  const [loadingDetectionProblems, setLoadingDetectionProblems] = useState(false);
+  const [showDPModal, setShowDPModal] = useState(false);
+  const [editingDP, setEditingDP] = useState(null);
+  const [dpSearchTerm, setDPSearchTerm] = useState('');
+  const [currentDPPage, setCurrentDPPage] = useState(1);
+  const [dpEntriesPerPage, setDPEntriesPerPage] = useState(10);
+  const [newDP, setNewDP] = useState({
+    name: '', category: '', description: '', severity_level: 'moderate',
+    indicators: '', affected_area: '', normal_range: '', is_active: true
+  });
+
+  // Exercise Recommendations state
+  const [exerciseRecs, setExerciseRecs] = useState([]);
+  const [loadingExerciseRecs, setLoadingExerciseRecs] = useState(false);
+  const [showERModal, setShowERModal] = useState(false);
+  const [editingER, setEditingER] = useState(null);
+  const [erSearchTerm, setERSearchTerm] = useState('');
+  const [currentERPage, setCurrentERPage] = useState(1);
+  const [erEntriesPerPage, setEREntriesPerPage] = useState(10);
+  const [newER, setNewER] = useState({
+    name: '', category: '', description: '', target_problems: '',
+    difficulty_level: 'beginner', duration_minutes: 15, repetitions: 10,
+    sets: 3, instructions: '', precautions: '', equipment_needed: '', is_active: true
+  });
 
   // Load overview statistics
   const loadOverviewStats = async (days = selectedDays) => {
@@ -788,6 +816,8 @@ function TherapistDashboard({ onLogout }) {
     }
     if (activeTab === 'physical') loadPhysical();
     if (activeTab === 'recommended-exercises') loadRecommendedExercises();
+    if (activeTab === 'detection-problems') loadDetectionProblems();
+    if (activeTab === 'exercise-recommendations') loadExerciseRecs();
     if (activeTab === 'success-stories') loadSuccessStories();
     if (activeTab === 'reports') loadReports();
     if (activeTab === 'appointments') {
@@ -1133,6 +1163,202 @@ function TherapistDashboard({ onLogout }) {
   };
 
   // Success Stories Functions
+  // ============= DETECTION PROBLEMS CRUD =============
+
+  const loadDetectionProblems = async () => {
+    setLoadingDetectionProblems(true);
+    try {
+      const response = await detectionProblemsService.getAll();
+      if (response.success) setDetectionProblems(response.problems || []);
+    } catch (e) {
+      console.error('Failed to load detection problems', e);
+      setDetectionProblems([]);
+    } finally {
+      setLoadingDetectionProblems(false);
+    }
+  };
+
+  const resetDPForm = () => setNewDP({
+    name: '', category: '', description: '', severity_level: 'moderate',
+    indicators: '', affected_area: '', normal_range: '', is_active: true
+  });
+
+  const handleOpenDPCreate = () => {
+    setEditingDP(null);
+    resetDPForm();
+    setShowDPModal(true);
+  };
+
+  const handleOpenDPEdit = (item) => {
+    setEditingDP(item);
+    setNewDP({
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      severity_level: item.severity_level,
+      indicators: (item.indicators || []).join(', '),
+      affected_area: item.affected_area,
+      normal_range: item.normal_range,
+      is_active: item.is_active
+    });
+    setShowDPModal(true);
+  };
+
+  const handleSaveDP = async () => {
+    if (!newDP.name.trim()) { alert('Name is required'); return; }
+    const payload = {
+      ...newDP,
+      indicators: newDP.indicators.split(',').map(s => s.trim()).filter(Boolean)
+    };
+    try {
+      let response;
+      if (editingDP) {
+        response = await detectionProblemsService.update(editingDP.problem_id, payload);
+      } else {
+        response = await detectionProblemsService.create(payload);
+      }
+      if (response.success) {
+        setShowDPModal(false);
+        loadDetectionProblems();
+        alert(editingDP ? 'Detection problem updated!' : 'Detection problem created!');
+      }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Save failed');
+    }
+  };
+
+  const handleDeleteDP = async (id) => {
+    if (!window.confirm('Delete this detection problem?')) return;
+    try {
+      const response = await detectionProblemsService.delete(id);
+      if (response.success) { loadDetectionProblems(); alert('Deleted successfully!'); }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const handleToggleDP = async (id) => {
+    try {
+      const response = await detectionProblemsService.toggle(id);
+      if (response.success) loadDetectionProblems();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Toggle failed');
+    }
+  };
+
+  const handleSeedDP = async () => {
+    if (!window.confirm('Seed default detection problems?')) return;
+    try {
+      const response = await detectionProblemsService.seed();
+      if (response.success) { loadDetectionProblems(); alert(`Seeded ${response.count} problems!`); }
+    } catch (e) {
+      alert(e.response?.data?.message || e.response?.data?.error || 'Seed failed');
+    }
+  };
+
+  // ============= EXERCISE RECOMMENDATIONS CRUD =============
+
+  const loadExerciseRecs = async () => {
+    setLoadingExerciseRecs(true);
+    try {
+      const response = await exerciseRecommendationsService.getAll();
+      if (response.success) setExerciseRecs(response.exercises || []);
+    } catch (e) {
+      console.error('Failed to load exercise recommendations', e);
+      setExerciseRecs([]);
+    } finally {
+      setLoadingExerciseRecs(false);
+    }
+  };
+
+  const resetERForm = () => setNewER({
+    name: '', category: '', description: '', target_problems: '',
+    difficulty_level: 'beginner', duration_minutes: 15, repetitions: 10,
+    sets: 3, instructions: '', precautions: '', equipment_needed: '', is_active: true
+  });
+
+  const handleOpenERCreate = () => {
+    setEditingER(null);
+    resetERForm();
+    setShowERModal(true);
+  };
+
+  const handleOpenEREdit = (item) => {
+    setEditingER(item);
+    setNewER({
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      target_problems: (item.target_problems || []).join(', '),
+      difficulty_level: item.difficulty_level,
+      duration_minutes: item.duration_minutes,
+      repetitions: item.repetitions,
+      sets: item.sets,
+      instructions: (item.instructions || []).join('\n'),
+      precautions: item.precautions,
+      equipment_needed: (item.equipment_needed || []).join(', '),
+      is_active: item.is_active
+    });
+    setShowERModal(true);
+  };
+
+  const handleSaveER = async () => {
+    if (!newER.name.trim()) { alert('Name is required'); return; }
+    const payload = {
+      ...newER,
+      target_problems: newER.target_problems.split(',').map(s => s.trim()).filter(Boolean),
+      instructions: newER.instructions.split('\n').map(s => s.trim()).filter(Boolean),
+      equipment_needed: newER.equipment_needed.split(',').map(s => s.trim()).filter(Boolean),
+      duration_minutes: Number(newER.duration_minutes),
+      repetitions: Number(newER.repetitions),
+      sets: Number(newER.sets)
+    };
+    try {
+      let response;
+      if (editingER) {
+        response = await exerciseRecommendationsService.update(editingER.exercise_id, payload);
+      } else {
+        response = await exerciseRecommendationsService.create(payload);
+      }
+      if (response.success) {
+        setShowERModal(false);
+        loadExerciseRecs();
+        alert(editingER ? 'Exercise updated!' : 'Exercise created!');
+      }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Save failed');
+    }
+  };
+
+  const handleDeleteER = async (id) => {
+    if (!window.confirm('Delete this exercise recommendation?')) return;
+    try {
+      const response = await exerciseRecommendationsService.delete(id);
+      if (response.success) { loadExerciseRecs(); alert('Deleted successfully!'); }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const handleToggleER = async (id) => {
+    try {
+      const response = await exerciseRecommendationsService.toggle(id);
+      if (response.success) loadExerciseRecs();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Toggle failed');
+    }
+  };
+
+  const handleSeedER = async () => {
+    if (!window.confirm('Seed default exercise recommendations?')) return;
+    try {
+      const response = await exerciseRecommendationsService.seed();
+      if (response.success) { loadExerciseRecs(); alert(`Seeded ${response.count} exercises!`); }
+    } catch (e) {
+      alert(e.response?.data?.message || e.response?.data?.error || 'Seed failed');
+    }
+  };
+
   const loadSuccessStories = async () => {
     let cancelled = false;
     console.log('✨ Loading success stories...');
@@ -1828,6 +2054,8 @@ function TherapistDashboard({ onLogout }) {
             onTabChange={handleTabChange}
             speechDropdownOpen={speechDropdownOpen}
             onSpeechDropdownToggle={() => setSpeechDropdownOpen(prev => !prev)}
+            physicalDropdownOpen={physicalDropdownOpen}
+            onPhysicalDropdownToggle={() => setPhysicalDropdownOpen(prev => !prev)}
             sidebarCollapsed={sidebarCollapsed}
             onToggleCollapse={toggleSidebar}
             isMobile={isMobile}
@@ -2663,6 +2891,450 @@ function TherapistDashboard({ onLogout }) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'detection-problems' && (
+            <div className="success-stories-section physical-therapy-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Detection Problems</h2>
+                  <p>Manage physical problems commonly detected in CVA patients</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button className="btn-primary" style={{ background: '#6b7280' }} onClick={handleSeedDP}>
+                    🌱 Seed Defaults
+                  </button>
+                  <button className="btn-primary" onClick={handleOpenDPCreate}>
+                    ➕ Add Problem
+                  </button>
+                </div>
+              </div>
+
+              <div className="stories-toolbar">
+                <div className="toolbar-left">
+                  <div className="search-container">
+                    <input
+                      type="text"
+                      placeholder="Search by name or category..."
+                      value={dpSearchTerm}
+                      onChange={(e) => { setDPSearchTerm(e.target.value); setCurrentDPPage(1); }}
+                      className="search-input"
+                    />
+                  </div>
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select
+                        value={dpEntriesPerPage}
+                        onChange={(e) => { setDPEntriesPerPage(Number(e.target.value)); setCurrentDPPage(1); }}
+                        className="entries-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+                <div className="toolbar-right">
+                  <div className="stats-summary">
+                    <span className="stat-item"><strong>{detectionProblems.filter(d => d.is_active).length}</strong> Active</span>
+                    <span className="stat-item"><strong>{detectionProblems.length}</strong> Total</span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingDetectionProblems ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading detection problems...</p>
+                </div>
+              ) : detectionProblems.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🔍</span>
+                    <h3>No Detection Problems Yet</h3>
+                    <p>Click "Seed Defaults" to populate or "Add Problem" to create one.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="datatable-container">
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Severity</th>
+                        <th>Affected Area</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filtered = detectionProblems.filter(d =>
+                          !dpSearchTerm ||
+                          d.name?.toLowerCase().includes(dpSearchTerm.toLowerCase()) ||
+                          d.category?.toLowerCase().includes(dpSearchTerm.toLowerCase())
+                        );
+                        const last = currentDPPage * dpEntriesPerPage;
+                        const first = last - dpEntriesPerPage;
+                        return filtered.slice(first, last).map(item => (
+                          <tr key={item.problem_id} style={{ opacity: item.is_active ? 1 : 0.55 }}>
+                            <td><code style={{ fontSize: '0.8rem' }}>{item.problem_id}</code></td>
+                            <td><strong>{item.name}</strong></td>
+                            <td>{item.category}</td>
+                            <td>
+                              <span className={`status-badge ${
+                                item.severity_level === 'severe' ? 'status-critical' :
+                                item.severity_level === 'moderate' ? 'status-warning' : 'status-active'
+                              }`}>
+                                {item.severity_level}
+                              </span>
+                            </td>
+                            <td>{item.affected_area}</td>
+                            <td>
+                              <label className="fluency-active-switch">
+                                <input
+                                  type="checkbox"
+                                  checked={item.is_active}
+                                  onChange={() => handleToggleDP(item.problem_id)}
+                                />
+                                <span>{item.is_active ? 'Active' : 'Inactive'}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <div className="exercise-actions">
+                                <button className="btn-edit" onClick={() => handleOpenDPEdit(item)}>Edit</button>
+                                <button className="btn-delete" onClick={() => handleDeleteDP(item.problem_id)}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                  {(() => {
+                    const filtered = detectionProblems.filter(d =>
+                      !dpSearchTerm ||
+                      d.name?.toLowerCase().includes(dpSearchTerm.toLowerCase()) ||
+                      d.category?.toLowerCase().includes(dpSearchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filtered.length / dpEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    const last = currentDPPage * dpEntriesPerPage;
+                    const first = last - dpEntriesPerPage;
+                    return (
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {first + 1} to {Math.min(last, filtered.length)} of {filtered.length} entries
+                        </span>
+                        <div className="pagination-buttons">
+                          <button onClick={() => setCurrentDPPage(1)} disabled={currentDPPage === 1} className="pagination-btn">«</button>
+                          <button onClick={() => setCurrentDPPage(p => Math.max(1, p - 1))} disabled={currentDPPage === 1} className="pagination-btn">‹</button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let p = totalPages <= 5 ? i + 1 : currentDPPage <= 3 ? i + 1 : currentDPPage >= totalPages - 2 ? totalPages - 4 + i : currentDPPage - 2 + i;
+                            return <button key={p} onClick={() => setCurrentDPPage(p)} className={`pagination-btn ${currentDPPage === p ? 'active' : ''}`}>{p}</button>;
+                          })}
+                          <button onClick={() => setCurrentDPPage(p => Math.min(totalPages, p + 1))} disabled={currentDPPage === totalPages} className="pagination-btn">›</button>
+                          <button onClick={() => setCurrentDPPage(totalPages)} disabled={currentDPPage === totalPages} className="pagination-btn">»</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showDPModal && (
+            <div className="modal-overlay" onClick={() => setShowDPModal(false)}>
+              <div className="modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingDP ? 'Edit Detection Problem' : 'Add Detection Problem'}</h3>
+                  <button className="modal-close" onClick={() => setShowDPModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label htmlFor="dp-name">Name *</label>
+                    <input id="dp-name" type="text" value={newDP.name} onChange={e => setNewDP({ ...newDP, name: e.target.value })} placeholder="e.g. Foot Drop" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-category">Category</label>
+                    <input id="dp-category" type="text" value={newDP.category} onChange={e => setNewDP({ ...newDP, category: e.target.value })} placeholder="e.g. Gait, Balance" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-description">Description</label>
+                    <textarea id="dp-description" rows="3" value={newDP.description} onChange={e => setNewDP({ ...newDP, description: e.target.value })} placeholder="Describe the problem..." />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-severity">Severity Level</label>
+                    <select id="dp-severity" value={newDP.severity_level} onChange={e => setNewDP({ ...newDP, severity_level: e.target.value })}>
+                      <option value="mild">Mild</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="severe">Severe</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-indicators">Indicators (comma-separated)</label>
+                    <input id="dp-indicators" type="text" value={newDP.indicators} onChange={e => setNewDP({ ...newDP, indicators: e.target.value })} placeholder="e.g. Dragging foot, Toe clearance issues" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-affected">Affected Area</label>
+                    <input id="dp-affected" type="text" value={newDP.affected_area} onChange={e => setNewDP({ ...newDP, affected_area: e.target.value })} placeholder="e.g. Lower limb, Ankle" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-normal">Normal Range</label>
+                    <input id="dp-normal" type="text" value={newDP.normal_range} onChange={e => setNewDP({ ...newDP, normal_range: e.target.value })} placeholder="e.g. Dorsiflexion 0-20°" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-active">
+                      <input id="dp-active" type="checkbox" checked={newDP.is_active} onChange={e => setNewDP({ ...newDP, is_active: e.target.checked })} style={{ marginRight: '0.5rem' }} />
+                      Active (visible to patients)
+                    </label>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="secondary-btn" onClick={() => setShowDPModal(false)}>Cancel</button>
+                  <button className="primary-btn" onClick={handleSaveDP}>{editingDP ? 'Update' : 'Create'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'exercise-recommendations' && (
+            <div className="success-stories-section physical-therapy-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Exercise Recommendations</h2>
+                  <p>Manage therapist-curated exercises for CVA patients</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button className="btn-primary" style={{ background: '#6b7280' }} onClick={handleSeedER}>
+                    🌱 Seed Defaults
+                  </button>
+                  <button className="btn-primary" onClick={handleOpenERCreate}>
+                    ➕ Add Exercise
+                  </button>
+                </div>
+              </div>
+
+              <div className="stories-toolbar">
+                <div className="toolbar-left">
+                  <div className="search-container">
+                    <input
+                      type="text"
+                      placeholder="Search by name or category..."
+                      value={erSearchTerm}
+                      onChange={(e) => { setERSearchTerm(e.target.value); setCurrentERPage(1); }}
+                      className="search-input"
+                    />
+                  </div>
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select
+                        value={erEntriesPerPage}
+                        onChange={(e) => { setEREntriesPerPage(Number(e.target.value)); setCurrentERPage(1); }}
+                        className="entries-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+                <div className="toolbar-right">
+                  <div className="stats-summary">
+                    <span className="stat-item"><strong>{exerciseRecs.filter(e => e.is_active).length}</strong> Active</span>
+                    <span className="stat-item"><strong>{exerciseRecs.length}</strong> Total</span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingExerciseRecs ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading exercise recommendations...</p>
+                </div>
+              ) : exerciseRecs.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">💪</span>
+                    <h3>No Exercise Recommendations Yet</h3>
+                    <p>Click "Seed Defaults" to populate or "Add Exercise" to create one.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="datatable-container">
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Difficulty</th>
+                        <th>Duration</th>
+                        <th>Sets × Reps</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filtered = exerciseRecs.filter(e =>
+                          !erSearchTerm ||
+                          e.name?.toLowerCase().includes(erSearchTerm.toLowerCase()) ||
+                          e.category?.toLowerCase().includes(erSearchTerm.toLowerCase())
+                        );
+                        const last = currentERPage * erEntriesPerPage;
+                        const first = last - erEntriesPerPage;
+                        return filtered.slice(first, last).map(item => (
+                          <tr key={item.exercise_id} style={{ opacity: item.is_active ? 1 : 0.55 }}>
+                            <td><code style={{ fontSize: '0.8rem' }}>{item.exercise_id}</code></td>
+                            <td><strong>{item.name}</strong></td>
+                            <td>{item.category}</td>
+                            <td>
+                              <span className={`status-badge ${
+                                item.difficulty_level === 'advanced' ? 'status-critical' :
+                                item.difficulty_level === 'intermediate' ? 'status-warning' : 'status-active'
+                              }`}>
+                                {item.difficulty_level}
+                              </span>
+                            </td>
+                            <td>{item.duration_minutes} min</td>
+                            <td>{item.sets} × {item.repetitions}</td>
+                            <td>
+                              <label className="fluency-active-switch">
+                                <input
+                                  type="checkbox"
+                                  checked={item.is_active}
+                                  onChange={() => handleToggleER(item.exercise_id)}
+                                />
+                                <span>{item.is_active ? 'Active' : 'Inactive'}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <div className="exercise-actions">
+                                <button className="btn-edit" onClick={() => handleOpenEREdit(item)}>Edit</button>
+                                <button className="btn-delete" onClick={() => handleDeleteER(item.exercise_id)}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                  {(() => {
+                    const filtered = exerciseRecs.filter(e =>
+                      !erSearchTerm ||
+                      e.name?.toLowerCase().includes(erSearchTerm.toLowerCase()) ||
+                      e.category?.toLowerCase().includes(erSearchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filtered.length / erEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    const last = currentERPage * erEntriesPerPage;
+                    const first = last - erEntriesPerPage;
+                    return (
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {first + 1} to {Math.min(last, filtered.length)} of {filtered.length} entries
+                        </span>
+                        <div className="pagination-buttons">
+                          <button onClick={() => setCurrentERPage(1)} disabled={currentERPage === 1} className="pagination-btn">«</button>
+                          <button onClick={() => setCurrentERPage(p => Math.max(1, p - 1))} disabled={currentERPage === 1} className="pagination-btn">‹</button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let p = totalPages <= 5 ? i + 1 : currentERPage <= 3 ? i + 1 : currentERPage >= totalPages - 2 ? totalPages - 4 + i : currentERPage - 2 + i;
+                            return <button key={p} onClick={() => setCurrentERPage(p)} className={`pagination-btn ${currentERPage === p ? 'active' : ''}`}>{p}</button>;
+                          })}
+                          <button onClick={() => setCurrentERPage(p => Math.min(totalPages, p + 1))} disabled={currentERPage === totalPages} className="pagination-btn">›</button>
+                          <button onClick={() => setCurrentERPage(totalPages)} disabled={currentERPage === totalPages} className="pagination-btn">»</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showERModal && (
+            <div className="modal-overlay" onClick={() => setShowERModal(false)}>
+              <div className="modal-content" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingER ? 'Edit Exercise' : 'Add Exercise Recommendation'}</h3>
+                  <button className="modal-close" onClick={() => setShowERModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label htmlFor="er-name">Name *</label>
+                    <input id="er-name" type="text" value={newER.name} onChange={e => setNewER({ ...newER, name: e.target.value })} placeholder="e.g. Ankle Dorsiflexion Stretch" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-category">Category</label>
+                    <input id="er-category" type="text" value={newER.category} onChange={e => setNewER({ ...newER, category: e.target.value })} placeholder="e.g. Stretching, Balance" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-description">Description</label>
+                    <textarea id="er-description" rows="2" value={newER.description} onChange={e => setNewER({ ...newER, description: e.target.value })} placeholder="Brief overview of the exercise..." />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-target">Target Problems (comma-separated)</label>
+                    <input id="er-target" type="text" value={newER.target_problems} onChange={e => setNewER({ ...newER, target_problems: e.target.value })} placeholder="e.g. Foot Drop, Gait Asymmetry" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-difficulty">Difficulty Level</label>
+                    <select id="er-difficulty" value={newER.difficulty_level} onChange={e => setNewER({ ...newER, difficulty_level: e.target.value })}>
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label htmlFor="er-duration">Duration (min)</label>
+                      <input id="er-duration" type="number" min="1" value={newER.duration_minutes} onChange={e => setNewER({ ...newER, duration_minutes: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="er-sets">Sets</label>
+                      <input id="er-sets" type="number" min="1" value={newER.sets} onChange={e => setNewER({ ...newER, sets: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="er-reps">Repetitions</label>
+                      <input id="er-reps" type="number" min="1" value={newER.repetitions} onChange={e => setNewER({ ...newER, repetitions: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-instructions">Instructions (one per line)</label>
+                    <textarea id="er-instructions" rows="4" value={newER.instructions} onChange={e => setNewER({ ...newER, instructions: e.target.value })} placeholder="Step 1&#10;Step 2&#10;Step 3" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-precautions">Precautions</label>
+                    <input id="er-precautions" type="text" value={newER.precautions} onChange={e => setNewER({ ...newER, precautions: e.target.value })} placeholder="e.g. Stop if pain increases" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-equipment">Equipment Needed (comma-separated)</label>
+                    <input id="er-equipment" type="text" value={newER.equipment_needed} onChange={e => setNewER({ ...newER, equipment_needed: e.target.value })} placeholder="e.g. Resistance band, Chair" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-active">
+                      <input id="er-active" type="checkbox" checked={newER.is_active} onChange={e => setNewER({ ...newER, is_active: e.target.checked })} style={{ marginRight: '0.5rem' }} />
+                      Active (visible to patients)
+                    </label>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="secondary-btn" onClick={() => setShowERModal(false)}>Cancel</button>
+                  <button className="primary-btn" onClick={handleSaveER}>{editingER ? 'Update' : 'Create'}</button>
+                </div>
+              </div>
             </div>
           )}
 

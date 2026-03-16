@@ -1,0 +1,363 @@
+/* Exercise Recommendations - Patient View */
+
+.er-page {
+  min-height: 100vh;
+  background: linear-gradient(to bottom, #f7fafc 0%, #edf2f7 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.er-main {
+  padding-top: 0;
+}
+
+.er-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+/* Header */
+.er-header {
+  text-align: center;
+  padding: 2.5rem 1rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.er-header-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ce3630, #a52c27);
+  color: #fff;
+  font-size: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  box-shadow: 0 4px 12px rgba(206, 54, 48, 0.35);
+}
+
+.er-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 0.5rem;
+}
+
+.er-subtitle {
+  font-size: 1rem;
+  color: #718096;
+  max-width: 560px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Loading / Error */
+.er-loading,
+.er-error {
+  text-align: center;
+  padding: 3rem;
+  color: #718096;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.er-error {
+  color: #dc3545;
+}
+
+.er-retry-btn {
+  background: #dc3545;
+  color: #fff;
+  border: none;
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+/* Category Filter */
+.er-category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.er-cat-btn {
+  padding: 0.4rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #fff;
+  color: #4a5568;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.er-cat-btn:hover {
+  border-color: #ce3630;
+  color: #ce3630;
+}
+
+.er-cat-btn.active {
+  background: #ce3630;
+  border-color: #ce3630;
+  color: #fff;
+}
+
+/* Empty */
+.er-empty {
+  text-align: center;
+  padding: 3rem;
+  color: #718096;
+}
+
+.er-empty i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+  color: #cbd5e0;
+}
+
+/* Exercise List */
+.er-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+/* Exercise Card */
+.er-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.2s;
+}
+
+.er-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.er-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.25rem;
+  cursor: pointer;
+  gap: 1rem;
+}
+
+.er-card-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.er-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.er-card-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.er-diff-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.er-diff-badge.diff-beginner {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.er-diff-badge.diff-intermediate {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.er-diff-badge.diff-advanced {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.er-card-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.er-meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #edf2f7;
+  color: #4a5568;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.er-expand-icon {
+  color: #718096;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+/* Card Body */
+.er-card-body {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid #edf2f7;
+}
+
+.er-description {
+  color: #4a5568;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 1rem 0;
+}
+
+.er-section {
+  margin-bottom: 1rem;
+}
+
+.er-section-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.er-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.er-problem-tag {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 20px;
+}
+
+.er-equip-tag {
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 20px;
+}
+
+.er-instructions-list {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #4a5568;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.er-precautions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  color: #92400e;
+  margin-top: 0.75rem;
+}
+
+.er-precautions i {
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Action Row */
+.er-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.er-back-btn,
+.er-problems-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.4rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.er-back-btn {
+  background: #edf2f7;
+  color: #4a5568;
+}
+
+.er-back-btn:hover {
+  background: #e2e8f0;
+  color: #2d3748;
+}
+
+.er-problems-btn {
+  background: #ce3630;
+  color: #fff;
+}
+
+.er-problems-btn:hover {
+  background: #a52c27;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .er-title {
+    font-size: 1.5rem;
+  }
+
+  .er-action-row {
+    flex-direction: column;
+  }
+
+  .er-back-btn,
+  .er-problems-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

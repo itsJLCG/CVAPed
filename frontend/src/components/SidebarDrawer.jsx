@@ -8,6 +8,8 @@ const SidebarDrawer = memo(function SidebarDrawer({
   onTabChange,
   speechDropdownOpen,
   onSpeechDropdownToggle,
+  physicalDropdownOpen,
+  onPhysicalDropdownToggle,
   sidebarCollapsed,
   onToggleCollapse,
   isMobile 
@@ -37,8 +39,8 @@ const SidebarDrawer = memo(function SidebarDrawer({
 
   const navItems = [
     { id: 'overview', icon: '📊', label: 'Overview' },
-    { id: 'speech', icon: '🎤', label: 'Speech Therapy', hasDropdown: true },
-    { id: 'physical', icon: '🏃', label: 'Physical Therapy' },
+    { id: 'speech', icon: '🎤', label: 'Speech Therapy', hasDropdown: true, dropdownKey: 'speech' },
+    { id: 'physical', icon: '🏃', label: 'Physical Therapy', hasDropdown: true, dropdownKey: 'physical' },
     { id: 'recommended-exercises', icon: '🧩', label: 'Recommended Exercise' },
     { id: 'appointments', icon: '📅', label: 'Appointments' },
     { id: 'success-stories', icon: '⭐', label: 'Success Stories' },
@@ -53,14 +55,27 @@ const SidebarDrawer = memo(function SidebarDrawer({
     { id: 'fluency', icon: '💬', label: 'Fluency' },
   ];
 
+  const physicalSubItems = [
+    { id: 'physical', icon: '🚶', label: 'Gait Analysis' },
+    { id: 'detection-problems', icon: '🔍', label: 'Detection Problems' },
+    { id: 'exercise-recommendations', icon: '💪', label: 'Exercise Recommendations' },
+  ];
+
+  const getDropdownOpen = (item) => item.dropdownKey === 'physical' ? physicalDropdownOpen : speechDropdownOpen;
+  const getSubItems = (item) => item.dropdownKey === 'physical' ? physicalSubItems : speechSubItems;
+
   const handleNavClick = useCallback((item) => {
     if (item.hasDropdown) {
-      onSpeechDropdownToggle();
+      if (item.dropdownKey === 'physical') {
+        onPhysicalDropdownToggle();
+      } else {
+        onSpeechDropdownToggle();
+      }
     } else {
       onTabChange(item.id);
       if (isMobile) onClose();
     }
-  }, [isMobile, onClose, onSpeechDropdownToggle, onTabChange]);
+  }, [isMobile, onClose, onSpeechDropdownToggle, onPhysicalDropdownToggle, onTabChange]);
 
   const handleSubItemClick = useCallback((subItemId) => {
     onTabChange(subItemId);
@@ -97,9 +112,10 @@ const SidebarDrawer = memo(function SidebarDrawer({
             <div key={item.id} className="nav-item-wrapper">
               <button
                 className={`nav-item ${
-                  activeTab === item.id || 
-                  (item.hasDropdown && (activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency'))
-                    ? 'active' 
+                  activeTab === item.id ||
+                  (item.dropdownKey === 'speech' && (activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency')) ||
+                  (item.dropdownKey === 'physical' && (activeTab === 'physical' || activeTab === 'detection-problems' || activeTab === 'exercise-recommendations'))
+                    ? 'active'
                     : ''
                 }`}
                 onClick={() => handleNavClick(item)}
@@ -107,13 +123,13 @@ const SidebarDrawer = memo(function SidebarDrawer({
                 <span className="nav-icon">{item.icon}</span>
                 <span className="nav-label">{item.label}</span>
                 {item.hasDropdown && (
-                  <span className={`dropdown-arrow ${speechDropdownOpen ? 'open' : ''}`}>▼</span>
+                  <span className={`dropdown-arrow ${getDropdownOpen(item) ? 'open' : ''}`}>▼</span>
                 )}
               </button>
-              
-              {item.hasDropdown && speechDropdownOpen && (
+
+              {item.hasDropdown && getDropdownOpen(item) && (
                 <div className={`dropdown-menu ${sidebarCollapsed ? 'collapsed' : ''}`}>
-                  {speechSubItems.map((subItem) => (
+                  {getSubItems(item).map((subItem) => (
                     <button
                       key={subItem.id}
                       className={`nav-item sub-item ${activeTab === subItem.id ? 'active' : ''}`}

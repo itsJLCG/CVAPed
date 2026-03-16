@@ -6949,6 +6949,48 @@
   margin: -60px 0 0 0;
 }
 
+.physical-therapy-section {
+  margin: -60px 0 0 0;
+  padding: 0 0.15rem 0.05rem;
+  font-size: 0.78rem;
+}
+
+.physical-therapy-section .section-header {
+  margin-bottom: 0.1rem;
+  padding-bottom: 0;
+}
+
+.physical-therapy-section .section-header .header-left h2 {
+  font-size: 1rem;
+  margin: 0 0 0.1rem 0;
+}
+
+.physical-therapy-section .section-header .header-left p {
+  font-size: 0.72rem;
+}
+
+.physical-therapy-section .stories-toolbar {
+  font-size: 0.78rem;
+  padding: 0.2rem;
+}
+
+.physical-therapy-section .search-input,
+.physical-therapy-section .entries-select {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.physical-therapy-section .btn-primary {
+  font-size: 1.1rem;
+  padding: 0.6rem 1.2rem;
+}
+
+.physical-therapy-section table th,
+.physical-therapy-section table td {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.5rem;
+}
+
 .success-stories-section .section-header {
   display: flex;
   justify-content: space-between;

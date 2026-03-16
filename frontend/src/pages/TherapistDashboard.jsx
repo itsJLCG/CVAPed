@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
 import { useToast } from '../components/ToastContext';
@@ -6,6 +6,7 @@ import { images } from '../assets/images';
 import './TherapistDashboard.css';
 import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf } from '../components/PdfReportTemplate';
 import DashboardOverview from '../components/DashboardOverview';
+import SidebarDrawer from '../components/SidebarDrawer';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
@@ -14,6 +15,7 @@ function TherapistDashboard({ onLogout }) {
   const toast = useToast();
   const [user, setUser] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
   const [speechDropdownOpen, setSpeechDropdownOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSub, setActiveSub] = useState('receptive');
@@ -963,6 +965,33 @@ function TherapistDashboard({ onLogout }) {
     }));
   };
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    if (isMobile) {
+      setSidebarDrawerOpen(prev => !prev);
+    } else {
+      setSidebarCollapsed(prev => !prev);
+    }
+  }, [isMobile]);
+
+  const closeSidebarDrawer = useCallback(() => {
+    setSidebarDrawerOpen(false);
+  }, []);
+
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+    setTherapyData([]);
+  }, []);
+
   const toggleSelectAnalysis = useCallback((id) => {
     setSelectedAnalysisIds(prev => {
       const next = new Set(prev);
@@ -1758,141 +1787,54 @@ function TherapistDashboard({ onLogout }) {
 
   return (
     <div className="admin-dashboard">
-      <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header">
-          <div 
-            className="sidebar-logo" 
-            onClick={sidebarCollapsed ? () => setSidebarCollapsed(false) : undefined}
-            style={sidebarCollapsed ? { cursor: 'pointer' } : {}}
-          >
-            <img src={images.logo} alt="CVAPed Logo" className="logo-img" />
-            {!sidebarCollapsed && (
-              <div className="logo-text">
-                <h2>CVAPed</h2>
-                <span className="admin-badge">Therapist</span>
+      <div className="dashboard-wrapper">
+        <header className="admin-navbar">
+          <div className="navbar-left">
+            <div className="navbar-brand">
+              <img src={images.logo} alt="CVAPed" className="navbar-logo" />
+              <div className="brand-content">
+                <span className="brand-name">CVAPed</span>
+                <span className="brand-subtitle">Therapist Dashboard</span>
               </div>
-            )}
+            </div>
           </div>
-          {!sidebarCollapsed && (
-            <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-              ←
-            </button>
-          )}
-        </div>
-
-        <nav className="sidebar-nav">
-          <button className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => { setActiveTab('overview'); setTherapyData([]); }}>
-            <span className="nav-icon">📊</span>
-            {!sidebarCollapsed && <span className="nav-label">Overview</span>}
-          </button>
-
-          <div className="dropdown-container">
-            <button 
-              className={`nav-item ${activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency' ? 'active' : ''}`} 
-              onClick={() => setSpeechDropdownOpen(!speechDropdownOpen)}
-            >
-              <span className="nav-icon">🎤</span>
-              {!sidebarCollapsed && (
-                <>
-                  <span className="nav-label">Speech Therapy</span>
-                  <span className={`dropdown-arrow ${speechDropdownOpen ? 'open' : ''}`}>▼</span>
-                </>
-              )}
-            </button>
-            {!sidebarCollapsed && speechDropdownOpen && (
-              <div className="dropdown-menu">
-                <button className={`nav-item sub-item ${activeTab === 'articulation' ? 'active' : ''}`} onClick={() => { setActiveTab('articulation'); setTherapyData([]); }}>
-                  <span className="nav-label">Articulation</span>
-                </button>
-                <div>
-                  <button className={`nav-item sub-item ${activeTab === 'language' ? 'active' : ''}`} onClick={() => { setActiveTab('language'); setActiveSub('receptive'); setTherapyData([]); }}>
-                    <span className="nav-label">Language</span>
-                  </button>
-                  {activeTab === 'language' && (
-                    <div className="sub-sub-nav">
-                      <button className={`nav-item sub-sub-item ${activeSub === 'receptive' ? 'active' : ''}`} onClick={() => { setActiveSub('receptive'); }}>
-                        Receptive
-                      </button>
-                      <button className={`nav-item sub-sub-item ${activeSub === 'expressive' ? 'active' : ''}`} onClick={() => { setActiveSub('expressive'); }}>
-                        Expressive
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <button className={`nav-item sub-item ${activeTab === 'fluency' ? 'active' : ''}`} onClick={() => { setActiveTab('fluency'); setTherapyData([]); }}>
-                  <span className="nav-label">Fluency</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <button className={`nav-item ${activeTab === 'physical' ? 'active' : ''}`} onClick={() => { setActiveTab('physical'); setTherapyData([]); }}>
-            <span className="nav-icon">🏃</span>
-            {!sidebarCollapsed && <span className="nav-label">Physical Therapy</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'recommended-exercises' ? 'active' : ''}`} onClick={() => { setActiveTab('recommended-exercises'); setTherapyData([]); }}>
-            <span className="nav-icon">🧩</span>
-            {!sidebarCollapsed && <span className="nav-label">Recommended Exercise</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => { setActiveTab('appointments'); setTherapyData([]); }}>
-            <span className="nav-icon">📅</span>
-            {!sidebarCollapsed && <span className="nav-label">Appointments</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'success-stories' ? 'active' : ''}`} onClick={() => { setActiveTab('success-stories'); setTherapyData([]); }}>
-            <span className="nav-icon">⭐</span>
-            {!sidebarCollapsed && <span className="nav-label">Success Stories</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => { setActiveTab('reports'); setTherapyData([]); }}>
-            <span className="nav-icon">📊</span>
-            {!sidebarCollapsed && <span className="nav-label">Reports</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'diagnostics' ? 'active' : ''}`} onClick={() => { setActiveTab('diagnostics'); setTherapyData([]); }}>
-            <span className="nav-icon">🔬</span>
-            {!sidebarCollapsed && <span className="nav-label">Diagnostic Comparison</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'pre-evaluation' ? 'active' : ''}`} onClick={() => { setActiveTab('pre-evaluation'); setTherapyData([]); }}>
-            <span className="nav-icon">🩺</span>
-            {!sidebarCollapsed && <span className="nav-label">Pre-Evaluation</span>}
-          </button>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="admin-profile">
-            <div className="profile-avatar">{user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}</div>
-            {!sidebarCollapsed && (
-              <div className="profile-info">
-                <p className="profile-name">{user?.firstName} {user?.lastName}</p>
-                <p className="profile-role">Therapist</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </aside>
-
-      <main className="admin-main">
-        <header className="admin-header">
-          <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'recommended-exercises' ? 'Recommended Exercise' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : activeTab === 'diagnostics' ? 'Diagnostic Comparison' : activeTab === 'pre-evaluation' ? 'Pre-Evaluation / Initial Diagnostic' : 'Therapist'}</h1>
-            <p className="page-subtitle">Welcome, {user?.firstName}</p>
-          </div>
-          <div className="header-right">
-            <button className="header-btn facility-btn" onClick={() => {
+          
+          <div className="navbar-right">
+            <button className="navbar-btn facility-btn" onClick={() => {
               localStorage.setItem('therapistToken', localStorage.getItem('token') || '');
               localStorage.setItem('therapistUser', localStorage.getItem('user') || '');
               localStorage.setItem('facilityMode', 'true');
               navigate('/facility-login');
-            }}>🏥 Facility Mode</button>
-            <button className="header-btn logout-btn" onClick={onLogout}>🚪 Logout</button>
+            }}>
+              <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span>Facility Mode</span>
+            </button>
+            <button className="navbar-btn logout-btn" onClick={onLogout}>
+              <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+              </svg>
+              <span>Logout</span>
+            </button>
           </div>
         </header>
 
-        <div className="admin-content">
+        <div className="dashboard-main">
+          <SidebarDrawer
+            isOpen={sidebarDrawerOpen}
+            onClose={closeSidebarDrawer}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            speechDropdownOpen={speechDropdownOpen}
+            onSpeechDropdownToggle={() => setSpeechDropdownOpen(prev => !prev)}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
+            isMobile={isMobile}
+          />
+
+          <main className="admin-main">
+            <div className="admin-content">
           {activeTab === 'overview' && (
             <DashboardOverview
               overviewStats={overviewStats}
@@ -1900,6 +1842,7 @@ function TherapistDashboard({ onLogout }) {
               selectedDays={selectedDays}
               setSelectedDays={setSelectedDays}
               loadingStats={loadingStats}
+              user={user}
             />
           )}
 
@@ -5061,6 +5004,8 @@ function TherapistDashboard({ onLogout }) {
 
         </div>
       </main>
+        </div>
+      </div>
 
       {/* Create Exercise Modal */}
       {showExerciseModal && (

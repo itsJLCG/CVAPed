@@ -8,6 +8,65 @@
    - Therapy: Articulation #f59e0b, Language #8b5cf6, Fluency #10b981
    =================================== */
 
+/* ---- Greeting Header ---- */
+.do-greeting-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 24px;
+}
+
+.do-greeting {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--nav-dark, #1e293b);
+  margin: 0;
+}
+
+.do-greeting-name {
+  color: var(--color-primary, #ce3630);
+}
+
+.do-time-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.do-time {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--nav-dark, #1e293b);
+}
+
+.do-date {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: var(--nav-slate, #64748b);
+}
+
+@media (max-width: 768px) {
+  .do-greeting-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .do-time-display {
+    align-items: flex-start;
+  }
+
+  .do-greeting {
+    font-size: 1.375rem;
+  }
+
+  .do-time {
+    font-size: 1.25rem;
+  }
+}
+
 /* ---- Container ---- */
 .do-container {
   display: flex;

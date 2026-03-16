@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   AreaChart, Area,
   BarChart, Bar,
@@ -16,6 +16,53 @@ const APPOINTMENT_COLORS = {
   Today: '#f59e0b',
   Cancelled: '#6b7280',
 };
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 18) return 'Good Afternoon';
+  return 'Good Night';
+}
+
+function getUserName(user) {
+  if (!user) return 'Therapist';
+  if (user.firstName) {
+    return `${user.firstName} ${user.lastName || ''}`.trim();
+  }
+  return user.name || 'Therapist';
+}
+
+function GreetingHeader({ user }) {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeString = currentTime.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: true 
+  });
+
+  const dateString = currentTime.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'long', 
+    day: 'numeric',
+    year: 'numeric'
+  });
+
+  return (
+    <div className="do-greeting-header">
+      <h1 className="do-greeting">{getGreeting()}, <span className="do-greeting-name">{getUserName(user)}</span></h1>
+      <div className="do-time-display">
+        <span className="do-time">{timeString}</span>
+        <span className="do-date">{dateString}</span>
+      </div>
+    </div>
+  );
+}
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -622,7 +669,7 @@ function RecentActivitiesList({ activities }) {
 }
 
 /* ====== MAIN COMPONENT ====== */
-function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelectedDays, loadingStats }) {
+function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelectedDays, loadingStats, user }) {
   if (loadingStats) {
     return (
       <div className="loading-overlay">
@@ -644,6 +691,7 @@ function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelect
 
   return (
     <div className="do-container">
+      <GreetingHeader user={user} />
       {/* Row 1: Key Metric Cards */}
       <MetricCards
         stats={overviewStats}

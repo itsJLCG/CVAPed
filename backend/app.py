@@ -9,6 +9,7 @@ import jwt
 import datetime
 from functools import wraps
 import os
+import json
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, auth
@@ -45,9 +46,35 @@ def utc_now():
     """Returns current UTC time as timezone-aware datetime"""
     return datetime.datetime.now(datetime.timezone.utc)
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate('cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json')
-firebase_admin.initialize_app(cred)
+def initialize_firebase_admin():
+    """Initialize Firebase Admin using JSON content or a service-account file path."""
+    service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+    service_account_path = os.getenv(
+        'FIREBASE_SERVICE_ACCOUNT_PATH',
+        'cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json'
+    )
+
+    if service_account_json:
+        try:
+            cred_data = json.loads(service_account_json)
+            cred = credentials.Certificate(cred_data)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON: {e}")
+    else:
+        if not os.path.isabs(service_account_path):
+            service_account_path = os.path.join(os.path.dirname(__file__), service_account_path)
+        if not os.path.exists(service_account_path):
+            raise RuntimeError(
+                f"Firebase service account file not found: {service_account_path}. "
+                "Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON."
+            )
+        cred = credentials.Certificate(service_account_path)
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+
+
+initialize_firebase_admin()
 
 app = Flask(__name__)
 SECRET_KEY = os.getenv('SECRET_KEY')
@@ -55,10 +82,25 @@ if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is not set. Cannot start application.")
 
 app.config['SECRET_KEY'] = SECRET_KEY
+
+# Parse comma-separated origins from environment for production-safe CORS.
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        'CORS_ORIGINS',
+        'http://localhost:3000,http://localhost:5000,http://localhost:5173'
+    ).split(',')
+    if origin.strip()
+]
+
+frontend_url = os.getenv('FRONTEND_URL')
+if frontend_url and frontend_url not in cors_origins:
+    cors_origins.append(frontend_url)
+
 # Enable CORS with full configuration
 CORS(
     app,
-    origins=["http://localhost:3000", "http://localhost:5000", "https://your-production-frontend.com"],
+    origins=cors_origins,
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
     expose_headers=["Content-Type", "Authorization"],
@@ -68,6 +110,7 @@ CORS(
 
 # Print confirmation
 print("✅ CORS initialized for allowed origins")
+print(f"   - Allowed origins: {', '.join(cors_origins)}")
 print("   - Allowed methods: GET, POST, PUT, DELETE, PATCH, OPTIONS")
 print("   - Allowed headers: Content-Type, Authorization, X-Requested-With, Accept, Origin")
 print("   - Credentials: enabled")

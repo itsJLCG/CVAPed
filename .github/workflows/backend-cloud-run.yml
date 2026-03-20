@@ -1,0 +1,119 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - gwyn
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-cloud-run.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-cloud-run-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_PROJECT_ID: project-897ce48e-6275-4757-ab9
+  GCP_REGION: us-central1
+  CLOUD_RUN_SERVICE: cvaped-backend
+  ARTIFACT_REPOSITORY: cvaped-backend
+  GCP_SERVICE_ACCOUNT: github-actions-cloud-run@project-897ce48e-6275-4757-ab9.iam.gserviceaccount.com
+  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/592360297121/locations/global/workloadIdentityPools/github-actions/providers/github-provider
+  IMAGE_NAME: cvaped-backend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Validate backend Python files
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib
+          import py_compile
+
+          backend_dir = pathlib.Path('backend')
+          skipped_dirs = {'venv', '.venv', '__pycache__'}
+
+          for path in backend_dir.rglob('*.py'):
+              if any(part in skipped_dirs for part in path.parts):
+                  continue
+              py_compile.compile(str(path), doraise=True)
+
+          print('Backend Python validation passed')
+          PY
+
+      - name: Configure Docker authentication for Artifact Registry
+        shell: bash
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build backend container image
+        shell: bash
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: docker build -f backend/Dockerfile -t "$IMAGE_URI" backend
+
+      - name: Push backend container image
+        shell: bash
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: docker push "$IMAGE_URI"
+
+      - name: Deploy backend image to Cloud Run
+        id: deploy
+        shell: bash
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: |
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --image "$IMAGE_URI" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --quiet
+
+          SERVICE_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format='value(status.url)')
+
+          echo "service_url=$SERVICE_URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed backend to $SERVICE_URL"
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## Backend Deploy Succeeded"
+            echo ""
+            echo "- Service: \`${CLOUD_RUN_SERVICE}\`"
+            echo "- Region: \`${GCP_REGION}\`"
+            echo "- Image: \`${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}\`"
+            echo "- URL: ${{ steps.deploy.outputs.service_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

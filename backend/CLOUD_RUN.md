@@ -45,6 +45,8 @@ Create these too if you use the related features:
 
 Run this from the `backend/` directory:
 
+For automatic backend redeploys from GitHub, see `backend/CI_CD_GITHUB_ACTIONS.md`. The repository now includes a ready-to-use GitHub Actions workflow for this project.
+
 ### PowerShell deploy script
 
 This repo includes `backend/deploy-cloud-run.ps1`, which reads the real values from `backend/.env`, uploads them to Secret Manager, grants the runtime service account access, and deploys the Cloud Run service.

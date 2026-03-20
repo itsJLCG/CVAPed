@@ -414,6 +414,12 @@
   border-radius: 8px;
 }
 
+.device-image.qr-image {
+  object-fit: contain;
+  background: white;
+  padding: 1px;
+}
+
 .device-image.mobile-img {
   /* Make the image fill the container and rely on the container's rounded corners
      to crop the image. This hides any surrounding background of the image's canvas

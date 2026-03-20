@@ -9,6 +9,7 @@ import taguigPRU from './CVACare_TPMRU.jpeg';
 import imageBig from './CVACare_ImageBig.png';
 import physicalTherapy from './CVACare_Physical_Therapy.png';
 import speechTherapy from './CVACare_Speech_Therapy.png';
+import cvapedQr from './CVAPed_QR.png';
 
 // Team photos
 import mayorLani from './team/mayor_lani.png';
@@ -27,7 +28,7 @@ export const images = {
   imageBig: imageBig, // CVACare big image for auth pages
   
   // Device screenshots
-  webSystem: null, // Add web system screenshot when available
+  webSystem: cvapedQr, // CVAPed application QR code
   mobileApp: mobileApp, // CVACare Android mobile app screenshot
   
   // Partner logos

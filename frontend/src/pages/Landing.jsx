@@ -114,7 +114,7 @@ function Landing() {
               
               <div className="web-device floating">
                 {hasImage('webSystem') ? (
-                  <img src={images.webSystem} alt="Web System" className="device-image" />
+                  <img src={images.webSystem} alt="CVAPed Application QR Code" className="device-image qr-image" />
                 ) : (
                   <div className="device-screen">
                     <div className="screen-placeholder coming-soon">
@@ -289,7 +289,7 @@ function Landing() {
       <footer className="landing-footer">
         <div className="footer-container">
           <div className="footer-section">
-            <h4>CVACare</h4>
+            <h4>CVAPed</h4>
             <p>Empowering recovery through innovative therapy management for stroke patients and pediatric speech therapy.</p>
           </div>
           <div className="footer-section">

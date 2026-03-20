@@ -33,6 +33,8 @@ Thumbs.db
 *.sqlite
 
 # GitHub Configuration
-.github/
+.github/*
+!.github/workflows/
+!.github/workflows/**
 .github/copilot-instructions.md
 AGENTS.md

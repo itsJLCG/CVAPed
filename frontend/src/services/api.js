@@ -553,11 +553,11 @@ export const healthService = {
     return response.data;
   },
 
-  // Prediction endpoints (from mobile backend - may need to be implemented)
+  // Prediction endpoints
   getArticulationPredictions: async () => {
     try {
-      const response = await api.get('/articulation/predict-mastery');
-      return response.data;
+      const response = await api.get('/predictions');
+      return response.data?.predictions?.articulation || null;
     } catch (error) {
       console.log('Articulation predictions not available');
       return null;
@@ -566,8 +566,8 @@ export const healthService = {
 
   getFluencyPrediction: async () => {
     try {
-      const response = await api.get('/fluency/predict-mastery');
-      return response.data;
+      const response = await api.get('/predictions/fluency');
+      return response.data?.prediction || null;
     } catch (error) {
       console.log('Fluency prediction not available');
       return null;
@@ -576,8 +576,8 @@ export const healthService = {
 
   getReceptivePrediction: async () => {
     try {
-      const response = await api.get('/receptive/predict-mastery');
-      return response.data;
+      const response = await api.get('/predictions/language/receptive');
+      return response.data?.prediction || null;
     } catch (error) {
       console.log('Receptive prediction not available');
       return null;
@@ -586,8 +586,8 @@ export const healthService = {
 
   getExpressivePrediction: async () => {
     try {
-      const response = await api.get('/expressive/predict-mastery');
-      return response.data;
+      const response = await api.get('/predictions/language/expressive');
+      return response.data?.prediction || null;
     } catch (error) {
       console.log('Expressive prediction not available');
       return null;
@@ -596,8 +596,8 @@ export const healthService = {
 
   getOverallSpeechPrediction: async () => {
     try {
-      const response = await api.get('/overall-speech/predict-mastery');
-      return response.data;
+      const response = await api.get('/predictions/overall');
+      return response.data?.prediction || null;
     } catch (error) {
       console.log('Overall speech prediction not available');
       return null;

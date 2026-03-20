@@ -1147,6 +1147,17 @@ def get_health_logs(current_user):
         fetch_all = request.args.get('all') == 'true'
         limit = int(request.args.get('limit', 50))
 
+        def make_json_safe(value):
+            if isinstance(value, ObjectId):
+                return str(value)
+            if isinstance(value, datetime.datetime):
+                return value.isoformat()
+            if isinstance(value, list):
+                return [make_json_safe(item) for item in value]
+            if isinstance(value, dict):
+                return {key: make_json_safe(item) for key, item in value.items()}
+            return value
+
         # Fetch Articulation Trials
         articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
         for trial in articulation_trials:
@@ -1252,7 +1263,7 @@ def get_health_logs(current_user):
                 exercise_plan_data = {
                     'planId': str(associated_plan['_id']),
                     'totalExercises': associated_plan.get('total_exercises', 0),
-                    'exercises': associated_plan.get('exercises', []),
+                    'exercises': make_json_safe(associated_plan.get('exercises', [])),
                     'status': associated_plan.get('status', 'ongoing'),
                     'visibility': associated_plan.get('visibility', 'active'),
                     'createdAt': associated_plan.get('created_at', datetime.datetime.utcnow()).isoformat() if isinstance(associated_plan.get('created_at'), datetime.datetime) else str(associated_plan.get('created_at', ''))
@@ -1274,7 +1285,7 @@ def get_health_logs(current_user):
                     'stride_length': metrics.get('stride_length', 0),
                     'vertical_oscillation': metrics.get('vertical_oscillation', 0),
                 },
-                'detectedProblems': gait.get('detected_problems', []),
+                'detectedProblems': make_json_safe(gait.get('detected_problems', [])),
                 'exercisePlan': exercise_plan_data,
                 'dataQuality': gait.get('data_quality', 'N/A'),
                 'duration': gait.get('analysis_duration', 0),
@@ -1444,8 +1455,8 @@ def get_gait_prescriptive_analysis(current_user):
             gait_predictor = GaitMasteryPredictor(db)
             gait_predictor.load_model()
             prediction = gait_predictor.predict_days_to_mastery(user_id)
-            if prediction and 'predicted_days_to_mastery' in prediction:
-                predicted_days = prediction['predicted_days_to_mastery']
+            if prediction:
+                predicted_days = prediction.get('predicted_days') or prediction.get('predicted_days_to_mastery')
         except Exception as e:
             print(f"Could not get gait prediction for prescriptive analysis: {e}")
         

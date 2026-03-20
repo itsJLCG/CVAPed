@@ -52,6 +52,28 @@ class GaitMasteryPredictor:
             'gait_symmetry': 'symmetry',
             'step_regularity': 'regularity'
         }
+
+    def _to_numeric(self, value, default=0.0) -> float:
+        """Convert metric values to float, supporting legacy nested dict payloads."""
+        if isinstance(value, (int, float, np.number)):
+            return float(value)
+
+        if isinstance(value, dict):
+            for key in ('value', 'current', 'score', 'avg', 'mean', 'raw'):
+                nested = value.get(key)
+                if isinstance(nested, (int, float, np.number)):
+                    return float(nested)
+            return float(default)
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _metric(self, metrics: Dict, key: str, default=0.0) -> float:
+        if not isinstance(metrics, dict):
+            return float(default)
+        return self._to_numeric(metrics.get(key, default), default)
     
     def extract_training_data(self) -> pd.DataFrame:
         """
@@ -114,7 +136,7 @@ class GaitMasteryPredictor:
             
             # Check if ALL metrics meet healthy thresholds
             is_healthy = all(
-                metrics.get(metric, 0) >= threshold
+                self._metric(metrics, metric, 0) >= threshold
                 for metric, threshold in self.healthy_thresholds.items()
             )
             
@@ -142,13 +164,13 @@ class GaitMasteryPredictor:
         first_metrics = first_session.get('metrics', {})
         
         features.update({
-            'first_cadence': first_metrics.get('cadence', 0),
-            'first_velocity': first_metrics.get('velocity', 0),
-            'first_stride_length': first_metrics.get('stride_length', 0),
-            'first_stability': first_metrics.get('stability_score', 0),
-            'first_symmetry': first_metrics.get('gait_symmetry', 0),
-            'first_regularity': first_metrics.get('step_regularity', 0),
-            'first_overall_score': first_session.get('gait_score', 0) / 100,
+            'first_cadence': self._metric(first_metrics, 'cadence', 0),
+            'first_velocity': self._metric(first_metrics, 'velocity', 0),
+            'first_stride_length': self._metric(first_metrics, 'stride_length', 0),
+            'first_stability': self._metric(first_metrics, 'stability_score', 0),
+            'first_symmetry': self._metric(first_metrics, 'gait_symmetry', 0),
+            'first_regularity': self._metric(first_metrics, 'step_regularity', 0),
+            'first_overall_score': self._to_numeric(first_session.get('gait_score', 0), 0) / 100,
             
             # Initial problem severity
             'initial_problem_count': len(first_session.get('detected_problems', [])),
@@ -162,10 +184,10 @@ class GaitMasteryPredictor:
         # 2. EARLY PERFORMANCE (First 3 Sessions)
         # ────────────────────────────────────────────────────────
         early_sessions = sessions[:min(3, len(sessions))]
-        early_cadences = [s.get('metrics', {}).get('cadence', 0) for s in early_sessions]
-        early_velocities = [s.get('metrics', {}).get('velocity', 0) for s in early_sessions]
-        early_stabilities = [s.get('metrics', {}).get('stability_score', 0) for s in early_sessions]
-        early_overall = [s.get('gait_score', 0) / 100 for s in early_sessions]
+        early_cadences = [self._metric(s.get('metrics', {}), 'cadence', 0) for s in early_sessions]
+        early_velocities = [self._metric(s.get('metrics', {}), 'velocity', 0) for s in early_sessions]
+        early_stabilities = [self._metric(s.get('metrics', {}), 'stability_score', 0) for s in early_sessions]
+        early_overall = [self._to_numeric(s.get('gait_score', 0), 0) / 100 for s in early_sessions]
         
         features.update({
             'early_avg_cadence': np.mean(early_cadences),
@@ -184,20 +206,20 @@ class GaitMasteryPredictor:
         num_sessions = len(sessions)
         
         cadence_improvement = (
-            latest_metrics.get('cadence', 0) - first_metrics.get('cadence', 0)
+            self._metric(latest_metrics, 'cadence', 0) - self._metric(first_metrics, 'cadence', 0)
         ) / num_sessions if num_sessions > 0 else 0
         
         velocity_improvement = (
-            latest_metrics.get('velocity', 0) - first_metrics.get('velocity', 0)
+            self._metric(latest_metrics, 'velocity', 0) - self._metric(first_metrics, 'velocity', 0)
         ) / num_sessions if num_sessions > 0 else 0
         
         stability_improvement = (
-            latest_metrics.get('stability_score', 0) - first_metrics.get('stability_score', 0)
+            self._metric(latest_metrics, 'stability_score', 0) - self._metric(first_metrics, 'stability_score', 0)
         ) / num_sessions if num_sessions > 0 else 0
         
         overall_improvement = (
-            (latest_session.get('gait_score', 0) / 100) - 
-            (first_session.get('gait_score', 0) / 100)
+            (self._to_numeric(latest_session.get('gait_score', 0), 0) / 100) - 
+            (self._to_numeric(first_session.get('gait_score', 0), 0) / 100)
         ) / num_sessions if num_sessions > 0 else 0
         
         features.update({
@@ -207,16 +229,16 @@ class GaitMasteryPredictor:
             'overall_improvement_rate': overall_improvement,
             
             # Total improvement magnitude
-            'total_cadence_improvement': latest_metrics.get('cadence', 0) - first_metrics.get('cadence', 0),
-            'total_velocity_improvement': latest_metrics.get('velocity', 0) - first_metrics.get('velocity', 0),
+            'total_cadence_improvement': self._metric(latest_metrics, 'cadence', 0) - self._metric(first_metrics, 'cadence', 0),
+            'total_velocity_improvement': self._metric(latest_metrics, 'velocity', 0) - self._metric(first_metrics, 'velocity', 0),
         })
         
         # ────────────────────────────────────────────────────────
         # 4. CONSISTENCY (Variance)
         # ────────────────────────────────────────────────────────
-        all_cadences = [s.get('metrics', {}).get('cadence', 0) for s in sessions]
-        all_velocities = [s.get('metrics', {}).get('velocity', 0) for s in sessions]
-        all_overall = [s.get('gait_score', 0) / 100 for s in sessions]
+        all_cadences = [self._metric(s.get('metrics', {}), 'cadence', 0) for s in sessions]
+        all_velocities = [self._metric(s.get('metrics', {}), 'velocity', 0) for s in sessions]
+        all_overall = [self._to_numeric(s.get('gait_score', 0), 0) / 100 for s in sessions]
         
         features.update({
             'cadence_variance': np.var(all_cadences) if len(all_cadences) > 1 else 0,
@@ -265,10 +287,10 @@ class GaitMasteryPredictor:
             
             # Average session metrics
             'avg_session_duration': np.mean([
-                s.get('duration', 0) for s in sessions
+                self._to_numeric(s.get('duration', 0), 0) for s in sessions
             ]),
             'avg_step_count': np.mean([
-                s.get('metrics', {}).get('step_count', 0) for s in sessions
+                self._metric(s.get('metrics', {}), 'step_count', 0) for s in sessions
             ]),
         })
         
@@ -294,7 +316,7 @@ class GaitMasteryPredictor:
         # ────────────────────────────────────────────────────────
         # Calculate deficit from healthy thresholds
         for metric, threshold in self.healthy_thresholds.items():
-            current_value = latest_metrics.get(metric, 0)
+            current_value = self._metric(latest_metrics, metric, 0)
             features[f'{metric}_deficit'] = max(0, threshold - current_value)
             features[f'{metric}_pct_of_target'] = (current_value / threshold) if threshold > 0 else 0
         
@@ -479,11 +501,11 @@ class GaitMasteryPredictor:
         # Get current status
         latest_session = sessions[-1]
         latest_metrics = latest_session.get('metrics', {})
-        current_overall_score = latest_session.get('gait_score', 0) / 100
+        current_overall_score = self._to_numeric(latest_session.get('gait_score', 0), 0) / 100
         
         # Calculate improvement rate
         if len(sessions) >= 2:
-            first_score = sessions[0].get('gait_score', 0) / 100
+            first_score = self._to_numeric(sessions[0].get('gait_score', 0), 0) / 100
             days_elapsed = (latest_session.get('created_at') - sessions[0].get('created_at')).days + 1
             improvement_rate = (current_overall_score - first_score) / days_elapsed if days_elapsed > 0 else 0
         else:
@@ -492,7 +514,7 @@ class GaitMasteryPredictor:
         # Calculate metric-specific progress
         metric_progress = {}
         for metric, threshold in self.healthy_thresholds.items():
-            current_value = latest_metrics.get(metric, 0)
+            current_value = self._metric(latest_metrics, metric, 0)
             display_name = self.metric_display_names.get(metric, metric)
             metric_progress[display_name] = {
                 'current': round(current_value, 2),

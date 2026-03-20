@@ -108,6 +108,27 @@ function Prescription({ onLogout, onFacilityExit }) {
   }
 
   if (selectedCategory === 'physical') {
+    if (error) {
+      return (
+        <div className="blank-page">
+          <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
+          <main className="blank-page-content">
+            <div className="prescription-container">
+              <div className="error-state">
+                <i className="fas fa-exclamation-triangle"></i>
+                <h3>Unable to Load Analysis</h3>
+                <p>{error}</p>
+                <button onClick={fetchGaitPrescriptiveAnalysis} className="retry-btn">
+                  <i className="fas fa-redo"></i>
+                  Try Again
+                </button>
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
     if (!analysis) {
       return (
         <div className="blank-page">

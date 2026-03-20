@@ -983,3 +983,156 @@
     text-align: center;
   }
 }
+
+/* Gait Therapy Prescription Styles */
+.gait-icon {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+}
+
+.gait-metrics-section {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.gait-metrics-section h3 {
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gait-metrics-section h3 i {
+  color: #3b82f6;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.metric-card {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  border: 2px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.metric-card.healthy {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.metric-card.needs-work {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-header i {
+  font-size: 20px;
+  color: #64748b;
+}
+
+.metric-header span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.healthy-badge {
+  margin-left: auto;
+  background: #10b981;
+  color: white;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.metric-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.metric-value .current {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.metric-value .target {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.metric-deficit {
+  font-size: 13px;
+}
+
+.deficit-value.low {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.deficit-value.high {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.gait-priority {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.gait-full-width .prescription-container {
+  padding: 24px 32px;
+}
+
+.gait-note {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-left: 4px solid #3b82f6;
+}
+
+.no-data-state i {
+  color: #3b82f6;
+}
+
+.no-data-state h3 {
+  color: #1e40af;
+}
+
+.analysis-info {
+  text-align: center;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.analysis-info i {
+  margin-right: 8px;
+}
+

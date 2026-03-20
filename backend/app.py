@@ -259,7 +259,11 @@ def token_required(f):
         token = request.headers.get('Authorization')
         
         if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
+            return jsonify({
+                'message': 'Token is missing!',
+                'error': 'TOKEN_MISSING',
+                'code': 'session/missing'
+            }), 401
         
         try:
             if token.startswith('Bearer '):
@@ -292,10 +296,18 @@ def token_required(f):
             }), 401
         except jwt.InvalidTokenError as e:
             logger.warning(f"Invalid token: {e}")
-            return jsonify({'message': 'Token is invalid!'}), 401
+            return jsonify({
+                'message': 'Token is invalid!',
+                'error': 'TOKEN_INVALID',
+                'code': 'session/invalid'
+            }), 401
         except Exception as e:
             logger.error(f"Token validation error: {e}", exc_info=True)
-            return jsonify({'message': 'Token validation failed!'}), 401
+            return jsonify({
+                'message': 'Token validation failed!',
+                'error': 'TOKEN_INVALID',
+                'code': 'session/invalid'
+            }), 401
         
         return f(current_user, *args, **kwargs)
     
@@ -5223,6 +5235,33 @@ def get_physical_therapy_data(current_user):
 
 WEARABLE_DEFAULT_DEVICE_ID = 'default-device'
 WEARABLE_LATEST_MAX_AGE_SECONDS = get_int_env('WEARABLE_LATEST_MAX_AGE_SECONDS', 300)
+WEARABLE_LIVE_LOG_EVERY_N_REQUESTS = max(1, get_int_env('WEARABLE_LIVE_LOG_EVERY_N_REQUESTS', 30))
+wearable_ingest_request_count = 0
+
+
+def log_wearable_ingest(ingest_metadata):
+    global wearable_ingest_request_count
+
+    wearable_ingest_request_count += 1
+    payload_kind = ingest_metadata.get('payload_kind', 'unknown')
+    sample_summary = ingest_metadata.get('sample_summary', {})
+
+    if payload_kind == 'analysis':
+        logger.info(
+            'Wearable analysis payload received: device=%s sensors=%s fsr=%s request=%s',
+            ingest_metadata.get('device_id'),
+            sample_summary.get('sensor_count', 0),
+            sample_summary.get('fsr_sensor_count', 0),
+            wearable_ingest_request_count,
+        )
+        return
+
+    if wearable_ingest_request_count % WEARABLE_LIVE_LOG_EVERY_N_REQUESTS == 0:
+        logger.info(
+            'Wearable live payload received: device=%s request=%s',
+            ingest_metadata.get('device_id'),
+            wearable_ingest_request_count,
+        )
 
 
 def get_request_bearer_token():
@@ -5697,11 +5736,7 @@ def wearable_data():
                 }), 400
 
             ingest_metadata = store_latest_wearable_payload(payload)
-
-            print("\n" + "="*50)
-            print(f"📡 SYNCHRONIZED DATA RECEIVED: {datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
-            print(f"   Device: {ingest_metadata['device_id']}")
-            print("="*50 + "\n")
+            log_wearable_ingest(ingest_metadata)
 
             return jsonify({
                 'status': 'ok',

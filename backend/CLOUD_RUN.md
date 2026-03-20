@@ -38,7 +38,7 @@ Create these too if you use the related features:
 - Memory: `2Gi`
 - Concurrency: `5`
 - Timeout: `300`
-- Min instances: `0`
+- Min instances: `1`
 - Max instances: set based on budget and traffic, for example `10`
 
 ## Deploy
@@ -67,6 +67,7 @@ gcloud run deploy cvaped-backend \
   --memory 2Gi \
   --concurrency 5 \
   --timeout 300 \
+  --min-instances 1 \
   --max-instances 10 \
   --set-env-vars "ENABLE_MDNS=false,CORS_ORIGINS=https://your-frontend.example,FRONTEND_URL=https://your-frontend.example" \
   --update-secrets "SECRET_KEY=SECRET_KEY:latest,MONGO_URI=MONGO_URI:latest,FIREBASE_SERVICE_ACCOUNT_JSON=FIREBASE_SERVICE_ACCOUNT_JSON:latest,WEARABLE_INGEST_TOKEN=WEARABLE_INGEST_TOKEN:latest"
@@ -100,5 +101,6 @@ CLOUDINARY_API_SECRET=CLOUDINARY_API_SECRET:latest
 ## Notes
 
 - `ENABLE_MDNS` should stay `false` on Cloud Run.
+- `WEARABLE_LIVE_LOG_EVERY_N_REQUESTS` can reduce Cloud Logging noise from high-frequency live sensor uploads.
 - `GET /api/wearable/data` still works for live polling and now reads from MongoDB instead of instance memory.
 - Rate limiting currently uses in-memory storage, so limits are per instance.

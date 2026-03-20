@@ -5,7 +5,7 @@ import { TherapyCategoryProvider } from './components/TherapyCategoryContext';
 import { VoiceSettingsProvider } from './components/VoiceSettingsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import audioManager from './services/audioManager';
-import { wakeBackend } from './services/api';
+import { authService, clearStoredAuth, wakeBackend } from './services/api';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import FacilityLogin from './pages/FacilityLogin';
@@ -42,21 +42,52 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    wakeBackend();
+    let isMounted = true;
 
-    // Check if user is authenticated
-    const token = localStorage.getItem('token');
-    const user = localStorage.getItem('user');
-    if (token && user) {
-      setIsAuthenticated(true);
-      try {
-        const userData = JSON.parse(user);
-        setUserRole(userData.role);
-      } catch (error) {
-        console.error('Error parsing user data:', error);
+    const initializeAuth = async () => {
+      wakeBackend();
+
+      const token = localStorage.getItem('token');
+      const user = localStorage.getItem('user');
+      if (!token || !user) {
+        if (isMounted) {
+          setLoading(false);
+        }
+        return;
       }
-    }
-    setLoading(false);
+
+      try {
+        await authService.getMe();
+        if (!isMounted) return;
+
+        setIsAuthenticated(true);
+        try {
+          const userData = JSON.parse(user);
+          setUserRole(userData.role);
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+          await clearStoredAuth();
+          if (!isMounted) return;
+          setIsAuthenticated(false);
+          setUserRole(null);
+        }
+      } catch (error) {
+        await clearStoredAuth();
+        if (!isMounted) return;
+        setIsAuthenticated(false);
+        setUserRole(null);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleLogin = () => {
@@ -89,20 +120,11 @@ function App() {
     // Immediately stop any active Azure/Web Speech TTS or audio playback
     audioManager.stopAll();
 
-    // Clear localStorage
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    await clearStoredAuth();
+
     // Clear gait analysis result
     localStorage.removeItem('gaitAnalysisResult');
-    
-    // Sign out from Firebase to clear auth state
-    try {
-      const { firebaseSignOut } = await import('./services/firebase');
-      await firebaseSignOut();
-    } catch (error) {
-      console.error('Error signing out from Firebase:', error);
-    }
-    
+
     // Update app state
     setIsAuthenticated(false);
     setUserRole(null);

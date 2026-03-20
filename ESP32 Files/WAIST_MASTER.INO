@@ -20,7 +20,7 @@
 
 // WiFi Configuration
 const char* ssid = "hey";
-const char* password = "higwynhi";
+const char* password = "heygwynhi";
 
 // Backend Configuration
 const char* serverUrl = "https://cvaped-backend-qrjmay7wva-uc.a.run.app/api/wearable/data";
@@ -187,6 +187,25 @@ void storeImuSample(ImuSample& sample, uint32_t timestamp, float ax, float ay, f
   sample.gz = gz;
 }
 
+void readWaistSamples(uint32_t timestamp, ImuSample& leftSample, ImuSample& rightSample) {
+  float leftWaistAx = read16(MPU_LEFT, 0x3B) / 16384.0;
+  float leftWaistAy = read16(MPU_LEFT, 0x3D) / 16384.0;
+  float leftWaistAz = read16(MPU_LEFT, 0x3F) / 16384.0;
+  float leftWaistGx = read16(MPU_LEFT, 0x43) / 131.0;
+  float leftWaistGy = read16(MPU_LEFT, 0x45) / 131.0;
+  float leftWaistGz = read16(MPU_LEFT, 0x47) / 131.0;
+
+  float rightWaistAx = read16(MPU_RIGHT, 0x3B) / 16384.0;
+  float rightWaistAy = read16(MPU_RIGHT, 0x3D) / 16384.0;
+  float rightWaistAz = read16(MPU_RIGHT, 0x3F) / 16384.0;
+  float rightWaistGx = read16(MPU_RIGHT, 0x43) / 131.0;
+  float rightWaistGy = read16(MPU_RIGHT, 0x45) / 131.0;
+  float rightWaistGz = read16(MPU_RIGHT, 0x47) / 131.0;
+
+  storeImuSample(leftSample, timestamp, leftWaistAx, leftWaistAy, leftWaistAz, leftWaistGx, leftWaistGy, leftWaistGz);
+  storeImuSample(rightSample, timestamp, rightWaistAx, rightWaistAy, rightWaistAz, rightWaistGx, rightWaistGy, rightWaistGz);
+}
+
 bool captureSample() {
   if (sampleCount >= BATCH_SAMPLES) {
     batchReady = true;
@@ -218,22 +237,7 @@ bool captureSample() {
     batchStartedAt = timestamp;
   }
 
-  float leftWaistAx = read16(MPU_LEFT, 0x3B) / 16384.0;
-  float leftWaistAy = read16(MPU_LEFT, 0x3D) / 16384.0;
-  float leftWaistAz = read16(MPU_LEFT, 0x3F) / 16384.0;
-  float leftWaistGx = read16(MPU_LEFT, 0x43) / 131.0;
-  float leftWaistGy = read16(MPU_LEFT, 0x45) / 131.0;
-  float leftWaistGz = read16(MPU_LEFT, 0x47) / 131.0;
-
-  float rightWaistAx = read16(MPU_RIGHT, 0x3B) / 16384.0;
-  float rightWaistAy = read16(MPU_RIGHT, 0x3D) / 16384.0;
-  float rightWaistAz = read16(MPU_RIGHT, 0x3F) / 16384.0;
-  float rightWaistGx = read16(MPU_RIGHT, 0x43) / 131.0;
-  float rightWaistGy = read16(MPU_RIGHT, 0x45) / 131.0;
-  float rightWaistGz = read16(MPU_RIGHT, 0x47) / 131.0;
-
-  storeImuSample(leftWaistSamples[sampleCount], timestamp, leftWaistAx, leftWaistAy, leftWaistAz, leftWaistGx, leftWaistGy, leftWaistGz);
-  storeImuSample(rightWaistSamples[sampleCount], timestamp, rightWaistAx, rightWaistAy, rightWaistAz, rightWaistGx, rightWaistGy, rightWaistGz);
+  readWaistSamples(timestamp, leftWaistSamples[sampleCount], rightWaistSamples[sampleCount]);
   storeImuSample(leftKneeSamples[sampleCount], timestamp, leftSnapshot.knee_ax, leftSnapshot.knee_ay, leftSnapshot.knee_az, leftSnapshot.knee_gx, leftSnapshot.knee_gy, leftSnapshot.knee_gz);
   storeImuSample(rightKneeSamples[sampleCount], timestamp, rightSnapshot.knee_ax, rightSnapshot.knee_ay, rightSnapshot.knee_az, rightSnapshot.knee_gx, rightSnapshot.knee_gy, rightSnapshot.knee_gz);
   storeImuSample(leftAnkleSamples[sampleCount], timestamp, leftSnapshot.ankle_ax, leftSnapshot.ankle_ay, leftSnapshot.ankle_az, leftSnapshot.ankle_gx, leftSnapshot.ankle_gy, leftSnapshot.ankle_gz);
@@ -287,37 +291,91 @@ void addFloatSamples(JsonArray valuesArray, float values[], uint8_t count) {
 }
 
 bool buildLivePayload(String& payload) {
-  if (sampleCount == 0) {
-    return false;
+  DynamicJsonDocument doc(4096);
+  struct_foot_message leftSnapshot;
+  struct_foot_message rightSnapshot;
+  bool includeLeftFoot = false;
+  bool includeRightFoot = false;
+  uint32_t timestamp = millis();
+  ImuSample leftWaistLiveSample;
+  ImuSample rightWaistLiveSample;
+
+  readWaistSamples(timestamp, leftWaistLiveSample, rightWaistLiveSample);
+
+  includeLeftFoot = leftFootDataReceived && isFootDataFresh(lastLeftFootReceivedAt);
+  includeRightFoot = rightFootDataReceived && isFootDataFresh(lastRightFootReceivedAt);
+
+  if (includeLeftFoot || includeRightFoot) {
+    noInterrupts();
+    if (includeLeftFoot) {
+      memcpy(&leftSnapshot, &leftFootData, sizeof(leftSnapshot));
+    }
+    if (includeRightFoot) {
+      memcpy(&rightSnapshot, &rightFootData, sizeof(rightSnapshot));
+    }
+    interrupts();
   }
 
-  const uint8_t latestIndex = sampleCount - 1;
-  DynamicJsonDocument doc(4096);
-
   doc["device_id"] = "WAIST_MASTER";
-  doc["timestamp"] = leftWaistSamples[latestIndex].timestamp;
+  doc["timestamp"] = timestamp;
   doc["payload_type"] = "live";
 
   if (strlen(patientUserId) > 0) {
     doc["user_id"] = patientUserId;
   }
 
-  copyImuSampleToJson(doc.createNestedObject("LEFT_WAIST"), leftWaistSamples[latestIndex]);
-  copyImuSampleToJson(doc.createNestedObject("RIGHT_WAIST"), rightWaistSamples[latestIndex]);
-  copyImuSampleToJson(doc.createNestedObject("LEFT_KNEE"), leftKneeSamples[latestIndex]);
-  copyImuSampleToJson(doc.createNestedObject("RIGHT_KNEE"), rightKneeSamples[latestIndex]);
-  copyImuSampleToJson(doc.createNestedObject("LEFT_ANKLE"), leftAnkleSamples[latestIndex]);
-  copyImuSampleToJson(doc.createNestedObject("RIGHT_ANKLE"), rightAnkleSamples[latestIndex]);
+  copyImuSampleToJson(doc.createNestedObject("LEFT_WAIST"), leftWaistLiveSample);
+  copyImuSampleToJson(doc.createNestedObject("RIGHT_WAIST"), rightWaistLiveSample);
 
-  JsonArray leftFsr = doc.createNestedArray("LEFT_FOOT_FSR");
-  leftFsr.add(leftToeFsrSamples[latestIndex]);
-  leftFsr.add(leftMidFsrSamples[latestIndex]);
-  leftFsr.add(leftHeelFsrSamples[latestIndex]);
+  if (includeLeftFoot) {
+    JsonObject leftKnee = doc.createNestedObject("LEFT_KNEE");
+    leftKnee["timestamp"] = timestamp;
+    leftKnee["ax"] = leftSnapshot.knee_ax;
+    leftKnee["ay"] = leftSnapshot.knee_ay;
+    leftKnee["az"] = leftSnapshot.knee_az;
+    leftKnee["gx"] = leftSnapshot.knee_gx;
+    leftKnee["gy"] = leftSnapshot.knee_gy;
+    leftKnee["gz"] = leftSnapshot.knee_gz;
 
-  JsonArray rightFsr = doc.createNestedArray("RIGHT_FOOT_FSR");
-  rightFsr.add(rightToeFsrSamples[latestIndex]);
-  rightFsr.add(rightMidFsrSamples[latestIndex]);
-  rightFsr.add(rightHeelFsrSamples[latestIndex]);
+    JsonObject leftAnkle = doc.createNestedObject("LEFT_ANKLE");
+    leftAnkle["timestamp"] = timestamp;
+    leftAnkle["ax"] = leftSnapshot.ankle_ax;
+    leftAnkle["ay"] = leftSnapshot.ankle_ay;
+    leftAnkle["az"] = leftSnapshot.ankle_az;
+    leftAnkle["gx"] = leftSnapshot.ankle_gx;
+    leftAnkle["gy"] = leftSnapshot.ankle_gy;
+    leftAnkle["gz"] = leftSnapshot.ankle_gz;
+
+    JsonArray leftFsr = doc.createNestedArray("LEFT_FOOT_FSR");
+    leftFsr.add(leftSnapshot.fsr[0]);
+    leftFsr.add(leftSnapshot.fsr[1]);
+    leftFsr.add(leftSnapshot.fsr[2]);
+  }
+
+  if (includeRightFoot) {
+    JsonObject rightKnee = doc.createNestedObject("RIGHT_KNEE");
+    rightKnee["timestamp"] = timestamp;
+    rightKnee["ax"] = rightSnapshot.knee_ax;
+    rightKnee["ay"] = rightSnapshot.knee_ay;
+    rightKnee["az"] = rightSnapshot.knee_az;
+    rightKnee["gx"] = rightSnapshot.knee_gx;
+    rightKnee["gy"] = rightSnapshot.knee_gy;
+    rightKnee["gz"] = rightSnapshot.knee_gz;
+
+    JsonObject rightAnkle = doc.createNestedObject("RIGHT_ANKLE");
+    rightAnkle["timestamp"] = timestamp;
+    rightAnkle["ax"] = rightSnapshot.ankle_ax;
+    rightAnkle["ay"] = rightSnapshot.ankle_ay;
+    rightAnkle["az"] = rightSnapshot.ankle_az;
+    rightAnkle["gx"] = rightSnapshot.ankle_gx;
+    rightAnkle["gy"] = rightSnapshot.ankle_gy;
+    rightAnkle["gz"] = rightSnapshot.ankle_gz;
+
+    JsonArray rightFsr = doc.createNestedArray("RIGHT_FOOT_FSR");
+    rightFsr.add(rightSnapshot.fsr[0]);
+    rightFsr.add(rightSnapshot.fsr[1]);
+    rightFsr.add(rightSnapshot.fsr[2]);
+  }
 
   payload = "";
   payload.reserve(2048);
@@ -519,7 +577,7 @@ void loop() {
     captureSample();
   }
 
-  if (sampleCount > 0 && (now - lastLiveUploadAt) >= LIVE_UPLOAD_INTERVAL_MS) {
+  if ((now - lastLiveUploadAt) >= LIVE_UPLOAD_INTERVAL_MS) {
     lastLiveUploadAt = now;
     uploadLiveSnapshot();
   }

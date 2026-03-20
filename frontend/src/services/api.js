@@ -10,6 +10,21 @@ const api = axios.create({
   },
 });
 
+export const clearStoredAuth = async () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('therapistToken');
+  localStorage.removeItem('therapistUser');
+  localStorage.removeItem('facilityMode');
+
+  try {
+    const { firebaseSignOut } = await import('./firebase');
+    await firebaseSignOut();
+  } catch (error) {
+    console.error('Error signing out from Firebase:', error);
+  }
+};
+
 export const wakeBackend = async () => {
   try {
     await fetch(`${API_BASE_URL}/api/health`, {
@@ -51,8 +66,7 @@ api.interceptors.response.use(
       
       // Handle session expiration (our new 3-hour expiry)
       if (errorCode === 'session/expired' || serverMessage?.includes('Session expired')) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        await clearStoredAuth();
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
@@ -63,20 +77,14 @@ api.interceptors.response.use(
       if (errorCode?.includes('auth/') || 
           errorMessage === 'TOKEN_EXPIRED' || 
           errorMessage === 'TOKEN_INVALID' ||
-          errorMessage === 'TOKEN_REVOKED') {
-        
-        // Clear all auth data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        
-        // Sign out from Firebase
-        try {
-          const { firebaseSignOut } = await import('./firebase');
-          await firebaseSignOut();
-        } catch (err) {
-          console.error('Error signing out from Firebase:', err);
-        }
-        
+          errorMessage === 'TOKEN_REVOKED' ||
+          errorCode === 'session/invalid' ||
+          errorCode === 'session/missing' ||
+          serverMessage === 'Token is invalid!' ||
+          serverMessage === 'Token validation failed!' ||
+          serverMessage === 'Token is missing!') {
+        await clearStoredAuth();
+
         // Redirect to login page
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
@@ -153,17 +161,7 @@ export const authService = {
   },
 
   logout: async () => {
-    // Clear localStorage first
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    // Clear any cached Firebase tokens
-    try {
-      const { firebaseSignOut } = await import('./firebase');
-      await firebaseSignOut();
-    } catch (error) {
-      console.error('Error signing out from Firebase:', error);
-    }
+    await clearStoredAuth();
   },
 
   getCurrentUser: async () => {

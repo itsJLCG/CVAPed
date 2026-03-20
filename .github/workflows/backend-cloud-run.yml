@@ -25,6 +25,7 @@ env:
   ARTIFACT_REPOSITORY: cvaped-backend
   GCP_SERVICE_ACCOUNT: github-actions-cloud-run@project-897ce48e-6275-4757-ab9.iam.gserviceaccount.com
   GCP_WORKLOAD_IDENTITY_PROVIDER: projects/592360297121/locations/global/workloadIdentityPools/github-actions/providers/github-provider
+  CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: 592360297121-compute@developer.gserviceaccount.com
   IMAGE_NAME: cvaped-backend
 
 jobs:
@@ -96,6 +97,14 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --platform managed \
+            --service-account "$CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT" \
+            --cpu 1 \
+            --memory 2Gi \
+            --concurrency 5 \
+            --timeout 300 \
+            --min-instances 1 \
+            --max-instances 10 \
+            --allow-unauthenticated \
             --quiet
 
           SERVICE_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" \

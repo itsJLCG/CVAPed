@@ -11,7 +11,7 @@ param(
     [int]$Concurrency = 5,
     [int]$TimeoutSeconds = 300,
     [int]$MaxInstances = 10,
-    [int]$MinInstances = 0,
+    [int]$MinInstances = 1,
     [switch]$NoAllowUnauthenticated
 )
 

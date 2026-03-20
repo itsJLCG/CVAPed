@@ -38,8 +38,10 @@ const char* TARGET_SSID = "hey";
 #define CHANNEL_SCAN_RETRIES 5       // How many times to re-scan before giving up
 #define CHANNEL_SCAN_DELAY_MS 2000   // Delay between scan retries
 #define FALLBACK_CHANNEL 1           // Last-resort channel if scan fails
+#define SEND_INTERVAL_MS 200         // 5 Hz sample/send rate
 
 int espnowChannel = 0;  // Will be set dynamically
+unsigned long lastStatusPrintAt = 0;
 
 // ═══════════════════════════════════════════════════════════════════════
 // WAIST ESP32 MAC Address
@@ -80,8 +82,9 @@ Adafruit_ADS1115 ads;
 // ESP-NOW Callback - Confirms data was sent
 // ═══════════════════════════════════════════════════════════════════════
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
-  Serial.print("Send Status: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "SUCCESS" : "FAILED");
+  if (status != ESP_NOW_SEND_SUCCESS) {
+    Serial.println("ESP-NOW send callback reported failure");
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -273,21 +276,6 @@ void loop() {
   leftFootData.fsr[2] = heel;
 
   // ─────────────────────────────────────────────────────────────────────
-  // Display Data
-  // ─────────────────────────────────────────────────────────────────────
-  Serial.println("════════════════════════════════════════");
-  Serial.printf("📊 LEFT Knee: (%.2f, %.2f, %.2f)\n",
-                leftFootData.knee_ax,
-                leftFootData.knee_ay,
-                leftFootData.knee_az);
-  Serial.printf("📊 LEFT Ankle: (%.2f, %.2f, %.2f)\n",
-                leftFootData.ankle_ax,
-                leftFootData.ankle_ay,
-                leftFootData.ankle_az);
-  Serial.printf("📊 LEFT FSR: Toe=%.2fV Mid=%.2fV Heel=%.2fV\n",
-                toe, mid, heel);
-
-  // ─────────────────────────────────────────────────────────────────────
   // Send to WAIST via ESP-NOW (with retries)
   // ─────────────────────────────────────────────────────────────────────
   esp_err_t result = ESP_FAIL;
@@ -304,7 +292,21 @@ void loop() {
     Serial.println("ESP-NOW Send Error after all retries!");
   }
 
-  Serial.println("════════════════════════════════════════\n");
+  if (millis() - lastStatusPrintAt >= 5000) {
+    Serial.printf(
+      "LEFT stream OK | Knee(%.2f, %.2f, %.2f) | Ankle(%.2f, %.2f, %.2f) | FSR(Toe=%.2f Mid=%.2f Heel=%.2f)\n",
+      leftFootData.knee_ax,
+      leftFootData.knee_ay,
+      leftFootData.knee_az,
+      leftFootData.ankle_ax,
+      leftFootData.ankle_ay,
+      leftFootData.ankle_az,
+      toe,
+      mid,
+      heel
+    );
+    lastStatusPrintAt = millis();
+  }
 
-  delay(1000);  // Send every 1 second
+  delay(SEND_INTERVAL_MS);
 }

@@ -1,84 +1,119 @@
 /*
- * ═══════════════════════════════════════════════════════════════════════
  * CVACare - WAIST ESP32 (MASTER)
- * ═══════════════════════════════════════════════════════════════════════
- * 
- * ROLE: WiFi Master + ESP-NOW Receiver
+ *
+ * ROLE: WiFi Master + ESP-NOW Receiver + Cloud uploader
  * - Reads WAIST sensors (2x MPU6050)
- * - RECEIVES left foot data via ESP-NOW
- * - RECEIVES right foot data via ESP-NOW
- * - Combines all data and sends to backend via WiFi
- * 
- * HARDWARE:
- * - MPU6050 (LEFT_WAIST)  → I2C Address: 0x68
- * - MPU6050 (RIGHT_WAIST) → I2C Address: 0x69
+ * - Receives left foot data via ESP-NOW
+ * - Receives right foot data via ESP-NOW
+ * - Buffers synchronized gait samples locally
+ * - Uploads batched payloads to backend over WiFi
  */
 
 #include <esp_now.h>
 #include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
-// ═══════════════════════════════════════════════════════════════════════
 // WiFi Configuration
-// ═══════════════════════════════════════════════════════════════════════
-/* const char* ssid = "HONOR X9C";
-const char* password = "buboycute"; */
-
 const char* ssid = "hey";
-const char* password = "heygwynhi";
-// ═══════════════════════════════════════════════════════════════════════
-// Backend Server URL - Using mDNS
-// ═══════════════════════════════════════════════════════════════════════
-const char* serverUrl = "http://cvacare.local:5000/api/wearable/data";
+const char* password = "higwynhi";
 
-// ═══════════════════════════════════════════════════════════════════════
-// ESP-NOW Data Structures
-// ═══════════════════════════════════════════════════════════════════════
-typedef struct struct_foot_message {
+// Backend Configuration
+const char* serverUrl = "https://cvaped-backend-qrjmay7wva-uc.a.run.app/api/wearable/data";
+const char* wearableToken = "pM4ZKYHgv7gKEEFm6HnZXZPfz5RHlmomrEFTJzeEEto";
+const char* patientUserId = "";
+const bool allowInsecureTls = true;
+
+// Sampling and upload settings
+const uint16_t SAMPLE_INTERVAL_MS = 200;
+const uint16_t LIVE_UPLOAD_INTERVAL_MS = 1000;
+const uint8_t BATCH_SAMPLES = 60;
+const uint16_t FOOT_DATA_STALE_MS = 600;
+const uint16_t HTTP_TIMEOUT_MS = 15000;
+const uint32_t UPLOAD_RETRY_MS = 5000;
+const size_t JSON_DOC_CAPACITY = 98304;
+
+// MPU6050 I2C Addresses
+#define MPU_LEFT   0x68
+#define MPU_RIGHT  0x69
+
+struct struct_foot_message {
   float knee_ax, knee_ay, knee_az;
   float knee_gx, knee_gy, knee_gz;
   float ankle_ax, ankle_ay, ankle_az;
   float ankle_gx, ankle_gy, ankle_gz;
-  float fsr[3];  // [toe, mid, heel]
-  char device_id[20];  // "LEFT_FOOT" or "RIGHT_FOOT"
-} struct_foot_message;
+  float fsr[3];
+  char device_id[20];
+};
+
+struct ImuSample {
+  uint32_t timestamp;
+  float ax, ay, az;
+  float gx, gy, gz;
+};
 
 struct_foot_message leftFootData;
 struct_foot_message rightFootData;
 bool leftFootDataReceived = false;
 bool rightFootDataReceived = false;
+unsigned long lastLeftFootReceivedAt = 0;
+unsigned long lastRightFootReceivedAt = 0;
 
-// ═══════════════════════════════════════════════════════════════════════
-// MPU6050 I2C Addresses
-// ═══════════════════════════════════════════════════════════════════════
-#define MPU_LEFT   0x68   // AD0 pin LOW or floating
-#define MPU_RIGHT  0x69   // AD0 pin connected to 3.3V
+ImuSample leftWaistSamples[BATCH_SAMPLES];
+ImuSample rightWaistSamples[BATCH_SAMPLES];
+ImuSample leftKneeSamples[BATCH_SAMPLES];
+ImuSample rightKneeSamples[BATCH_SAMPLES];
+ImuSample leftAnkleSamples[BATCH_SAMPLES];
+ImuSample rightAnkleSamples[BATCH_SAMPLES];
 
-// ═══════════════════════════════════════════════════════════════════════
-// ESP-NOW Callback - Receives foot data
-// ═══════════════════════════════════════════════════════════════════════
+float leftHeelFsrSamples[BATCH_SAMPLES];
+float leftMidFsrSamples[BATCH_SAMPLES];
+float leftToeFsrSamples[BATCH_SAMPLES];
+float rightHeelFsrSamples[BATCH_SAMPLES];
+float rightMidFsrSamples[BATCH_SAMPLES];
+float rightToeFsrSamples[BATCH_SAMPLES];
+
+uint8_t sampleCount = 0;
+bool batchReady = false;
+unsigned long lastSampleAt = 0;
+unsigned long lastUploadAttemptAt = 0;
+unsigned long lastLiveUploadAt = 0;
+unsigned long lastWaitLogAt = 0;
+unsigned long batchStartedAt = 0;
+unsigned long batchSequence = 1;
+
+WiFiClientSecure secureClient;
+
 void OnDataRecv(const esp_now_recv_info *info, const uint8_t *incomingData, int len) {
+  if (len != sizeof(struct_foot_message)) {
+    Serial.printf("Unexpected ESP-NOW packet size: %d\n", len);
+    return;
+  }
+
   struct_foot_message receivedData;
   memcpy(&receivedData, incomingData, sizeof(receivedData));
-  
+
   if (strcmp(receivedData.device_id, "LEFT_FOOT") == 0) {
     memcpy(&leftFootData, &receivedData, sizeof(receivedData));
+    if (!leftFootDataReceived) {
+      Serial.println("LEFT foot data stream detected");
+    }
     leftFootDataReceived = true;
-    Serial.println("✅ LEFT foot data received");
+    lastLeftFootReceivedAt = millis();
   } else if (strcmp(receivedData.device_id, "RIGHT_FOOT") == 0) {
     memcpy(&rightFootData, &receivedData, sizeof(receivedData));
+    if (!rightFootDataReceived) {
+      Serial.println("RIGHT foot data stream detected");
+    }
     rightFootDataReceived = true;
-    Serial.println("✅ RIGHT foot data received");
+    lastRightFootReceivedAt = millis();
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// MPU6050 Helper Functions
-// ═══════════════════════════════════════════════════════════════════════
 int16_t read16(uint8_t addr, uint8_t reg) {
   Wire.beginTransmission(addr);
   Wire.write(reg);
@@ -101,45 +136,8 @@ bool testMPU(uint8_t addr) {
   return (Wire.endTransmission() == 0);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// SETUP
-// ═══════════════════════════════════════════════════════════════════════
-void setup() {
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
-  Serial.begin(115200);
-  delay(2000);
-
-  Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║     WAIST ESP32 (MASTER)              ║");
-  Serial.println("╚════════════════════════════════════════╝");
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Initialize I2C Sensors
-  // ─────────────────────────────────────────────────────────────────────
-  Wire.begin(21, 22);
-  Wire.setClock(100000);
-  delay(100);
-
-  Serial.println("\n🔍 Detecting Sensors...");
-  
-  if (testMPU(MPU_LEFT)) {
-    Serial.println("  ✅ LEFT_WAIST (MPU6050)");
-    wakeMPU(MPU_LEFT);
-  } else {
-    Serial.println("  ❌ LEFT_WAIST NOT FOUND!");
-  }
-
-  if (testMPU(MPU_RIGHT)) {
-    Serial.println("  ✅ RIGHT_WAIST (MPU6050)");
-    wakeMPU(MPU_RIGHT);
-  } else {
-    Serial.println("  ❌ RIGHT_WAIST NOT FOUND!");
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Connect to WiFi
-  // ─────────────────────────────────────────────────────────────────────
-  Serial.println("\n📡 Connecting to WiFi...");
+bool connectToWiFi() {
+  Serial.printf("Connecting to WiFi SSID: %s\n", ssid);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
@@ -150,195 +148,386 @@ void setup() {
     attempts++;
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ WiFi Connected!");
-    Serial.print("   IP Address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("   Gateway: ");
-    Serial.println(WiFi.gatewayIP());
-    Serial.println("   Backend: http://cvacare.local:5000");
-    Serial.printf("   WiFi Channel: %d\n", WiFi.channel());
-  } else {
-    Serial.println("\n❌ WiFi Connection FAILED!");
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nWiFi connection failed");
+    return false;
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Initialize ESP-NOW
-  // ─────────────────────────────────────────────────────────────────────
-  Serial.println("\n🔗 Initializing ESP-NOW...");
-  
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("❌ ESP-NOW Init Failed!");
-    return;
-  }
-  
-  Serial.println("✅ ESP-NOW Ready");
-  esp_now_register_recv_cb(OnDataRecv);
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Display MAC Address
-  // ─────────────────────────────────────────────────────────────────────
-  Serial.println("\n📍 MY MAC ADDRESS (for foot ESP32 slave files):");
-  Serial.print("   ");
-  Serial.println(WiFi.macAddress());
-
-  Serial.println("\n════════════════════════════════════════");
-  Serial.println("  SYSTEM READY - WAITING FOR DATA");
-  Serial.println("════════════════════════════════════════\n");
+  Serial.println("\nWiFi connected");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("Backend URL: ");
+  Serial.println(serverUrl);
+  Serial.printf("WiFi Channel: %d\n", WiFi.channel());
+  return true;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// MAIN LOOP
-// ═══════════════════════════════════════════════════════════════════════
-void loop() {
-  // Check WiFi connection
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("⚠️  WiFi disconnected, reconnecting...");
-    WiFi.reconnect();
-    delay(3000);
+bool ensureWiFiConnected() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
+  }
+
+  Serial.println("WiFi disconnected, reconnecting...");
+  WiFi.disconnect();
+  delay(250);
+  return connectToWiFi();
+}
+
+bool isFootDataFresh(unsigned long lastReceivedAt) {
+  return lastReceivedAt > 0 && (millis() - lastReceivedAt) <= FOOT_DATA_STALE_MS;
+}
+
+void storeImuSample(ImuSample& sample, uint32_t timestamp, float ax, float ay, float az, float gx, float gy, float gz) {
+  sample.timestamp = timestamp;
+  sample.ax = ax;
+  sample.ay = ay;
+  sample.az = az;
+  sample.gx = gx;
+  sample.gy = gy;
+  sample.gz = gz;
+}
+
+bool captureSample() {
+  if (sampleCount >= BATCH_SAMPLES) {
+    batchReady = true;
+    return false;
+  }
+
+  if (!leftFootDataReceived || !rightFootDataReceived || !isFootDataFresh(lastLeftFootReceivedAt) || !isFootDataFresh(lastRightFootReceivedAt)) {
+    unsigned long now = millis();
+    if (now - lastWaitLogAt >= 2000) {
+      Serial.printf(
+        "Waiting for synchronized foot data (left=%s right=%s)\n",
+        isFootDataFresh(lastLeftFootReceivedAt) ? "fresh" : "stale",
+        isFootDataFresh(lastRightFootReceivedAt) ? "fresh" : "stale"
+      );
+      lastWaitLogAt = now;
+    }
+    return false;
+  }
+
+  struct_foot_message leftSnapshot;
+  struct_foot_message rightSnapshot;
+  noInterrupts();
+  memcpy(&leftSnapshot, &leftFootData, sizeof(leftSnapshot));
+  memcpy(&rightSnapshot, &rightFootData, sizeof(rightSnapshot));
+  interrupts();
+
+  uint32_t timestamp = millis();
+  if (sampleCount == 0) {
+    batchStartedAt = timestamp;
+  }
+
+  float leftWaistAx = read16(MPU_LEFT, 0x3B) / 16384.0;
+  float leftWaistAy = read16(MPU_LEFT, 0x3D) / 16384.0;
+  float leftWaistAz = read16(MPU_LEFT, 0x3F) / 16384.0;
+  float leftWaistGx = read16(MPU_LEFT, 0x43) / 131.0;
+  float leftWaistGy = read16(MPU_LEFT, 0x45) / 131.0;
+  float leftWaistGz = read16(MPU_LEFT, 0x47) / 131.0;
+
+  float rightWaistAx = read16(MPU_RIGHT, 0x3B) / 16384.0;
+  float rightWaistAy = read16(MPU_RIGHT, 0x3D) / 16384.0;
+  float rightWaistAz = read16(MPU_RIGHT, 0x3F) / 16384.0;
+  float rightWaistGx = read16(MPU_RIGHT, 0x43) / 131.0;
+  float rightWaistGy = read16(MPU_RIGHT, 0x45) / 131.0;
+  float rightWaistGz = read16(MPU_RIGHT, 0x47) / 131.0;
+
+  storeImuSample(leftWaistSamples[sampleCount], timestamp, leftWaistAx, leftWaistAy, leftWaistAz, leftWaistGx, leftWaistGy, leftWaistGz);
+  storeImuSample(rightWaistSamples[sampleCount], timestamp, rightWaistAx, rightWaistAy, rightWaistAz, rightWaistGx, rightWaistGy, rightWaistGz);
+  storeImuSample(leftKneeSamples[sampleCount], timestamp, leftSnapshot.knee_ax, leftSnapshot.knee_ay, leftSnapshot.knee_az, leftSnapshot.knee_gx, leftSnapshot.knee_gy, leftSnapshot.knee_gz);
+  storeImuSample(rightKneeSamples[sampleCount], timestamp, rightSnapshot.knee_ax, rightSnapshot.knee_ay, rightSnapshot.knee_az, rightSnapshot.knee_gx, rightSnapshot.knee_gy, rightSnapshot.knee_gz);
+  storeImuSample(leftAnkleSamples[sampleCount], timestamp, leftSnapshot.ankle_ax, leftSnapshot.ankle_ay, leftSnapshot.ankle_az, leftSnapshot.ankle_gx, leftSnapshot.ankle_gy, leftSnapshot.ankle_gz);
+  storeImuSample(rightAnkleSamples[sampleCount], timestamp, rightSnapshot.ankle_ax, rightSnapshot.ankle_ay, rightSnapshot.ankle_az, rightSnapshot.ankle_gx, rightSnapshot.ankle_gy, rightSnapshot.ankle_gz);
+
+  leftToeFsrSamples[sampleCount] = leftSnapshot.fsr[0];
+  leftMidFsrSamples[sampleCount] = leftSnapshot.fsr[1];
+  leftHeelFsrSamples[sampleCount] = leftSnapshot.fsr[2];
+  rightToeFsrSamples[sampleCount] = rightSnapshot.fsr[0];
+  rightMidFsrSamples[sampleCount] = rightSnapshot.fsr[1];
+  rightHeelFsrSamples[sampleCount] = rightSnapshot.fsr[2];
+
+  sampleCount++;
+
+  if (sampleCount >= BATCH_SAMPLES) {
+    batchReady = true;
+    lastUploadAttemptAt = 0;
+    Serial.printf("Captured %d synchronized samples (%.2fs). Preparing upload...\n", sampleCount, (millis() - batchStartedAt) / 1000.0);
+  }
+
+  return true;
+}
+
+void addImuSamples(JsonArray sensorArray, ImuSample samples[], uint8_t count) {
+  for (uint8_t i = 0; i < count; i++) {
+    JsonObject sample = sensorArray.createNestedObject();
+    sample["timestamp"] = samples[i].timestamp;
+    sample["ax"] = samples[i].ax;
+    sample["ay"] = samples[i].ay;
+    sample["az"] = samples[i].az;
+    sample["gx"] = samples[i].gx;
+    sample["gy"] = samples[i].gy;
+    sample["gz"] = samples[i].gz;
+  }
+}
+
+void copyImuSampleToJson(JsonObject sampleJson, const ImuSample& sample) {
+  sampleJson["timestamp"] = sample.timestamp;
+  sampleJson["ax"] = sample.ax;
+  sampleJson["ay"] = sample.ay;
+  sampleJson["az"] = sample.az;
+  sampleJson["gx"] = sample.gx;
+  sampleJson["gy"] = sample.gy;
+  sampleJson["gz"] = sample.gz;
+}
+
+void addFloatSamples(JsonArray valuesArray, float values[], uint8_t count) {
+  for (uint8_t i = 0; i < count; i++) {
+    valuesArray.add(values[i]);
+  }
+}
+
+bool buildLivePayload(String& payload) {
+  if (sampleCount == 0) {
+    return false;
+  }
+
+  const uint8_t latestIndex = sampleCount - 1;
+  DynamicJsonDocument doc(4096);
+
+  doc["device_id"] = "WAIST_MASTER";
+  doc["timestamp"] = leftWaistSamples[latestIndex].timestamp;
+  doc["payload_type"] = "live";
+
+  if (strlen(patientUserId) > 0) {
+    doc["user_id"] = patientUserId;
+  }
+
+  copyImuSampleToJson(doc.createNestedObject("LEFT_WAIST"), leftWaistSamples[latestIndex]);
+  copyImuSampleToJson(doc.createNestedObject("RIGHT_WAIST"), rightWaistSamples[latestIndex]);
+  copyImuSampleToJson(doc.createNestedObject("LEFT_KNEE"), leftKneeSamples[latestIndex]);
+  copyImuSampleToJson(doc.createNestedObject("RIGHT_KNEE"), rightKneeSamples[latestIndex]);
+  copyImuSampleToJson(doc.createNestedObject("LEFT_ANKLE"), leftAnkleSamples[latestIndex]);
+  copyImuSampleToJson(doc.createNestedObject("RIGHT_ANKLE"), rightAnkleSamples[latestIndex]);
+
+  JsonArray leftFsr = doc.createNestedArray("LEFT_FOOT_FSR");
+  leftFsr.add(leftToeFsrSamples[latestIndex]);
+  leftFsr.add(leftMidFsrSamples[latestIndex]);
+  leftFsr.add(leftHeelFsrSamples[latestIndex]);
+
+  JsonArray rightFsr = doc.createNestedArray("RIGHT_FOOT_FSR");
+  rightFsr.add(rightToeFsrSamples[latestIndex]);
+  rightFsr.add(rightMidFsrSamples[latestIndex]);
+  rightFsr.add(rightHeelFsrSamples[latestIndex]);
+
+  payload = "";
+  payload.reserve(2048);
+  if (serializeJson(doc, payload) == 0) {
+    Serial.println("Failed to serialize live payload");
+    return false;
+  }
+
+  return true;
+}
+
+bool buildBatchPayload(String& payload) {
+  DynamicJsonDocument doc(JSON_DOC_CAPACITY);
+
+  doc["device_id"] = "WAIST_MASTER";
+  doc["timestamp"] = millis();
+  doc["batch_id"] = batchSequence;
+  doc["sample_count"] = sampleCount;
+  doc["sample_interval_ms"] = SAMPLE_INTERVAL_MS;
+  doc["batch_duration_ms"] = sampleCount > 1 ? (leftWaistSamples[sampleCount - 1].timestamp - leftWaistSamples[0].timestamp) : 0;
+  doc["synchronized"] = true;
+
+  if (strlen(patientUserId) > 0) {
+    doc["user_id"] = patientUserId;
+  }
+
+  JsonObject sensors = doc.createNestedObject("sensors");
+  addImuSamples(sensors.createNestedArray("LEFT_WAIST"), leftWaistSamples, sampleCount);
+  addImuSamples(sensors.createNestedArray("RIGHT_WAIST"), rightWaistSamples, sampleCount);
+  addImuSamples(sensors.createNestedArray("LEFT_KNEE"), leftKneeSamples, sampleCount);
+  addImuSamples(sensors.createNestedArray("RIGHT_KNEE"), rightKneeSamples, sampleCount);
+  addImuSamples(sensors.createNestedArray("LEFT_ANKLE"), leftAnkleSamples, sampleCount);
+  addImuSamples(sensors.createNestedArray("RIGHT_ANKLE"), rightAnkleSamples, sampleCount);
+
+  JsonObject fsr = doc.createNestedObject("fsr");
+  addFloatSamples(fsr.createNestedArray("LEFT_HEEL"), leftHeelFsrSamples, sampleCount);
+  addFloatSamples(fsr.createNestedArray("LEFT_MID"), leftMidFsrSamples, sampleCount);
+  addFloatSamples(fsr.createNestedArray("LEFT_TOE"), leftToeFsrSamples, sampleCount);
+  addFloatSamples(fsr.createNestedArray("RIGHT_HEEL"), rightHeelFsrSamples, sampleCount);
+  addFloatSamples(fsr.createNestedArray("RIGHT_MID"), rightMidFsrSamples, sampleCount);
+  addFloatSamples(fsr.createNestedArray("RIGHT_TOE"), rightToeFsrSamples, sampleCount);
+
+  payload = "";
+  payload.reserve(45000);
+  if (serializeJson(doc, payload) == 0) {
+    Serial.println("Failed to serialize gait payload");
+    return false;
+  }
+
+  return true;
+}
+
+bool beginHttpClient(HTTPClient& http) {
+  String url = String(serverUrl);
+  if (url.startsWith("https://")) {
+    if (allowInsecureTls) {
+      secureClient.setInsecure();
+    }
+    secureClient.setTimeout(HTTP_TIMEOUT_MS / 1000);
+    return http.begin(secureClient, serverUrl);
+  }
+
+  return http.begin(serverUrl);
+}
+
+void clearBatch() {
+  sampleCount = 0;
+  batchReady = false;
+  batchStartedAt = 0;
+  lastUploadAttemptAt = 0;
+}
+
+bool uploadBatch() {
+  if (!batchReady || sampleCount == 0) {
+    return false;
+  }
+
+  String payload;
+  if (!buildBatchPayload(payload)) {
+    return false;
+  }
+
+  HTTPClient http;
+  if (!beginHttpClient(http)) {
+    Serial.println("Failed to initialize HTTP client");
+    return false;
+  }
+
+  http.setTimeout(HTTP_TIMEOUT_MS);
+  http.addHeader("Content-Type", "application/json");
+  if (strlen(wearableToken) > 0) {
+    http.addHeader("X-Wearable-Token", wearableToken);
+  }
+
+  int httpCode = http.POST((uint8_t*)payload.c_str(), payload.length());
+  String responseBody = http.getString();
+  http.end();
+
+  if (httpCode >= 200 && httpCode < 300) {
+    Serial.printf("Uploaded gait batch %lu successfully (HTTP %d)\n", batchSequence, httpCode);
+    Serial.printf("Samples: %d, duration: %.2fs\n", sampleCount, (leftWaistSamples[sampleCount - 1].timestamp - leftWaistSamples[0].timestamp) / 1000.0);
+    clearBatch();
+    batchSequence++;
+    return true;
+  }
+
+  Serial.printf("Batch upload failed (HTTP %d)\n", httpCode);
+  if (responseBody.length() > 0) {
+    Serial.println(responseBody);
+  }
+  return false;
+}
+
+bool uploadLiveSnapshot() {
+  String payload;
+  if (!buildLivePayload(payload)) {
+    return false;
+  }
+
+  HTTPClient http;
+  if (!beginHttpClient(http)) {
+    Serial.println("Failed to initialize HTTP client for live upload");
+    return false;
+  }
+
+  http.setTimeout(HTTP_TIMEOUT_MS);
+  http.addHeader("Content-Type", "application/json");
+  if (strlen(wearableToken) > 0) {
+    http.addHeader("X-Wearable-Token", wearableToken);
+  }
+
+  int httpCode = http.POST((uint8_t*)payload.c_str(), payload.length());
+  String responseBody = http.getString();
+  http.end();
+
+  if (httpCode >= 200 && httpCode < 300) {
+    Serial.printf("Live snapshot uploaded (HTTP %d)\n", httpCode);
+    return true;
+  }
+
+  Serial.printf("Live snapshot upload failed (HTTP %d)\n", httpCode);
+  if (responseBody.length() > 0) {
+    Serial.println(responseBody);
+  }
+  return false;
+}
+
+void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  Serial.begin(115200);
+  delay(2000);
+
+  Serial.println("\nCVACare WAIST MASTER");
+
+  Wire.begin(21, 22);
+  Wire.setClock(100000);
+  delay(100);
+
+  Serial.println("Detecting waist sensors...");
+  if (testMPU(MPU_LEFT)) {
+    Serial.println("LEFT_WAIST OK");
+    wakeMPU(MPU_LEFT);
+  } else {
+    Serial.println("LEFT_WAIST NOT FOUND");
+  }
+
+  if (testMPU(MPU_RIGHT)) {
+    Serial.println("RIGHT_WAIST OK");
+    wakeMPU(MPU_RIGHT);
+  } else {
+    Serial.println("RIGHT_WAIST NOT FOUND");
+  }
+
+  connectToWiFi();
+
+  Serial.println("Initializing ESP-NOW...");
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
     return;
   }
 
-  // Wait for foot data (timeout after 2 seconds)
-  unsigned long startWait = millis();
-  while ((!leftFootDataReceived || !rightFootDataReceived) && (millis() - startWait) < 2000) {
-    delay(10);
+  esp_now_register_recv_cb(OnDataRecv);
+  Serial.println("ESP-NOW ready");
+  Serial.print("WAIST MAC Address: ");
+  Serial.println(WiFi.macAddress());
+  Serial.println("Waiting for foot sensor streams...");
+}
+
+void loop() {
+  if (!ensureWiFiConnected()) {
+    delay(1000);
+    return;
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Read WAIST Sensors
-  // ─────────────────────────────────────────────────────────────────────
-  float left_waist_ax = read16(MPU_LEFT, 0x3B) / 16384.0;
-  float left_waist_ay = read16(MPU_LEFT, 0x3D) / 16384.0;
-  float left_waist_az = read16(MPU_LEFT, 0x3F) / 16384.0;
-  float left_waist_gx = read16(MPU_LEFT, 0x43) / 131.0;
-  float left_waist_gy = read16(MPU_LEFT, 0x45) / 131.0;
-  float left_waist_gz = read16(MPU_LEFT, 0x47) / 131.0;
+  unsigned long now = millis();
 
-  float right_waist_ax = read16(MPU_RIGHT, 0x3B) / 16384.0;
-  float right_waist_ay = read16(MPU_RIGHT, 0x3D) / 16384.0;
-  float right_waist_az = read16(MPU_RIGHT, 0x3F) / 16384.0;
-  float right_waist_gx = read16(MPU_RIGHT, 0x43) / 131.0;
-  float right_waist_gy = read16(MPU_RIGHT, 0x45) / 131.0;
-  float right_waist_gz = read16(MPU_RIGHT, 0x47) / 131.0;
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Build JSON Payload
-  // ─────────────────────────────────────────────────────────────────────
-  StaticJsonDocument<2048> doc;
-  
-  doc["device_id"] = "WAIST_MASTER";
-  doc["timestamp"] = millis();
-  doc["synchronized"] = leftFootDataReceived && rightFootDataReceived;
-
-  // WAIST DATA
-  JsonObject leftWaist = doc.createNestedObject("LEFT_WAIST");
-  leftWaist["ax"] = left_waist_ax;
-  leftWaist["ay"] = left_waist_ay;
-  leftWaist["az"] = left_waist_az;
-  leftWaist["gx"] = left_waist_gx;
-  leftWaist["gy"] = left_waist_gy;
-  leftWaist["gz"] = left_waist_gz;
-
-  JsonObject rightWaist = doc.createNestedObject("RIGHT_WAIST");
-  rightWaist["ax"] = right_waist_ax;
-  rightWaist["ay"] = right_waist_ay;
-  rightWaist["az"] = right_waist_az;
-  rightWaist["gx"] = right_waist_gx;
-  rightWaist["gy"] = right_waist_gy;
-  rightWaist["gz"] = right_waist_gz;
-
-  // LEFT FOOT DATA (if received)
-  if (leftFootDataReceived) {
-    JsonObject leftKnee = doc.createNestedObject("LEFT_KNEE");
-    leftKnee["ax"] = leftFootData.knee_ax;
-    leftKnee["ay"] = leftFootData.knee_ay;
-    leftKnee["az"] = leftFootData.knee_az;
-    leftKnee["gx"] = leftFootData.knee_gx;
-    leftKnee["gy"] = leftFootData.knee_gy;
-    leftKnee["gz"] = leftFootData.knee_gz;
-
-    JsonObject leftAnkle = doc.createNestedObject("LEFT_ANKLE");
-    leftAnkle["ax"] = leftFootData.ankle_ax;
-    leftAnkle["ay"] = leftFootData.ankle_ay;
-    leftAnkle["az"] = leftFootData.ankle_az;
-    leftAnkle["gx"] = leftFootData.ankle_gx;
-    leftAnkle["gy"] = leftFootData.ankle_gy;
-    leftAnkle["gz"] = leftFootData.ankle_gz;
-
-    JsonArray leftFsr = doc.createNestedArray("LEFT_FOOT_FSR");
-    leftFsr.add(leftFootData.fsr[0]);  // toe
-    leftFsr.add(leftFootData.fsr[1]);  // mid
-    leftFsr.add(leftFootData.fsr[2]);  // heel
+  if (!batchReady && (now - lastSampleAt) >= SAMPLE_INTERVAL_MS) {
+    lastSampleAt = now;
+    captureSample();
   }
 
-  // RIGHT FOOT DATA (if received)
-  if (rightFootDataReceived) {
-    JsonObject rightKnee = doc.createNestedObject("RIGHT_KNEE");
-    rightKnee["ax"] = rightFootData.knee_ax;
-    rightKnee["ay"] = rightFootData.knee_ay;
-    rightKnee["az"] = rightFootData.knee_az;
-    rightKnee["gx"] = rightFootData.knee_gx;
-    rightKnee["gy"] = rightFootData.knee_gy;
-    rightKnee["gz"] = rightFootData.knee_gz;
-
-    JsonObject rightAnkle = doc.createNestedObject("RIGHT_ANKLE");
-    rightAnkle["ax"] = rightFootData.ankle_ax;
-    rightAnkle["ay"] = rightFootData.ankle_ay;
-    rightAnkle["az"] = rightFootData.ankle_az;
-    rightAnkle["gx"] = rightFootData.ankle_gx;
-    rightAnkle["gy"] = rightFootData.ankle_gy;
-    rightAnkle["gz"] = rightFootData.ankle_gz;
-
-    JsonArray rightFsr = doc.createNestedArray("RIGHT_FOOT_FSR");
-    rightFsr.add(rightFootData.fsr[0]);  // toe
-    rightFsr.add(rightFootData.fsr[1]);  // mid
-    rightFsr.add(rightFootData.fsr[2]);  // heel
+  if (sampleCount > 0 && (now - lastLiveUploadAt) >= LIVE_UPLOAD_INTERVAL_MS) {
+    lastLiveUploadAt = now;
+    uploadLiveSnapshot();
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Send to Backend
-  // ─────────────────────────────────────────────────────────────────────
-  String payload;
-  serializeJson(doc, payload);
-
-  HTTPClient http;
-  http.begin(serverUrl);
-  http.addHeader("Content-Type", "application/json");
-  int httpCode = http.POST(payload);
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Display Results
-  // ─────────────────────────────────────────────────────────────────────
-  Serial.println("════════════════════════════════════════");
-  Serial.printf("📊 Data Sent (Sync: L=%s R=%s)\n", 
-                leftFootDataReceived ? "✓" : "✗",
-                rightFootDataReceived ? "✓" : "✗");
-  Serial.printf("   WAIST: L(%.2f,%.2f,%.2f) R(%.2f,%.2f,%.2f)\n", 
-                left_waist_ax, left_waist_ay, left_waist_az,
-                right_waist_ax, right_waist_ay, right_waist_az);
-  
-  if (leftFootDataReceived) {
-    Serial.printf("   LEFT:  Knee(%.2f,%.2f,%.2f) FSR(%.2f,%.2f,%.2f)\n",
-                  leftFootData.knee_ax, leftFootData.knee_ay, leftFootData.knee_az,
-                  leftFootData.fsr[0], leftFootData.fsr[1], leftFootData.fsr[2]);
+  if (batchReady && (lastUploadAttemptAt == 0 || (now - lastUploadAttemptAt) >= UPLOAD_RETRY_MS)) {
+    lastUploadAttemptAt = now;
+    uploadBatch();
   }
-  
-  if (rightFootDataReceived) {
-    Serial.printf("   RIGHT: Knee(%.2f,%.2f,%.2f) FSR(%.2f,%.2f,%.2f)\n",
-                  rightFootData.knee_ax, rightFootData.knee_ay, rightFootData.knee_az,
-                  rightFootData.fsr[0], rightFootData.fsr[1], rightFootData.fsr[2]);
-  }
-  
-  Serial.printf("📤 HTTP Response: %d %s\n", httpCode, 
-                httpCode == 200 ? "✅ OK" : "❌ ERROR");
-  Serial.println("════════════════════════════════════════\n");
 
-  http.end();
-
-  // Reset flags for next cycle
-  leftFootDataReceived = false;
-  rightFootDataReceived = false;
-  
-  delay(1000);  // Send every 1 second
+  delay(10);
 }

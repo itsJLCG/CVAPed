@@ -1,0 +1,15 @@
+.gcloudignore
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+env/
+uploads/
+*.wav
+*.mp3
+cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json
+*-firebase-adminsdk-*.json

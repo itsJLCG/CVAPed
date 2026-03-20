@@ -41,6 +41,26 @@ from physical_therapy_crud import physical_therapy_bp, init_physical_therapy_cru
 # Load environment variables from .env file
 load_dotenv()
 
+IS_CLOUD_RUN = bool(os.getenv('K_SERVICE'))
+DEFAULT_FIREBASE_SERVICE_ACCOUNT_PATH = 'cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json'
+
+
+def get_bool_env(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def get_int_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
 # Helper function for timezone-aware UTC datetime
 def utc_now():
     """Returns current UTC time as timezone-aware datetime"""
@@ -49,10 +69,6 @@ def utc_now():
 def initialize_firebase_admin():
     """Initialize Firebase Admin using JSON content or a service-account file path."""
     service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
-    service_account_path = os.getenv(
-        'FIREBASE_SERVICE_ACCOUNT_PATH',
-        'cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json'
-    )
 
     if service_account_json:
         try:
@@ -61,14 +77,31 @@ def initialize_firebase_admin():
         except json.JSONDecodeError as e:
             raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON: {e}")
     else:
-        if not os.path.isabs(service_account_path):
-            service_account_path = os.path.join(os.path.dirname(__file__), service_account_path)
-        if not os.path.exists(service_account_path):
+        candidate_paths = []
+        configured_service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
+
+        if configured_service_account_path:
+            candidate_paths.append(configured_service_account_path)
+
+        if not IS_CLOUD_RUN:
+            candidate_paths.append(DEFAULT_FIREBASE_SERVICE_ACCOUNT_PATH)
+
+        resolved_service_account_path = None
+        for candidate_path in candidate_paths:
+            path_to_check = candidate_path
+            if not os.path.isabs(path_to_check):
+                path_to_check = os.path.join(os.path.dirname(__file__), path_to_check)
+            if os.path.exists(path_to_check):
+                resolved_service_account_path = path_to_check
+                break
+
+        if not resolved_service_account_path:
             raise RuntimeError(
-                f"Firebase service account file not found: {service_account_path}. "
-                "Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON."
+                'Firebase service account credentials are not configured. '
+                'Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH.'
             )
-        cred = credentials.Certificate(service_account_path)
+
+        cred = credentials.Certificate(resolved_service_account_path)
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)
@@ -102,7 +135,7 @@ CORS(
     app,
     origins=cors_origins,
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "X-Wearable-Token"],
     expose_headers=["Content-Type", "Authorization"],
     supports_credentials=True,
     max_age=86400,  # Cache preflight response for 24 hours
@@ -112,7 +145,7 @@ CORS(
 print("✅ CORS initialized for allowed origins")
 print(f"   - Allowed origins: {', '.join(cors_origins)}")
 print("   - Allowed methods: GET, POST, PUT, DELETE, PATCH, OPTIONS")
-print("   - Allowed headers: Content-Type, Authorization, X-Requested-With, Accept, Origin")
+print("   - Allowed headers: Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Wearable-Token")
 print("   - Credentials: enabled")
 
 # Rate limiting
@@ -148,10 +181,18 @@ language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
 appointments_collection = db['appointments']
 facility_diagnostics_collection = db['facility_diagnostics']
+wearable_latest_collection = db['wearable_latest']
+
+try:
+    wearable_latest_collection.create_index('device_id', unique=True)
+    wearable_latest_collection.create_index([('updated_at', -1)])
+    wearable_latest_collection.create_index([('user_id', 1), ('updated_at', -1)])
+except Exception as e:
+    logger.warning(f'Wearable index initialization failed: {e}')
 
 # Register fluency CRUD blueprint
 app.register_blueprint(fluency_bp)
-init_fluency_crud(db)
+init_fluency_crud(db, app.config['SECRET_KEY'])
 
 # Register language CRUD blueprint
 app.register_blueprint(language_bp)
@@ -167,7 +208,7 @@ init_articulation_crud(db, app.config['SECRET_KEY'])
 
 # Register admin management blueprint
 app.register_blueprint(admin_bp)
-init_admin_management(db)
+init_admin_management(db, app.config['SECRET_KEY'])
 
 # Register success story CRUD blueprint
 app.register_blueprint(success_story_bp, url_prefix='/api')
@@ -175,7 +216,7 @@ init_success_story_crud(db)
 
 # Register physical therapy CRUD blueprint
 app.register_blueprint(physical_therapy_bp)
-init_physical_therapy_crud(db)
+init_physical_therapy_crud(db, app.config['SECRET_KEY'])
 
 # Initialize XGBoost Prediction Service (Standalone - all 5 predictors)
 print("\n🤖 Initializing XGBoost Prediction Models...")
@@ -1135,6 +1176,32 @@ def get_all_completed_evaluations(current_user):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'healthy', 'message': 'CVACare API is running'}), 200
+
+
+@app.route('/api/health/ready', methods=['GET'])
+def readiness():
+    checks = {
+        'firebase': 'ok' if firebase_admin._apps else 'error',
+        'mongodb': 'unknown',
+    }
+    status_code = 200
+
+    try:
+        client.admin.command('ping')
+        checks['mongodb'] = 'ok'
+    except Exception as e:
+        logger.error(f'MongoDB readiness check failed: {e}', exc_info=True)
+        checks['mongodb'] = 'error'
+        status_code = 503
+
+    if not firebase_admin._apps:
+        status_code = 503
+
+    return jsonify({
+        'status': 'ready' if status_code == 200 else 'not_ready',
+        'checks': checks,
+        'service': 'CVACare API',
+    }), status_code
 
 # Health Logs Endpoints
 @app.route('/api/health/logs', methods=['GET'])
@@ -5154,8 +5221,457 @@ def get_physical_therapy_data(current_user):
 # WEARABLE GAIT ANALYSIS ENDPOINTS
 # ============================================================================
 
-# Global variable to store latest wearable sensor data
-latest_wearable_data = {}
+WEARABLE_DEFAULT_DEVICE_ID = 'default-device'
+WEARABLE_LATEST_MAX_AGE_SECONDS = get_int_env('WEARABLE_LATEST_MAX_AGE_SECONDS', 300)
+
+
+def get_request_bearer_token():
+    auth_header = request.headers.get('Authorization', '').strip()
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:].strip() or None
+    return auth_header or None
+
+
+def is_wearable_ingest_authorized():
+    expected_token = os.getenv('WEARABLE_INGEST_TOKEN')
+    if not expected_token:
+        return True
+
+    provided_token = request.headers.get('X-Wearable-Token') or get_request_bearer_token()
+    return provided_token == expected_token
+
+
+def summarize_wearable_payload(payload):
+    sensors = payload.get('sensors') if isinstance(payload.get('sensors'), dict) else {}
+    fsr_data = payload.get('fsr') if isinstance(payload.get('fsr'), dict) else {}
+
+    if not sensors:
+        direct_sensor_names = [
+            'LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE',
+            'LEFT_ANKLE', 'RIGHT_ANKLE', 'LEFT_TOE', 'RIGHT_TOE'
+        ]
+        sensors = {
+            sensor_name: payload.get(sensor_name)
+            for sensor_name in direct_sensor_names
+            if isinstance(payload.get(sensor_name), dict)
+        }
+
+    if not fsr_data:
+        fsr_keys = ['LEFT_FOOT_FSR', 'RIGHT_FOOT_FSR']
+        fsr_data = {
+            fsr_name: payload.get(fsr_name)
+            for fsr_name in fsr_keys
+            if isinstance(payload.get(fsr_name), list)
+        }
+
+    return {
+        'sensor_count': len(sensors),
+        'fsr_sensor_count': len(fsr_data),
+        'sensor_samples': {
+            sensor_name: len(sensor_readings) if isinstance(sensor_readings, list) else 1
+            for sensor_name, sensor_readings in sensors.items()
+        },
+        'fsr_samples': {
+            sensor_name: len(sensor_readings) if isinstance(sensor_readings, list) else 1
+            for sensor_name, sensor_readings in fsr_data.items()
+        }
+    }
+
+
+def get_latest_sensor_sample(sensor_entry):
+    if isinstance(sensor_entry, list):
+        for sample in reversed(sensor_entry):
+            if isinstance(sample, dict):
+                return sample
+        return None
+
+    if isinstance(sensor_entry, dict):
+        return sensor_entry
+
+    return None
+
+
+def get_latest_fsr_value(fsr_entry):
+    if isinstance(fsr_entry, list):
+        for value in reversed(fsr_entry):
+            if isinstance(value, (int, float)):
+                return value
+        return None
+
+    if isinstance(fsr_entry, (int, float)):
+        return fsr_entry
+
+    return None
+
+
+def build_live_snapshot(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    snapshot = {}
+    direct_sensor_names = [
+        'LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE',
+        'LEFT_ANKLE', 'RIGHT_ANKLE', 'LEFT_TOE', 'RIGHT_TOE'
+    ]
+
+    for sensor_name in direct_sensor_names:
+        sensor_sample = get_latest_sensor_sample(payload.get(sensor_name))
+        if sensor_sample:
+            snapshot[sensor_name] = sensor_sample
+
+    if 'LEFT_TOE' not in snapshot and 'LEFT_ANKLE' in snapshot:
+        snapshot['LEFT_TOE'] = snapshot['LEFT_ANKLE']
+    if 'RIGHT_TOE' not in snapshot and 'RIGHT_ANKLE' in snapshot:
+        snapshot['RIGHT_TOE'] = snapshot['RIGHT_ANKLE']
+
+    if isinstance(payload.get('LEFT_FOOT_FSR'), list):
+        snapshot['LEFT_FOOT_FSR'] = payload['LEFT_FOOT_FSR']
+    if isinstance(payload.get('RIGHT_FOOT_FSR'), list):
+        snapshot['RIGHT_FOOT_FSR'] = payload['RIGHT_FOOT_FSR']
+
+    sensors = payload.get('sensors') if isinstance(payload.get('sensors'), dict) else {}
+    fsr_data = payload.get('fsr') if isinstance(payload.get('fsr'), dict) else {}
+
+    sensor_aliases = {
+        'LEFT_WAIST': 'LEFT_WAIST',
+        'RIGHT_WAIST': 'RIGHT_WAIST',
+        'LEFT_KNEE': 'LEFT_KNEE',
+        'RIGHT_KNEE': 'RIGHT_KNEE',
+        'LEFT_ANKLE': 'LEFT_ANKLE',
+        'RIGHT_ANKLE': 'RIGHT_ANKLE',
+        'LEFT_TOE': 'LEFT_ANKLE',
+        'RIGHT_TOE': 'RIGHT_ANKLE',
+    }
+
+    for target_name, source_name in sensor_aliases.items():
+        sensor_sample = get_latest_sensor_sample(sensors.get(source_name))
+        if sensor_sample and target_name not in snapshot:
+            snapshot[target_name] = sensor_sample
+
+    left_fsr = [
+        get_latest_fsr_value(fsr_data.get('LEFT_TOE')),
+        get_latest_fsr_value(fsr_data.get('LEFT_MID')),
+        get_latest_fsr_value(fsr_data.get('LEFT_HEEL')),
+    ]
+    right_fsr = [
+        get_latest_fsr_value(fsr_data.get('RIGHT_TOE')),
+        get_latest_fsr_value(fsr_data.get('RIGHT_MID')),
+        get_latest_fsr_value(fsr_data.get('RIGHT_HEEL')),
+    ]
+
+    if any(value is not None for value in left_fsr):
+        snapshot['LEFT_FOOT_FSR'] = [value if value is not None else 0 for value in left_fsr]
+    if any(value is not None for value in right_fsr):
+        snapshot['RIGHT_FOOT_FSR'] = [value if value is not None else 0 for value in right_fsr]
+
+    if payload.get('device_id'):
+        snapshot['device_id'] = payload.get('device_id')
+    if payload.get('timestamp') is not None:
+        snapshot['timestamp'] = payload.get('timestamp')
+
+    return snapshot
+
+
+def get_analysis_payload(document):
+    if not isinstance(document, dict):
+        return {}
+
+    if isinstance(document.get('analysis_payload'), dict):
+        return document['analysis_payload']
+
+    if isinstance(document.get('payload'), dict):
+        payload = document['payload']
+        if isinstance(payload.get('sensors'), dict):
+            return payload
+
+    return {}
+
+
+def build_wearable_query(device_id=None, user_id=None):
+    query = {}
+    if device_id:
+        query['device_id'] = str(device_id)
+    if user_id:
+        query['user_id'] = str(user_id)
+    return query
+
+
+def get_latest_wearable_document(device_id=None, user_id=None):
+    query = build_wearable_query(device_id=device_id, user_id=user_id)
+    if not query:
+        query = {}
+    return wearable_latest_collection.find_one(query, sort=[('updated_at', -1)])
+
+
+def serialize_wearable_metadata(document):
+    updated_at = document.get('updated_at')
+    created_at = document.get('created_at')
+    live_updated_at = document.get('live_updated_at')
+    analysis_updated_at = document.get('analysis_updated_at')
+    is_stale = False
+
+    freshness_reference = live_updated_at or updated_at
+    if freshness_reference and WEARABLE_LATEST_MAX_AGE_SECONDS > 0:
+        try:
+            is_stale = (utc_now() - freshness_reference).total_seconds() > WEARABLE_LATEST_MAX_AGE_SECONDS
+        except TypeError:
+            is_stale = False
+
+    return {
+        'device_id': document.get('device_id'),
+        'user_id': document.get('user_id'),
+        'created_at': created_at.isoformat() if created_at else None,
+        'updated_at': updated_at.isoformat() if updated_at else None,
+        'live_updated_at': live_updated_at.isoformat() if live_updated_at else None,
+        'analysis_updated_at': analysis_updated_at.isoformat() if analysis_updated_at else None,
+        'is_stale': is_stale,
+        'sample_summary': document.get('sample_summary', {}),
+        'analysis_summary': document.get('analysis_summary', {}),
+        'last_payload_kind': document.get('last_payload_kind')
+    }
+
+
+def store_latest_wearable_payload(payload):
+    normalized_payload = dict(payload)
+    device_id = str(normalized_payload.get('device_id') or WEARABLE_DEFAULT_DEVICE_ID)
+    normalized_payload['device_id'] = device_id
+
+    user_id = normalized_payload.get('user_id')
+    if user_id is not None:
+        user_id = str(user_id)
+        normalized_payload['user_id'] = user_id
+
+    received_at = utc_now()
+    sample_summary = summarize_wearable_payload(normalized_payload)
+    live_snapshot = build_live_snapshot(normalized_payload)
+    payload_kind = 'analysis' if isinstance(normalized_payload.get('sensors'), dict) else 'live'
+
+    set_data = {
+        'device_id': device_id,
+        'user_id': user_id,
+        'payload': normalized_payload,
+        'sample_summary': sample_summary,
+        'updated_at': received_at,
+        'last_payload_kind': payload_kind,
+    }
+
+    if live_snapshot:
+        set_data['live_snapshot'] = live_snapshot
+        set_data['live_updated_at'] = received_at
+
+    if payload_kind == 'analysis':
+        set_data['analysis_payload'] = normalized_payload
+        set_data['analysis_summary'] = sample_summary
+        set_data['analysis_updated_at'] = received_at
+
+    wearable_latest_collection.update_one(
+        {'device_id': device_id},
+        {
+            '$set': set_data,
+            '$setOnInsert': {
+                'created_at': received_at,
+            }
+        },
+        upsert=True
+    )
+
+    return {
+        'device_id': device_id,
+        'user_id': user_id,
+        'updated_at': received_at,
+        'sample_summary': sample_summary,
+        'payload_kind': payload_kind,
+    }
+
+
+def normalize_hardware_sensor_data(sensor_data):
+    if not isinstance(sensor_data, dict):
+        return sensor_data
+
+    normalized = dict(sensor_data)
+    sensor_aliases = {
+        'LEFT_TOE': 'LEFT_ANKLE',
+        'RIGHT_TOE': 'RIGHT_ANKLE',
+    }
+
+    for canonical_name, alias_name in sensor_aliases.items():
+        if canonical_name not in normalized and alias_name in normalized:
+            normalized[canonical_name] = normalized[alias_name]
+
+    return normalized
+
+
+def run_hardware_gait_analysis(current_user, data, latest_document=None):
+    from hardware_gait_processor import HardwareGaitProcessor
+
+    if not isinstance(data, dict):
+        return jsonify({
+            'success': False,
+            'message': 'Invalid gait payload'
+        }), 400
+
+    print("\n" + "🎯" + "="*60)
+    print("GAIT ANALYSIS REQUEST RECEIVED")
+    print("="*60)
+
+    sensor_data = normalize_hardware_sensor_data(data.get('sensors', {}))
+    fsr_data = data.get('fsr', {})
+
+    if not isinstance(sensor_data, dict):
+        return jsonify({
+            'success': False,
+            'message': 'sensors payload must be an object'
+        }), 400
+
+    if not isinstance(fsr_data, dict):
+        return jsonify({
+            'success': False,
+            'message': 'fsr payload must be an object'
+        }), 400
+
+    for sensor, readings in sensor_data.items():
+        print(f"  {sensor}: {len(readings) if isinstance(readings, list) else 0} data points")
+
+    required_sensors = ['LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE', 'LEFT_TOE', 'RIGHT_TOE']
+    missing_sensors = [s for s in required_sensors if s not in sensor_data or not sensor_data[s]]
+
+    if len(missing_sensors) > 2:
+        print(f"❌ Too many sensors missing: {missing_sensors}")
+        return jsonify({
+            'success': False,
+            'message': f'Too many sensors missing: {missing_sensors}'
+        }), 400
+
+    print("✅ Sensor validation passed. Processing gait analysis...")
+
+    processor = HardwareGaitProcessor()
+    result = processor.analyze(
+        sensor_data=sensor_data,
+        fsr_data=fsr_data,
+        user_id=str(current_user['_id'])
+    )
+
+    if not result['success']:
+        print(f"❌ Analysis failed: {result.get('error')}")
+        return jsonify(result), 400
+
+    print("✅ Analysis complete!")
+    print(f"  Steps: {result['data']['metrics']['step_count']}")
+    print(f"  Cadence: {result['data']['metrics']['cadence']} steps/min")
+    print(f"  Quality: {result['data']['data_quality']}")
+
+    gait_progress_collection = db['gaitprogresses']
+    result['data']['metrics']['analysis_duration'] = result['data']['analysis_duration']
+
+    gait_document = {
+        'user_id': str(current_user['_id']),
+        'session_id': result['data']['session_id'],
+        'metrics': result['data']['metrics'],
+        'sensors_used': result['data']['sensors_used'],
+        'gait_phases': result['data']['gait_phases'],
+        'analysis_duration': result['data']['analysis_duration'],
+        'data_quality': result['data']['data_quality'],
+        'detected_problems': result['data']['detected_problems'],
+        'problem_summary': result['data']['problem_summary'],
+        'gait_score': result['data'].get('gait_score'),
+        'created_at': utc_now(),
+        'updated_at': utc_now()
+    }
+
+    source_device_id = data.get('device_id')
+    if latest_document:
+        gait_document['wearable_source'] = {
+            'device_id': latest_document.get('device_id'),
+            'user_id': latest_document.get('user_id'),
+            'updated_at': latest_document.get('updated_at'),
+            'sample_summary': latest_document.get('sample_summary', {})
+        }
+        source_device_id = latest_document.get('device_id') or source_device_id
+
+    if source_device_id:
+        gait_document['source_device_id'] = str(source_device_id)
+        result['data']['source_device_id'] = str(source_device_id)
+
+    if getattr(g, 'token_data', {}).get('facility_mode'):
+        gait_document['location'] = 'facility'
+
+    insert_result = gait_progress_collection.insert_one(gait_document)
+    gait_id = str(insert_result.inserted_id)
+
+    print("💾 Saved to MongoDB collection: gaitprogresses")
+    print(f"   Document ID: {gait_id}")
+
+    exercise_plan_created = False
+    if result['data']['detected_problems'] and len(result['data']['detected_problems']) > 0:
+        try:
+            print(f"🏋️  Processing exercise plan for {len(result['data']['detected_problems'])} detected problems...")
+
+            exercise_plans_collection = db['exerciseplans']
+            exercises = []
+            for problem in result['data']['detected_problems']:
+                recommendations = problem.get('exercises') or problem.get('recommendations', [])
+                if recommendations:
+                    rec = recommendations[0]
+                    exercises.append({
+                        'exercise_id': rec.get('id'),
+                        'exercise_name': rec.get('name'),
+                        'problem_targeted': problem.get('problem'),
+                        'severity': problem.get('severity'),
+                        'description': rec.get('description'),
+                        'duration': rec.get('duration'),
+                        'difficulty': rec.get('difficulty')
+                    })
+
+            if len(exercises) == 0:
+                print("⚠️  No exercises found in detected problems")
+            else:
+                print("📝 Creating new exercise plan...")
+                print(f"DEBUG - Gait insert_result.inserted_id: {insert_result.inserted_id}, type: {type(insert_result.inserted_id)}")
+
+                plan = {
+                    'user_id': str(current_user['_id']),
+                    'gait_analysis_id': insert_result.inserted_id,
+                    'gait_metrics': result['data']['metrics'],
+                    'detected_problems': result['data']['detected_problems'],
+                    'exercises': exercises,
+                    'total_exercises': len(exercises),
+                    'status': 'ongoing',
+                    'visibility': 'active',
+                    'created_at': utc_now(),
+                    'updated_at': utc_now()
+                }
+
+                print(f"DEBUG - Plan dict gait_analysis_id before insert: {plan['gait_analysis_id']}")
+
+                plan_result = exercise_plans_collection.insert_one(plan)
+                print(f"✅ Exercise plan created: {plan_result.inserted_id}")
+                print(f"   {len(exercises)} exercises recommended")
+
+                saved_plan = exercise_plans_collection.find_one({'_id': plan_result.inserted_id})
+                print(f"DEBUG - Saved plan gait_analysis_id: {saved_plan.get('gait_analysis_id')}")
+
+                exercise_plan_created = True
+
+        except Exception as plan_error:
+            logger.error(f"Failed to create/update exercise plan: {plan_error}", exc_info=True)
+            print(f"❌ Exercise plan operation failed: {str(plan_error)}")
+    else:
+        print("ℹ️  No problems detected, skipping exercise plan creation")
+
+    print("="*60 + "\n")
+
+    response_payload = {
+        'success': True,
+        'message': 'Hardware gait analysis completed',
+        'data': result['data'],
+        'gait_id': gait_id,
+        'exercise_plan_created': exercise_plan_created
+    }
+
+    if latest_document:
+        response_payload['wearable_source'] = serialize_wearable_metadata(latest_document)
+
+    return jsonify(response_payload), 200
 
 @app.route('/api/wearable/data', methods=['GET', 'POST'])
 @limiter.exempt
@@ -5165,28 +5681,59 @@ def wearable_data():
     POST: Receive combined sensor data from ESP-NOW master device
     GET: Retrieve latest sensor data for web interface
     """
-    global latest_wearable_data
-    
     if request.method == 'POST':
-        # Receive data from wearable sensors (already synchronized via ESP-NOW)
+        if not is_wearable_ingest_authorized():
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid wearable ingest token'
+            }), 401
+
         try:
-            latest_wearable_data = request.json
-            # Log received data for debugging
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Invalid JSON payload'
+                }), 400
+
+            ingest_metadata = store_latest_wearable_payload(payload)
+
             print("\n" + "="*50)
             print(f"📡 SYNCHRONIZED DATA RECEIVED: {datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
-            print(f"   Device: {latest_wearable_data.get('device_id', 'UNKNOWN')}")
+            print(f"   Device: {ingest_metadata['device_id']}")
             print("="*50 + "\n")
-            
-            # NOTE: NOT saving to MongoDB to prevent database from filling up
-            # Only analyzed gait sessions are saved (in gaitprogresses collection)
-            
-            return jsonify({"status": "ok"}), 200
+
+            return jsonify({
+                'status': 'ok',
+                'device_id': ingest_metadata['device_id'],
+                'updated_at': ingest_metadata['updated_at'].isoformat(),
+                'sample_summary': ingest_metadata['sample_summary'],
+                'payload_kind': ingest_metadata['payload_kind']
+            }), 200
         except Exception as e:
+            logger.error(f"Error processing wearable data: {e}", exc_info=True)
             print(f"Error processing wearable data: {str(e)}")
-            return jsonify({"status": "error", "message": str(e)}), 400
-    
-    # GET request - return latest data to web interface
-    return jsonify(latest_wearable_data), 200
+            return jsonify({"status": "error", "message": "Failed to process wearable data"}), 400
+
+    device_id = request.args.get('device_id')
+    user_id = request.args.get('user_id')
+    include_meta = request.args.get('include_meta', 'false').lower() == 'true'
+
+    latest_document = get_latest_wearable_document(device_id=device_id, user_id=user_id)
+    if not latest_document:
+        if include_meta:
+            return jsonify({'status': 'empty', 'data': {}, 'meta': None}), 200
+        return jsonify({}), 200
+
+    latest_payload = latest_document.get('live_snapshot') or build_live_snapshot(latest_document.get('payload', {}))
+    if include_meta:
+        return jsonify({
+            'status': 'ok',
+            'data': latest_payload,
+            'meta': serialize_wearable_metadata(latest_document)
+        }), 200
+
+    return jsonify(latest_payload), 200
 
 # ============================================================
 # HARDWARE GAIT ANALYSIS API
@@ -5200,156 +5747,7 @@ def hardware_gait_analyze(current_user):
     Returns same structure as mobile gait analysis for MongoDB compatibility
     """
     try:
-        from hardware_gait_processor import HardwareGaitProcessor
-        
-        print("\n" + "🎯" + "="*60)
-        print("GAIT ANALYSIS REQUEST RECEIVED")
-        print("="*60)
-        
-        data = request.json
-        sensor_data = data.get('sensors', {})
-        fsr_data = data.get('fsr', {})
-        
-        # Log received data sizes
-        for sensor, readings in sensor_data.items():
-            print(f"  {sensor}: {len(readings)} data points")
-        
-        # Validate required sensors
-        required_sensors = ['LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE', 'LEFT_TOE', 'RIGHT_TOE']
-        missing_sensors = [s for s in required_sensors if s not in sensor_data or not sensor_data[s]]
-        
-        if len(missing_sensors) > 2:  # Allow some sensors to be missing
-            print(f"❌ Too many sensors missing: {missing_sensors}")
-            return jsonify({
-                'success': False,
-                'message': f'Too many sensors missing: {missing_sensors}'
-            }), 400
-        
-        print(f"✅ Sensor validation passed. Processing gait analysis...")
-        
-        # Process gait data
-        processor = HardwareGaitProcessor()
-        result = processor.analyze(
-            sensor_data=sensor_data,
-            fsr_data=fsr_data,
-            user_id=str(current_user['_id'])
-        )
-        
-        if not result['success']:
-            print(f"❌ Analysis failed: {result.get('error')}")
-            return jsonify(result), 400
-        
-        print(f"✅ Analysis complete!")
-        print(f"  Steps: {result['data']['metrics']['step_count']}")
-        print(f"  Cadence: {result['data']['metrics']['cadence']} steps/min")
-        print(f"  Quality: {result['data']['data_quality']}")
-        
-        # Save to MongoDB (same collection as mobile uses: gaitprogresses)
-        gait_progress_collection = db['gaitprogresses']
-        
-        # Add analysis_duration to metrics for exercise plan
-        result['data']['metrics']['analysis_duration'] = result['data']['analysis_duration']
-        
-        # Prepare document matching mobile's GaitProgress schema
-        gait_document = {
-            'user_id': str(current_user['_id']),
-            'session_id': result['data']['session_id'],
-            'metrics': result['data']['metrics'],
-            'sensors_used': result['data']['sensors_used'],
-            'gait_phases': result['data']['gait_phases'],
-            'analysis_duration': result['data']['analysis_duration'],
-            'data_quality': result['data']['data_quality'],
-            'detected_problems': result['data']['detected_problems'],
-            'problem_summary': result['data']['problem_summary'],
-            'gait_score': result['data'].get('gait_score'),
-            'created_at': utc_now(),
-            'updated_at': utc_now()
-        }
-        if getattr(g, 'token_data', {}).get('facility_mode'):
-            gait_document['location'] = 'facility'
-        
-        # Insert into database
-        insert_result = gait_progress_collection.insert_one(gait_document)
-        gait_id = str(insert_result.inserted_id)
-        
-        print(f"💾 Saved to MongoDB collection: gaitprogresses")
-        print(f"   Document ID: {gait_id}")
-        
-        # Automatically create exercise plan if problems detected
-        exercise_plan_created = False
-        if result['data']['detected_problems'] and len(result['data']['detected_problems']) > 0:
-            try:
-                print(f"🏋️  Processing exercise plan for {len(result['data']['detected_problems'])} detected problems...")
-                
-                exercise_plans_collection = db['exerciseplans']
-                
-                # Extract exercises from detected problems (one exercise per problem)
-                exercises = []
-                for problem in result['data']['detected_problems']:
-                    recommendations = problem.get('exercises') or problem.get('recommendations', [])
-                    if recommendations:
-                        # Take first recommendation (one per problem)
-                        rec = recommendations[0]
-                        exercises.append({
-                            'exercise_id': rec.get('id'),
-                            'exercise_name': rec.get('name'),
-                            'problem_targeted': problem.get('problem'),
-                            'severity': problem.get('severity'),
-                            'description': rec.get('description'),
-                            'duration': rec.get('duration'),
-                            'difficulty': rec.get('difficulty')
-                        })
-                
-                if len(exercises) == 0:
-                    print(f"⚠️  No exercises found in detected problems")
-                else:
-                    # Always create new plan for each gait analysis
-                    print(f"📝 Creating new exercise plan...")
-                    
-                    print(f"DEBUG - Gait insert_result.inserted_id: {insert_result.inserted_id}, type: {type(insert_result.inserted_id)}")
-                    
-                    plan = {
-                        'user_id': str(current_user['_id']),
-                        'gait_analysis_id': insert_result.inserted_id,
-                        'gait_metrics': result['data']['metrics'],
-                        'detected_problems': result['data']['detected_problems'],
-                        'exercises': exercises,
-                        'total_exercises': len(exercises),
-                        'status': 'ongoing',
-                        'visibility': 'active',
-                        'created_at': utc_now(),
-                        'updated_at': utc_now()
-                    }
-                    
-                    print(f"DEBUG - Plan dict gait_analysis_id before insert: {plan['gait_analysis_id']}")
-                    
-                    plan_result = exercise_plans_collection.insert_one(plan)
-                    print(f"✅ Exercise plan created: {plan_result.inserted_id}")
-                    print(f"   {len(exercises)} exercises recommended")
-                    
-                    # Verify what was actually saved
-                    saved_plan = exercise_plans_collection.find_one({'_id': plan_result.inserted_id})
-                    print(f"DEBUG - Saved plan gait_analysis_id: {saved_plan.get('gait_analysis_id')}")
-                    
-                    exercise_plan_created = True
-                    
-            except Exception as plan_error:
-                logger.error(f"Failed to create/update exercise plan: {plan_error}", exc_info=True)
-                print(f"❌ Exercise plan operation failed: {str(plan_error)}")
-                # Continue - gait analysis was successful even if plan creation failed
-        else:
-            print(f"ℹ️  No problems detected, skipping exercise plan creation")
-        
-        print("="*60 + "\n")
-        
-        # Return success with MongoDB ID
-        return jsonify({
-            'success': True,
-            'message': 'Hardware gait analysis completed',
-            'data': result['data'],
-            'gait_id': gait_id,
-            'exercise_plan_created': exercise_plan_created
-        }), 200
+        return run_hardware_gait_analysis(current_user, request.get_json(silent=True))
         
     except Exception as e:
         logger.error(f"GAIT ANALYSIS ERROR: {e}", exc_info=True)
@@ -5358,6 +5756,56 @@ def hardware_gait_analyze(current_user):
         return jsonify({
             'success': False,
             'message': 'Hardware gait analysis failed'
+        }), 500
+
+
+@app.route('/api/hardware/gait/analyze-latest', methods=['POST'])
+@token_required
+def hardware_gait_analyze_latest(current_user):
+    """Analyze the latest stored wearable payload for a device or user."""
+    try:
+        request_data = request.get_json(silent=True) or {}
+        if not isinstance(request_data, dict):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid request payload'
+            }), 400
+
+        device_id = request_data.get('device_id') or request.args.get('device_id')
+        user_id = request_data.get('user_id') or str(current_user['_id'])
+
+        latest_document = get_latest_wearable_document(device_id=device_id, user_id=user_id)
+        if not latest_document and device_id:
+            latest_document = get_latest_wearable_document(device_id=device_id)
+
+        if not latest_document:
+            return jsonify({
+                'success': False,
+                'message': 'No stored wearable data found for analysis'
+            }), 404
+
+        latest_user_id = latest_document.get('user_id')
+        current_user_id = str(current_user['_id'])
+        if latest_user_id and latest_user_id != current_user_id and current_user.get('role') not in ['therapist', 'admin']:
+            return jsonify({
+                'success': False,
+                'message': 'Not authorized to analyze this wearable data'
+            }), 403
+
+        analysis_payload = get_analysis_payload(latest_document)
+        if not analysis_payload:
+            return jsonify({
+                'success': False,
+                'message': 'No batched wearable analysis payload is available yet'
+            }), 404
+
+        return run_hardware_gait_analysis(current_user, analysis_payload, latest_document=latest_document)
+
+    except Exception as e:
+        logger.error(f"LATEST GAIT ANALYSIS ERROR: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Latest wearable gait analysis failed'
         }), 500
 
 
@@ -6966,11 +7414,13 @@ def start_mdns_service():
 
 
 if __name__ == '__main__':
-    # Start mDNS service in background
-    mdns_thread = threading.Thread(target=start_mdns_service, daemon=True)
-    mdns_thread.start()
+    enable_mdns = get_bool_env('ENABLE_MDNS', default=not IS_CLOUD_RUN)
+    if enable_mdns:
+        mdns_thread = threading.Thread(target=start_mdns_service, daemon=True)
+        mdns_thread.start()
     
     # Start Flask app
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    default_port = '8080' if IS_CLOUD_RUN else '5000'
+    port = int(os.getenv('PORT', default_port))
+    debug = get_bool_env('FLASK_DEBUG', default=not IS_CLOUD_RUN)
     app.run(host='0.0.0.0', debug=debug, port=port)

@@ -1,21 +1,27 @@
-from flask import Blueprint, request, jsonify
+import logging
+
+from flask import Blueprint, request, jsonify, g
 from functools import wraps
 import jwt
-import os
 from bson import ObjectId
 import datetime
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
+logger = logging.getLogger(__name__)
 
 # This will be initialized from app.py
 db = None
 users_collection = None
+SECRET_KEY = None
 
-def init_admin_management(database):
+def init_admin_management(database, secret_key):
     """Initialize admin management with database connection"""
-    global db, users_collection
+    global db, users_collection, SECRET_KEY
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY is required to initialize admin management')
     db = database
     users_collection = db['users']
+    SECRET_KEY = secret_key
 
 def admin_required(f):
     """Decorator to require admin authentication"""
@@ -29,21 +35,21 @@ def admin_required(f):
             if token.startswith('Bearer '):
                 token = token.split(' ')[1]
             
-            secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key')
-            data = jwt.decode(token, secret_key, algorithms=['HS256'])
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
             
             # Verify user is admin
             user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not user or user.get('role') != 'admin':
                 return jsonify({'success': False, 'message': 'Admin access required'}), 403
                 
-            request.current_user = user
+            g.current_user = user
         except jwt.ExpiredSignatureError:
             return jsonify({'success': False, 'message': 'Token has expired'}), 401
         except jwt.InvalidTokenError:
             return jsonify({'success': False, 'message': 'Invalid token'}), 401
         except Exception as e:
-            return jsonify({'success': False, 'message': str(e)}), 401
+            logger.error(f'Admin auth failed: {e}', exc_info=True)
+            return jsonify({'success': False, 'message': 'Authentication failed'}), 401
         
         return f(*args, **kwargs)
     return decorated_function
@@ -71,7 +77,8 @@ def get_stats():
             }
         }), 200
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logger.error(f'Admin stats retrieval failed: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to load admin stats'}), 500
 
 @admin_bp.route('/users', methods=['GET'])
 @admin_required
@@ -124,7 +131,8 @@ def get_all_users():
             }
         }), 200
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logger.error(f'Admin user listing failed: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to load users'}), 500
 
 @admin_bp.route('/users/<user_id>', methods=['DELETE'])
 @admin_required
@@ -141,7 +149,7 @@ def delete_user(user_id):
             return jsonify({'success': False, 'message': 'User not found'}), 404
         
         # Prevent admin from deleting themselves
-        if str(user['_id']) == str(request.current_user['_id']):
+        if str(user['_id']) == str(g.current_user['_id']):
             return jsonify({'success': False, 'message': 'Cannot delete your own account'}), 400
         
         # Delete the user
@@ -156,7 +164,8 @@ def delete_user(user_id):
             return jsonify({'success': False, 'message': 'Failed to delete user'}), 500
             
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logger.error(f'Admin user deletion failed: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to delete user'}), 500
 
 @admin_bp.route('/users/<user_id>/role', methods=['PUT'])
 @admin_required
@@ -185,7 +194,7 @@ def update_user_role(user_id):
             return jsonify({'success': False, 'message': 'User not found'}), 404
         
         # Prevent admin from changing their own role
-        if str(user['_id']) == str(request.current_user['_id']):
+        if str(user['_id']) == str(g.current_user['_id']):
             return jsonify({'success': False, 'message': 'Cannot change your own role'}), 400
         
         # Update the user's role
@@ -203,4 +212,5 @@ def update_user_role(user_id):
             return jsonify({'success': False, 'message': 'No changes made'}), 200
             
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logger.error(f'Admin role update failed: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to update user role'}), 500

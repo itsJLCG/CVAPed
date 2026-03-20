@@ -10,7 +10,6 @@ from bson import ObjectId
 import datetime
 from functools import wraps
 import jwt
-import os
 
 # Create Blueprint
 articulation_bp = Blueprint('articulation_exercises', __name__)
@@ -24,10 +23,12 @@ SECRET_KEY = None
 def init_articulation_crud(database, secret_key=None):
     """Initialize the articulation exercises collection"""
     global db, users_collection, articulation_exercises_collection, SECRET_KEY
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY is required to initialize articulation CRUD')
     db = database
     users_collection = db['users']
     articulation_exercises_collection = db['articulation_exercises']
-    SECRET_KEY = secret_key or os.getenv('SECRET_KEY', 'your-secret-key-here')
+    SECRET_KEY = secret_key
 
 # Token verification decorator
 def token_required(f):

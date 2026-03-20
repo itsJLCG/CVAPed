@@ -21,6 +21,8 @@ RUN python -m pip install --upgrade pip \
 
 COPY . .
 
+RUN chmod +x /app/startup.sh /app/startup.py
+
 EXPOSE 8080
 
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "app:app"]
+CMD ["python", "/app/startup.py", "gunicorn", "--config", "gunicorn.conf.py", "app:app"]

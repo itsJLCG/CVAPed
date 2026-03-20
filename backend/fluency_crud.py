@@ -10,7 +10,6 @@ from functools import wraps
 from bson import ObjectId
 import datetime
 import jwt
-import os
 
 # Create Blueprint
 fluency_bp = Blueprint('fluency_crud', __name__)
@@ -19,13 +18,17 @@ fluency_bp = Blueprint('fluency_crud', __name__)
 db = None
 users_collection = None
 fluency_exercises_collection = None
+SECRET_KEY = None
 
-def init_fluency_crud(database):
+def init_fluency_crud(database, secret_key):
     """Initialize database collections"""
-    global db, users_collection, fluency_exercises_collection
+    global db, users_collection, fluency_exercises_collection, SECRET_KEY
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY is required to initialize fluency CRUD')
     db = database
     users_collection = db['users']
     fluency_exercises_collection = db['fluency_exercises']
+    SECRET_KEY = secret_key
 
 # Token required decorator
 def token_required(f):
@@ -39,7 +42,7 @@ def token_required(f):
         try:
             if token.startswith('Bearer '):
                 token = token[7:]
-            data = jwt.decode(token, os.getenv('SECRET_KEY', 'your-secret-key-here'), algorithms=["HS256"])
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             current_user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401

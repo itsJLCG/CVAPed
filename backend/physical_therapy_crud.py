@@ -10,7 +10,6 @@ from functools import wraps
 from bson import ObjectId
 import datetime
 import jwt
-import os
 
 physical_therapy_bp = Blueprint('physical_therapy_crud', __name__)
 
@@ -18,15 +17,19 @@ db = None
 users_collection = None
 detection_problems_collection = None
 exercise_recommendations_collection = None
+SECRET_KEY = None
 
 
-def init_physical_therapy_crud(database):
+def init_physical_therapy_crud(database, secret_key):
     """Initialize database collections"""
-    global db, users_collection, detection_problems_collection, exercise_recommendations_collection
+    global db, users_collection, detection_problems_collection, exercise_recommendations_collection, SECRET_KEY
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY is required to initialize physical therapy CRUD')
     db = database
     users_collection = db['users']
     detection_problems_collection = db['detection_problems']
     exercise_recommendations_collection = db['exercise_recommendations']
+    SECRET_KEY = secret_key
 
 
 def token_required(f):
@@ -38,7 +41,7 @@ def token_required(f):
         try:
             if token.startswith('Bearer '):
                 token = token[7:]
-            data = jwt.decode(token, os.getenv('SECRET_KEY', 'your-secret-key-here'), algorithms=["HS256"])
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             current_user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401

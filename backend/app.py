@@ -696,11 +696,13 @@ def firebase_auth():
                 'error': 'TOKEN_REVOKED',
                 'code': 'auth/id-token-revoked'
             }), 401
-        except auth.InvalidIdTokenError:
+        except auth.InvalidIdTokenError as e:
+            logger.error(f"Firebase InvalidIdTokenError: {e}", exc_info=True)
             return jsonify({
                 'message': 'Invalid Firebase token. Please sign in again.',
                 'error': 'TOKEN_INVALID',
-                'code': 'auth/invalid-id-token'
+                'code': 'auth/invalid-id-token',
+                'details': str(e)
             }), 401
         except Exception as e:
             logger.error(f"Firebase token verification failed: {e}", exc_info=True)
@@ -1188,6 +1190,27 @@ def get_all_completed_evaluations(current_user):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'healthy', 'message': 'CVACare API is running'}), 200
+
+
+@app.route('/api/debug/firebase', methods=['GET'])
+def debug_firebase():
+    result = {
+        'firebase_initialized': bool(firebase_admin._apps),
+        'firebase_apps': list(firebase_admin._apps.keys()) if firebase_admin._apps else [],
+        'env_firebase_json_exists': bool(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')),
+        'env_firebase_json_length': len(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON', '')),
+    }
+    
+    if os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON'):
+        try:
+            import json
+            fb_data = json.loads(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON'))
+            result['firebase_project_id'] = fb_data.get('project_id', 'NOT_FOUND')
+            result['firebase_client_email'] = fb_data.get('client_email', 'NOT_FOUND')
+        except Exception as e:
+            result['firebase_json_parse_error'] = str(e)
+    
+    return jsonify(result), 200
 
 
 @app.route('/api/health/ready', methods=['GET'])

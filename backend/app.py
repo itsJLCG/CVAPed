@@ -1668,13 +1668,15 @@ def get_all_predictions(current_user):
         except Exception as e:
             print(f"Overall predictor error: {e}")
         
-        # 6. Gait prediction for physical therapy users
-        therapy_type = current_user.get('therapyType')
-        if therapy_type in ['physical', 'both'] and gait_predictor:
+        # 6. Gait prediction for physical therapy users (always try regardless of therapyType)
+        if gait_predictor:
             try:
                 gait_pred = gait_predictor.predict_days_to_mastery(user_id)
-                predictions['gait'] = gait_pred
-                print(f"   Gait: ✅")
+                if gait_pred:  # Only add if prediction exists
+                    predictions['gait'] = gait_pred
+                    print(f"   Gait: ✅")
+                else:
+                    print(f"   Gait: ⏳ No data yet")
             except Exception as e:
                 print(f"   Gait: ❌ {e}")
         

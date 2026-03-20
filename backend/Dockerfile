@@ -19,6 +19,9 @@ COPY requirements.txt ./
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt
 
+COPY startup.py /usr/local/bin/startup.py
+RUN python /usr/local/bin/startup.py
+
 COPY . .
 
 EXPOSE 8080

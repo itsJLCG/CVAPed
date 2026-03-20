@@ -108,34 +108,233 @@ function Prescription({ onLogout, onFacilityExit }) {
   }
 
   if (selectedCategory === 'physical') {
+    if (error) {
+      return (
+        <div className="blank-page">
+          <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
+          <main className="blank-page-content">
+            <div className="prescription-container">
+              <div className="error-state">
+                <i className="fas fa-exclamation-triangle"></i>
+                <h3>Unable to Load Analysis</h3>
+                <p>{error}</p>
+                <button onClick={fetchGaitPrescriptiveAnalysis} className="retry-btn">
+                  <i className="fas fa-redo"></i>
+                  Try Again
+                </button>
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    if (!analysis) {
+      return (
+        <div className="blank-page">
+          <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
+          <main className="blank-page-content">
+            <div className="prescription-container">
+              <div className="no-data-state">
+                <i className="fas fa-person-walking"></i>
+                <h3>No Gait Analysis Available</h3>
+                <p>Complete gait analysis sessions to receive personalized recommendations</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    const renderGaitMetrics = () => {
+      if (!analysis.current_metrics) return null;
+      const metrics = Object.entries(analysis.current_metrics);
+      const thresholds = analysis.healthy_thresholds || {};
+      
+      return (
+        <div className="gait-metrics-section">
+          <h3><i className="fas fa-chart-line"></i> Current Gait Metrics</h3>
+          <div className="metrics-grid">
+            {metrics.map(([param, value]) => {
+              const target = thresholds[param];
+              const deficit = target ? ((target - value) / target * 100).toFixed(0) : 0;
+              const isHealthy = deficit <= 15;
+              
+              return (
+                <div key={param} className={`metric-card ${isHealthy ? 'healthy' : 'needs-work'}`}>
+                  <div className="metric-header">
+                    <i className={`fas fa-${param === 'cadence' ? 'shoe-prints' : param === 'velocity' ? 'gauge-high' : 'chart-simple'}`}></i>
+                    <span>{param.replace('_', ' ').toUpperCase()}</span>
+                    {isHealthy && <span className="healthy-badge">✓</span>}
+                  </div>
+                  <div className="metric-value">
+                    <span className="current">{typeof value === 'number' ? value.toFixed(2) : value}</span>
+                    <span className="target">/ {target}</span>
+                  </div>
+                  <div className="metric-deficit">
+                    <span className={`deficit-value ${deficit <= 15 ? 'low' : 'high'}`}>{deficit}% deficit</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
     return (
       <div className="blank-page">
         <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prescription-container">
-            <div className="coming-soon-message">
-              <div className="coming-soon-icon">🚧</div>
-              <h2>Physical Therapy Prescription</h2>
-              <h3>Coming Soon</h3>
-              <p>AI-powered prescriptive therapy recommendations for physical rehabilitation are currently under development.</p>
-              <p className="coming-soon-detail">
-                This feature will provide personalized exercise plans, therapy prioritization, 
-                and intelligent scheduling based on your gait analysis and mobility assessments.
-              </p>
-              <div className="coming-soon-features">
-                <div className="feature-item">
-                  <i className="fas fa-dumbbell"></i>
-                  <span>Personalized Exercise Plans</span>
+            <div className="prescription-header-section">
+              <div className="header-left">
+                <div className="header-icon gait-icon">
+                  <i className="fas fa-clipboard-check"></i>
                 </div>
-                <div className="feature-item">
-                  <i className="fas fa-clipboard-list"></i>
-                  <span>Therapy Prioritization</span>
-                </div>
-                <div className="feature-item">
-                  <i className="fas fa-calendar-alt"></i>
-                  <span>Smart Scheduling</span>
+                <div className="header-text">
+                  <h1>Gait Therapy Prescription Plan</h1>
+                  <p>AI-powered recommendations based on your gait analysis</p>
                 </div>
               </div>
+              <button onClick={fetchGaitPrescriptiveAnalysis} className="refresh-btn">
+                <i className="fas fa-sync-alt"></i>
+              </button>
+            </div>
+
+            {renderGaitMetrics()}
+
+            {analysis.bottleneck_analysis && (
+              <div className="bottleneck-alert">
+                <div className="alert-icon">
+                  <i className="fas fa-bolt"></i>
+                </div>
+                <div className="alert-content">
+                  <div className="alert-header">
+                    <span className="alert-badge">Critical Bottleneck</span>
+                    <h3>{analysis.bottleneck_analysis.bottleneck?.replace('_', ' ').toUpperCase()}</h3>
+                  </div>
+                  <p>{analysis.bottleneck_analysis.explanation}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="priorities-section">
+              <div className="section-title-bar">
+                <h2><i className="fas fa-flag"></i> Gait Priorities</h2>
+              </div>
+              <div className="priorities-list">
+                {analysis.priorities?.map((priority, index) => (
+                  <div key={index} className="priority-item gait-priority">
+                    <div className="priority-header-row">
+                      <div className="priority-name-group">
+                        <i 
+                          className={`fas ${getPriorityIcon(priority.priority)}`}
+                          style={{ color: getPriorityColor(priority.priority) }}
+                        ></i>
+                        <h3>{priority.parameter?.replace('_', ' ').toUpperCase()}</h3>
+                        <span 
+                          className="priority-label"
+                          style={{ 
+                            backgroundColor: getPriorityColor(priority.priority),
+                            opacity: 0.9
+                          }}
+                        >
+                          {priority.priority}
+                        </span>
+                      </div>
+                      <div className="priority-allocation">
+                        <span className="allocation-percent">{Math.round(priority.weight * 100)}%</span>
+                        <span className="allocation-text">Focus</span>
+                      </div>
+                    </div>
+                    <div className="priority-progress-bar">
+                      <div 
+                        className="progress-fill"
+                        style={{ 
+                          width: `${priority.weight * 100}%`,
+                          backgroundColor: getPriorityColor(priority.priority)
+                        }}
+                      ></div>
+                    </div>
+                    <div className="priority-details">
+                      <div className="detail-item">
+                        <i className="fas fa-lightbulb"></i>
+                        <span>{priority.focus}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="schedule-section">
+              <div className="section-title-bar">
+                <h2><i className="fas fa-calendar-week"></i> Weekly Schedule</h2>
+                <span className="schedule-note">Click any day for details</span>
+              </div>
+              <div className="weekly-grid">
+                {analysis.weekly_schedule?.map((day, index) => (
+                  <div 
+                    key={index} 
+                    className={`day-box ${selectedDay === index ? 'expanded' : ''}`}
+                    onClick={() => setSelectedDay(selectedDay === index ? null : index)}
+                  >
+                    <div className="day-header-row">
+                      <span className="day-name">{day.day}</span>
+                      <span className="trial-badge">{day.total_duration} min</span>
+                    </div>
+                    {selectedDay === index && (
+                      <div className="day-breakdown">
+                        {day.exercises?.map((exercise, exIndex) => (
+                          <div key={exIndex} className="exercise-row">
+                            <div className="exercise-left">
+                              <span className="exercise-name">{exercise.parameter}</span>
+                              <span className="exercise-focus">{exercise.focus}</span>
+                            </div>
+                            <div className="exercise-right">
+                              <span className="exercise-count">{exercise.duration}</span>
+                              <span 
+                                className="exercise-priority-dot"
+                                style={{ backgroundColor: getPriorityColor(exercise.priority) }}
+                              ></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="insights-section">
+              <h3><i className="fas fa-lightbulb"></i> Clinical Insights</h3>
+              <div className="insights-list">
+                {analysis.insights?.map((insight, index) => (
+                  <div key={index} className="insight-item">
+                    <i className="fas fa-info-circle"></i>
+                    <p>{insight}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="motivation-footer">
+              <div className="motivation-icon">
+                <i className="fas fa-heart"></i>
+              </div>
+              <div className="motivation-text">
+                <p className="motivation-main">Consistent gait practice accelerates recovery</p>
+                <p className="motivation-sub">Each session brings you closer to healthy mobility</p>
+              </div>
+            </div>
+
+            <div className="analysis-info">
+              <span>
+                <i className="fas fa-clock"></i>
+                Last updated: {new Date(analysis.generated_at).toLocaleString()}
+              </span>
             </div>
           </div>
         </main>

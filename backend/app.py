@@ -88,7 +88,7 @@ cors_origins = [
     origin.strip()
     for origin in os.getenv(
         'CORS_ORIGINS',
-        'http://localhost:3000,http://localhost:5000,http://localhost:5173'
+        'http://localhost:3000,http://localhost:5000,http://localhost:5173,https://cva-ped.vercel.app,https://www.cva-ped.vercel.app'
     ).split(',')
     if origin.strip()
 ]

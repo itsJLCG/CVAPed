@@ -5,6 +5,7 @@ import { TherapyCategoryProvider } from './components/TherapyCategoryContext';
 import { VoiceSettingsProvider } from './components/VoiceSettingsContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import audioManager from './services/audioManager';
+import { wakeBackend } from './services/api';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import FacilityLogin from './pages/FacilityLogin';
@@ -41,6 +42,8 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    wakeBackend();
+
     // Check if user is authenticated
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');

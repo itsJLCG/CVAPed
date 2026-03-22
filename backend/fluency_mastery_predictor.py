@@ -26,14 +26,14 @@ class FluencyMasteryPredictor:
         self.model_path = os.path.join(os.path.dirname(__file__), 'models', 'fluency_mastery_xgboost.pkl')
         self.is_baseline = False
         
-        print("✅ Fluency Mastery Predictor initialized")
+        print("[OK] Fluency Mastery Predictor initialized")
     
     def extract_training_data(self) -> pd.DataFrame:
         """
         Extract training data from users who have mastered fluency
         Mastery = completed all levels (1-5) with consistent high scores
         """
-        print("\n📊 Extracting training data from fluency trials...")
+        print("\n[INFO] Extracting training data from fluency trials...")
         
         training_data = []
         
@@ -83,7 +83,7 @@ class FluencyMasteryPredictor:
             training_data.append(features)
         
         df = pd.DataFrame(training_data)
-        print(f"✅ Extracted {len(df)} training samples")
+        print(f"[OK] Extracted {len(df)} training samples")
         
         return df
     
@@ -201,13 +201,13 @@ class FluencyMasteryPredictor:
         Train XGBoost model on historical data
         Returns training metrics
         """
-        print("\n🤖 Training Fluency Mastery XGBoost Model...")
+        print("\n[ROBOT] Training Fluency Mastery XGBoost Model...")
         
         # Extract training data
         df = self.extract_training_data()
         
         if len(df) < 10:
-            print(f"⚠️  Insufficient training data ({len(df)} samples). Need at least 10 completed users.")
+            print(f"[WARN] Insufficient training data ({len(df)} samples). Need at least 10 completed users.")
             return {
                 'success': False,
                 'message': 'Insufficient training data. Need at least 10 users who completed all fluency levels.'
@@ -238,10 +238,10 @@ class FluencyMasteryPredictor:
         rmse = np.sqrt(mean_squared_error(y_test, y_pred))
         r2 = r2_score(y_test, y_pred)
         
-        print(f"✅ Model trained successfully!")
+        print(f"[OK] Model trained successfully!")
         print(f"   MAE: {mae:.2f} days")
         print(f"   RMSE: {rmse:.2f} days")
-        print(f"   R² Score: {r2:.3f}")
+        print(f"   R2 Score: {r2:.3f}")
         
         # Save model
         self._save_model()
@@ -271,7 +271,7 @@ class FluencyMasteryPredictor:
         with open(self.model_path, 'wb') as f:
             pickle.dump(model_data, f)
         
-        print(f"💾 Model saved to {self.model_path}")
+        print(f"[SAVE] Model saved to {self.model_path}")
     
     def load_model(self) -> bool:
         """Load trained model from disk"""
@@ -285,11 +285,11 @@ class FluencyMasteryPredictor:
             self.model = model_data['model']
             self.feature_columns = model_data['feature_columns']
             
-            print(f"✅ Fluency model loaded from {self.model_path}")
+            print(f"[OK] Fluency model loaded from {self.model_path}")
             print(f"   Trained at: {model_data['trained_at']}")
             return True
         except Exception as e:
-            print(f"❌ Error loading fluency model: {e}")
+            print(f"[ERR] Error loading fluency model: {e}")
             return False
     
     def predict_days_to_mastery(self, user_id: str) -> Dict:
@@ -351,7 +351,7 @@ class FluencyMasteryPredictor:
             'message': f"Estimated time to master fluency therapy: {round(adjusted_prediction)} days."
         }
         
-        print(f"✅ Prediction: {round(adjusted_prediction)} days")
+        print(f"[OK] Prediction: {round(adjusted_prediction)} days")
         print(f"   Confidence: {confidence:.0%}")
         
         return result

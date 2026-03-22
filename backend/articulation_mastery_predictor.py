@@ -33,7 +33,7 @@ class ArticulationMasteryPredictor:
         Extract training data from MongoDB collections
         Creates dataset with user progression history
         """
-        print("📊 Extracting training data from database...")
+        print("[INFO] Extracting training data from database...")
         
         training_data = []
         
@@ -90,7 +90,7 @@ class ArticulationMasteryPredictor:
             training_data.append(features)
         
         df = pd.DataFrame(training_data)
-        print(f"✅ Extracted {len(df)} training samples")
+        print(f"[OK] Extracted {len(df)} training samples")
         
         return df
     
@@ -263,10 +263,10 @@ class ArticulationMasteryPredictor:
         Train XGBoost Gradient Boosted Regression Trees model
         Returns training metrics
         """
-        print("🤖 Training XGBoost model...")
+        print("[ROBOT] Training XGBoost model...")
         
         if len(df) < 10:
-            print("⚠️  Not enough training data. Using default model parameters.")
+            print("[WARN] Not enough training data. Using default model parameters.")
             # Create a simple baseline model
             self._create_baseline_model()
             return {
@@ -317,10 +317,10 @@ class ArticulationMasteryPredictor:
             'test_samples': len(X_test)
         }
         
-        print(f"✅ Model trained successfully")
+        print(f"[OK] Model trained successfully")
         print(f"   MAE: {metrics['mae']:.2f} days")
         print(f"   RMSE: {metrics['rmse']:.2f} days")
-        print(f"   R²: {metrics['r2']:.3f}")
+        print(f"   R2: {metrics['r2']:.3f}")
         
         # Save model
         self._save_model()
@@ -346,7 +346,7 @@ class ArticulationMasteryPredictor:
         with open(self.model_path, 'wb') as f:
             pickle.dump(model_data, f)
         
-        print(f"💾 Model saved to {self.model_path}")
+        print(f"[SAVE] Model saved to {self.model_path}")
     
     def load_model(self) -> bool:
         """Load trained model from disk"""
@@ -360,11 +360,11 @@ class ArticulationMasteryPredictor:
             self.model = model_data['model']
             self.feature_columns = model_data['feature_columns']
             
-            print(f"✅ Model loaded from {self.model_path}")
+            print(f"[OK] Model loaded from {self.model_path}")
             print(f"   Trained at: {model_data['trained_at']}")
             return True
         except Exception as e:
-            print(f"❌ Error loading model: {e}")
+            print(f"[ERR] Error loading model: {e}")
             return False
     
     def predict_days_to_mastery(self, user_id: str, sound_id: str) -> Dict:
@@ -435,7 +435,7 @@ class ArticulationMasteryPredictor:
             'message': f"Estimated time to master the {self._get_sound_name(sound_id)}-sound: {round(adjusted_prediction)} days."
         }
         
-        print(f"✅ Prediction: {round(adjusted_prediction)} days")
+        print(f"[OK] Prediction: {round(adjusted_prediction)} days")
         print(f"   Confidence: {confidence:.0%}")
         
         return result
@@ -534,7 +534,7 @@ class ArticulationMasteryPredictor:
         Retrain model with latest data from database
         Should be called periodically as more users complete therapy
         """
-        print("🔄 Retraining model with latest data...")
+        print("[RETRY] Retraining model with latest data...")
         
         # Extract fresh data
         df = self.extract_training_data()

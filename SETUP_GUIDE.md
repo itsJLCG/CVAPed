@@ -372,3 +372,9 @@ npm run dev
 17:04:12.421 -> 📍 MY MAC ADDRESS (Copy to BOTH foot ESP32s):
 17:04:12.421 ->    FC:E8:C0:7B:B4:14
 
+
+
+
+
+
+

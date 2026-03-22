@@ -1326,6 +1326,22 @@ def get_health_logs(current_user):
                 'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
             })
 
+        # Fetch Fluency Trials
+        fluency_trials = list(fluency_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
+        for trial in fluency_trials:
+            # fluency_score is already on 0-100 scale
+            score_percentage = int(trial.get('fluency_score', 0))
+
+            logs.append({
+                '_id': str(trial['_id']),
+                'therapyType': 'fluency',
+                'level': trial.get('level', 1),
+                'overallScore': score_percentage,
+                'trials': 1,
+                'correctCount': 1 if trial.get('passed') else 0,
+                'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
+            })
+
         # Fetch Gait Analysis Records
         gait_progress_collection = db['gaitprogresses']
         gait_records = list(gait_progress_collection.find({'user_id': user_id}).sort('created_at', -1))
@@ -1455,6 +1471,13 @@ def get_health_summary(current_user):
                 expressive_scores.append(100 if t.get('is_correct') else 0)
         expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
 
+        # Get fluency trials
+        fluency_count = fluency_trials_collection.count_documents({'user_id': user_id})
+        fluency_trials = list(fluency_trials_collection.find({'user_id': user_id}))
+        # Fluency stores score as 0-100
+        fluency_scores = [t.get('fluency_score', 0) for t in fluency_trials]
+        fluency_avg = sum(fluency_scores) / len(fluency_scores) if fluency_scores else 0
+
         # Get gait analysis records
         gait_progress_collection = db['gaitprogresses']
         gait_records = list(gait_progress_collection.find({'user_id': user_id}))
@@ -1488,6 +1511,10 @@ def get_health_summary(current_user):
             'language': {
                 'sessions': receptive_count + expressive_count,
                 'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
+            },
+            'fluency': {
+                'sessions': fluency_count,
+                'avgScore': round(fluency_avg, 1)
             },
             'gait': {
                 'sessions': gait_count,

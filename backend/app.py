@@ -1240,6 +1240,7 @@ def readiness():
 
 # Health Logs Endpoints
 @app.route('/api/health/logs', methods=['GET'])
+@limiter.exempt
 @token_required
 def get_health_logs(current_user):
     """Get all therapy progress logs for authenticated user"""
@@ -1430,6 +1431,7 @@ def get_health_logs(current_user):
         return jsonify({'success': False, 'message': 'Failed to fetch health logs'}), 500
 
 @app.route('/api/health/summary', methods=['GET'])
+@limiter.exempt
 @token_required
 def get_health_summary(current_user):
     """Get health summary statistics for authenticated user"""

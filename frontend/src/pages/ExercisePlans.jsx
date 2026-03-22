@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import Header from '../components/Header';
 import { generateExercisePlanPdf } from '../components/PdfReportTemplate';
+import { authService } from '../services/api';
 import './ExercisePlans.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -585,8 +586,11 @@ function ExercisePlans({ onLogout, onFacilityExit }) {
   const exportToPDF = async () => {
     if (!selectedPlan) return;
 
-    const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
-    const userName = userInfo.fullName || userInfo.name || 'Patient';
+    const user = authService.getStoredUser();
+    const userName = user
+      ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Patient'
+      : 'Patient';
+    const userEmail = user?.email || '';
 
     const exerciseDetails = selectedPlan.exercises.map((exercise) => {
       const fullExercise = EXERCISES.find(
@@ -613,8 +617,9 @@ function ExercisePlans({ onLogout, onFacilityExit }) {
 
     await generateExercisePlanPdf({
       patientName: userName,
-      patientEmail: userInfo.email || '',
+      patientEmail: userEmail,
       gaitMetrics: mergedMetrics,
+      analysisDate: selectedPlan.created_at || selectedPlan.gait_metrics?.created_at || null,
       detectedProblems: selectedPlan.detected_problems || [],
       exercises: exerciseDetails,
       filename: `CVAPed_ExercisePlan_${userName.replace(/\s+/g, '_')}`,

@@ -115,6 +115,12 @@ function TherapistDashboard({ onLogout }) {
   const [expandedGaitRows, setExpandedGaitRows] = useState({});
   const [currentGaitPage, setCurrentGaitPage] = useState(1);
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
+  const [speechEntries, setSpeechEntries] = useState([]);
+  const [loadingSpeechEntries, setLoadingSpeechEntries] = useState(false);
+  const [speechSearchTerm, setSpeechSearchTerm] = useState('');
+  const [currentSpeechPage, setCurrentSpeechPage] = useState(1);
+  const [speechEntriesPerPage, setSpeechEntriesPerPage] = useState(10);
+  const [expandedSpeechRows, setExpandedSpeechRows] = useState({});
   const [selectedAnalysisIds, setSelectedAnalysisIds] = useState(new Set());
   const [recommendedExercises, setRecommendedExercises] = useState([]);
   const [loadingRecommended, setLoadingRecommended] = useState(false);
@@ -136,7 +142,6 @@ function TherapistDashboard({ onLogout }) {
   const [selectedImages, setSelectedImages] = useState([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
   const [newStory, setNewStory] = useState({
-    patientName: '',
     story: ''
   });
 
@@ -814,6 +819,7 @@ function TherapistDashboard({ onLogout }) {
       loadFluency(); // Load patient session data
       loadFluencyExercises(); // Always load exercises for fluency
     }
+    if (activeTab === 'speech-entries') loadSpeechEntries();
     if (activeTab === 'physical') loadPhysical();
     if (activeTab === 'recommended-exercises') loadRecommendedExercises();
     if (activeTab === 'detection-problems') loadDetectionProblems();
@@ -908,6 +914,22 @@ function TherapistDashboard({ onLogout }) {
     }
   };
 
+  const loadSpeechEntries = async () => {
+    let cancelled = false;
+    setLoadingSpeechEntries(true);
+    try {
+      const response = await therapistService.getSpeechEntries(selectedDays, 1000);
+      if (!cancelled && response.success) {
+        setSpeechEntries(response.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to load speech entries', e);
+      if (!cancelled) setSpeechEntries([]);
+    } finally {
+      if (!cancelled) setLoadingSpeechEntries(false);
+    }
+  };
+
   const loadRecommendedExercises = async () => {
     let cancelled = false;
     setLoadingRecommended(true);
@@ -990,6 +1012,13 @@ function TherapistDashboard({ onLogout }) {
 
   const toggleGaitDetails = (id) => {
     setExpandedGaitRows(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const toggleSpeechDetails = (id) => {
+    setExpandedSpeechRows(prev => ({
       ...prev,
       [id]: !prev[id]
     }));
@@ -1160,6 +1189,34 @@ function TherapistDashboard({ onLogout }) {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const formatSpeechTherapyType = (type) => {
+    if (type === 'receptive') return 'Language (Receptive)';
+    if (type === 'expressive') return 'Language (Expressive)';
+    if (type === 'articulation') return 'Articulation';
+    if (type === 'fluency') return 'Fluency';
+    return 'Language';
+  };
+
+  const getSpeechDetailsText = (entry) => {
+    if (!entry || !entry.details) return 'No details provided';
+
+    if (entry.therapy_type === 'articulation') {
+      const sound = entry.details.sound_id ? `/${String(entry.details.sound_id).toUpperCase()}/` : 'N/A';
+      const target = entry.details.target_word || 'N/A';
+      return `Sound: ${sound} | Target: ${target}`;
+    }
+
+    if (entry.therapy_type === 'fluency') {
+      const exerciseType = entry.details.exercise_type || 'N/A';
+      const instruction = entry.details.instruction || 'N/A';
+      return `Type: ${exerciseType} | Instruction: ${instruction}`;
+    }
+
+    const exerciseId = entry.details.exercise_id || 'N/A';
+    const prompt = entry.details.prompt || 'N/A';
+    return `Exercise: ${exerciseId} | Prompt: ${prompt}`;
   };
 
   // Success Stories Functions
@@ -1880,7 +1937,6 @@ function TherapistDashboard({ onLogout }) {
   const handleAddStory = () => {
     setEditingStory(null);
     setNewStory({
-      patientName: '',
       story: ''
     });
     setSelectedImages([]);
@@ -1891,10 +1947,6 @@ function TherapistDashboard({ onLogout }) {
   const handleSaveStory = async () => {
     try {
       // Validation
-      if (!newStory.patientName.trim()) {
-        alert('Patient name is required');
-        return;
-      }
       if (!newStory.story.trim()) {
         alert('Success story content is required');
         return;
@@ -1902,7 +1954,6 @@ function TherapistDashboard({ onLogout }) {
 
       // Create FormData
       const formData = new FormData();
-      formData.append('patientName', newStory.patientName);
       formData.append('story', newStory.story);
       
       // Append images
@@ -1917,7 +1968,7 @@ function TherapistDashboard({ onLogout }) {
         setSelectedImages([]);
         setImagePreviewUrls([]);
         loadSuccessStories();
-        alert('Success story added successfully!');
+        alert(response.warnings ? `Success story added with warnings. ${response.warnings}` : 'Success story added successfully!');
       }
     } catch (error) {
       console.error('Failed to add success story:', error);
@@ -1928,7 +1979,6 @@ function TherapistDashboard({ onLogout }) {
   const handleEditStory = (story) => {
     setEditingStory(story);
     setNewStory({
-      patientName: story.patientName,
       story: story.story
     });
     setSelectedImages([]);
@@ -1939,10 +1989,6 @@ function TherapistDashboard({ onLogout }) {
   const handleUpdateStory = async () => {
     try {
       // Validation
-      if (!newStory.patientName.trim()) {
-        alert('Patient name is required');
-        return;
-      }
       if (!newStory.story.trim()) {
         alert('Success story content is required');
         return;
@@ -1950,7 +1996,6 @@ function TherapistDashboard({ onLogout }) {
 
       // Create FormData
       const formData = new FormData();
-      formData.append('patientName', newStory.patientName);
       formData.append('story', newStory.story);
       
       // Append new images
@@ -1966,7 +2011,7 @@ function TherapistDashboard({ onLogout }) {
         setSelectedImages([]);
         setImagePreviewUrls([]);
         loadSuccessStories();
-        alert('Success story updated successfully!');
+        alert(response.warnings ? `Success story updated with warnings. ${response.warnings}` : 'Success story updated successfully!');
       }
     } catch (error) {
       console.error('Failed to update success story:', error);
@@ -2533,6 +2578,233 @@ function TherapistDashboard({ onLogout }) {
                               className="pagination-btn" 
                               onClick={() => setCurrentGaitPage(totalPages)}
                               disabled={currentGaitPage === totalPages}
+                            >
+                              »
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'speech-entries' && (
+            <div className="physical-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Speech Entries</h2>
+                  <p>View all patient speech trial records across articulation, language, and fluency.</p>
+                </div>
+              </div>
+
+              {loadingSpeechEntries ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading speech entries...</p>
+                </div>
+              ) : speechEntries.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🎤</span>
+                    <h3>No Speech Entries Found</h3>
+                    <p>Speech entries will appear here once patients complete speech exercises.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group">
+                      <div className="search-container">
+                        <input
+                          type="text"
+                          placeholder="Search by patient name, email, or therapy type..."
+                          value={speechSearchTerm}
+                          onChange={(e) => {
+                            setSpeechSearchTerm(e.target.value);
+                            setCurrentSpeechPage(1);
+                          }}
+                          className="search-input"
+                        />
+                      </div>
+                      <div className="pagination-controls">
+                        <label className="entries-label">
+                          Show:
+                          <select
+                            value={speechEntriesPerPage}
+                            onChange={(e) => {
+                              setSpeechEntriesPerPage(Number(e.target.value));
+                              setCurrentSpeechPage(1);
+                            }}
+                            className="entries-select"
+                          >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                          entries
+                        </label>
+                      </div>
+                      <div className="stats-summary">
+                        <span className="stat-item">
+                          <strong>{speechEntries.length}</strong> Total Speech Entries
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="datatable-container">
+                    <table className="logs-table gait-table">
+                      <thead>
+                        <tr>
+                          <th>Patient</th>
+                          <th>Email</th>
+                          <th>Therapy Type</th>
+                          <th>Level</th>
+                          <th>Score</th>
+                          <th>Date & Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const term = speechSearchTerm.trim().toLowerCase();
+                          const filteredEntries = speechEntries.filter((entry) => {
+                            if (!term) return true;
+                            return (
+                              (entry.user_name || '').toLowerCase().includes(term) ||
+                              (entry.user_email || '').toLowerCase().includes(term) ||
+                              formatSpeechTherapyType(entry.therapy_type).toLowerCase().includes(term)
+                            );
+                          });
+
+                          const indexOfLastEntry = currentSpeechPage * speechEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - speechEntriesPerPage;
+                          const currentEntries = filteredEntries.slice(indexOfFirstEntry, indexOfLastEntry);
+
+                          return currentEntries.map((entry) => (
+                            <React.Fragment key={entry.id}>
+                              <tr>
+                                <td>
+                                  <div className="patient-cell">
+                                    <div className="patient-avatar-small">
+                                      {(entry.user_name || 'P').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </div>
+                                    <span className="patient-name-text">{entry.user_name || 'Unknown Patient'}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="email-text">{entry.user_email || 'N/A'}</span>
+                                </td>
+                                <td>
+                                  <span className="therapy-type-badge" data-type={entry.therapy_type === 'receptive' || entry.therapy_type === 'expressive' ? 'language' : entry.therapy_type}>
+                                    {formatSpeechTherapyType(entry.therapy_type)}
+                                  </span>
+                                </td>
+                                <td>{entry.level || 'N/A'}</td>
+                                <td>
+                                  <span className="score-number">{typeof entry.score === 'number' ? `${entry.score}%` : 'N/A'}</span>
+                                </td>
+                                <td>
+                                  <div className="date-cell-container">
+                                    <span className="date-cell">{entry.entry_at ? formatDate(entry.entry_at) : 'N/A'}</span>
+                                    <button
+                                      className={`gait-dropdown-btn ${expandedSpeechRows[entry.id] ? 'expanded' : ''}`}
+                                      onClick={() => toggleSpeechDetails(entry.id)}
+                                      title={expandedSpeechRows[entry.id] ? 'Hide details' : 'Show details'}
+                                    >
+                                      ▼
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {expandedSpeechRows[entry.id] && (
+                                <tr className="gait-details-row">
+                                  <td colSpan="6">
+                                    <div className="gait-details-container">
+                                      <h4 className="problems-title">Entry Details</h4>
+                                      <p className="speech-entry-details-text">{getSpeechDetailsText(entry)}</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+
+                    {(() => {
+                      const term = speechSearchTerm.trim().toLowerCase();
+                      const filteredEntries = speechEntries.filter((entry) => {
+                        if (!term) return true;
+                        return (
+                          (entry.user_name || '').toLowerCase().includes(term) ||
+                          (entry.user_email || '').toLowerCase().includes(term) ||
+                          formatSpeechTherapyType(entry.therapy_type).toLowerCase().includes(term)
+                        );
+                      });
+
+                      const totalPages = Math.ceil(filteredEntries.length / speechEntriesPerPage);
+                      if (totalPages <= 1) return null;
+
+                      const indexOfLastEntry = currentSpeechPage * speechEntriesPerPage;
+                      const indexOfFirstEntry = indexOfLastEntry - speechEntriesPerPage + 1;
+                      const actualLastEntry = Math.min(indexOfLastEntry, filteredEntries.length);
+
+                      return (
+                        <div className="pagination-footer">
+                          <div className="pagination-info">
+                            Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredEntries.length} entries
+                          </div>
+                          <div className="pagination-buttons">
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(1)}
+                              disabled={currentSpeechPage === 1}
+                            >
+                              «
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentSpeechPage === 1}
+                            >
+                              ‹
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentSpeechPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentSpeechPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentSpeechPage - 2 + i;
+                              }
+                              return (
+                                <button
+                                  key={pageNum}
+                                  className={`pagination-btn ${currentSpeechPage === pageNum ? 'active' : ''}`}
+                                  onClick={() => setCurrentSpeechPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentSpeechPage === totalPages}
+                            >
+                              ›
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(totalPages)}
+                              disabled={currentSpeechPage === totalPages}
                             >
                               »
                             </button>
@@ -3355,7 +3627,7 @@ function TherapistDashboard({ onLogout }) {
                   <div className="search-container">
                     <input
                       type="text"
-                      placeholder="Search by patient name..."
+                      placeholder="Search by story content..."
                       value={storySearchTerm}
                       onChange={(e) => setStorySearchTerm(e.target.value)}
                       className="search-input"
@@ -3412,10 +3684,8 @@ function TherapistDashboard({ onLogout }) {
                     <table className="logs-table stories-table">
                       <thead>
                         <tr>
-                          <th>Patient Name</th>
                           <th>Story Preview</th>
                           <th>Images</th>
-                          <th>Date Added</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
@@ -3423,21 +3693,13 @@ function TherapistDashboard({ onLogout }) {
                         {(() => {
                           const filteredStories = successStories.filter(story =>
                             !storySearchTerm ||
-                            story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                            story.story.toLowerCase().includes(storySearchTerm.toLowerCase())
                           );
                           const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
                           const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
                           const currentEntries = filteredStories.slice(indexOfFirstEntry, indexOfLastEntry);
                           return currentEntries.map(story => (
                             <tr key={story.id}>
-                              <td>
-                                <div className="patient-cell">
-                                  <div className="patient-avatar-small">
-                                    {story.patientName.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                  </div>
-                                  <span className="patient-name-text">{story.patientName}</span>
-                                </div>
-                              </td>
                               <td>
                                 <div className="story-preview">
                                   {story.story.length > 100 
@@ -3453,7 +3715,7 @@ function TherapistDashboard({ onLogout }) {
                                         <img 
                                           key={idx}
                                           src={imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}/${imagePath}`}
-                                          alt={`${story.patientName} - Image ${idx + 1}`}
+                                          alt={`Story ${idx + 1}`}
                                           className="story-thumbnail"
                                           title={`Image ${idx + 1} of ${story.images.length}`}
                                         />
@@ -3468,9 +3730,6 @@ function TherapistDashboard({ onLogout }) {
                                     <span className="no-images-text">No images</span>
                                   )}
                                 </div>
-                              </td>
-                              <td>
-                                <span className="date-cell">{formatDate(story.createdAt)}</span>
                               </td>
                               <td>
                                 <div className="exercise-actions">
@@ -3498,7 +3757,7 @@ function TherapistDashboard({ onLogout }) {
                   {(() => {
                     const filteredStories = successStories.filter(story =>
                       !storySearchTerm ||
-                      story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                      story.story.toLowerCase().includes(storySearchTerm.toLowerCase())
                     );
                     const totalPages = Math.ceil(filteredStories.length / storyEntriesPerPage);
                     if (totalPages <= 1) return null;
@@ -6529,17 +6788,6 @@ function TherapistDashboard({ onLogout }) {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label>Patient Name *</label>
-                <input 
-                  type="text" 
-                  value={newStory.patientName}
-                  onChange={(e) => setNewStory({ ...newStory, patientName: e.target.value })}
-                  placeholder="Enter patient's name"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
                 <label>Success Story *</label>
                 <textarea 
                   value={newStory.story}
@@ -6562,6 +6810,7 @@ function TherapistDashboard({ onLogout }) {
                 />
                 <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '8px', display: 'block' }}>
                   Supported formats: PNG, JPG, JPEG, GIF, WebP. Max size: 5MB per image.
+                  If multiple images are uploaded, they appear one at a time in the landing carousel with the same story description.
                 </small>
               </div>
 

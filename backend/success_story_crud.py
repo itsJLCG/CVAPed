@@ -12,8 +12,12 @@ from jwt import ExpiredSignatureError, InvalidTokenError
 from datetime import datetime
 from bson import ObjectId
 import os
+from dotenv import load_dotenv
 import cloudinary
 import cloudinary.uploader
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
 # Database will be initialized later
 success_stories_collection = None
 
@@ -22,12 +26,27 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 ALLOWED_MIMETYPES = {'image/png', 'image/jpg', 'image/jpeg', 'image/gif', 'image/webp'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Configure Cloudinary with environment variables
-cloudinary.config(
-    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
-    api_key=os.getenv('CLOUDINARY_API_KEY'),
-    api_secret=os.getenv('CLOUDINARY_API_SECRET')
-)
+def configure_cloudinary():
+    """Configure Cloudinary from environment variables or CLOUDINARY_URL."""
+    cloudinary_url = os.getenv('CLOUDINARY_URL')
+    cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME')
+    api_key = os.getenv('CLOUDINARY_API_KEY')
+    api_secret = os.getenv('CLOUDINARY_API_SECRET')
+
+    if cloudinary_url:
+        cloudinary.config(cloudinary_url=cloudinary_url)
+    else:
+        cloudinary.config(
+            cloud_name=cloud_name,
+            api_key=api_key,
+            api_secret=api_secret
+        )
+
+    cfg = cloudinary.config()
+    return bool(cfg.cloud_name and cfg.api_key and cfg.api_secret)
+
+
+configure_cloudinary()
 
 success_story_bp = Blueprint('success_stories', __name__)
 
@@ -48,6 +67,12 @@ def allowed_file(filename):
 def upload_to_cloudinary(file_storage):
     """Upload a file to Cloudinary and return the secure URL"""
     try:
+        if not configure_cloudinary():
+            raise ValueError(
+                'Cloudinary credentials are missing. Set CLOUDINARY_CLOUD_NAME, '
+                'CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET (or CLOUDINARY_URL).'
+            )
+
         result = cloudinary.uploader.upload(
             file_storage,
             folder='success_stories',
@@ -55,7 +80,7 @@ def upload_to_cloudinary(file_storage):
         )
         return result.get('secure_url')
     except Exception as e:
-        logger.error(f"❌ Cloudinary upload error: {{e}}", exc_info=True)
+        logger.error(f"❌ Cloudinary upload error: {e}", exc_info=True)
         raise
 
 
@@ -81,7 +106,7 @@ def delete_from_cloudinary(image_url):
             print(f"⚠️ Could not parse Cloudinary public_id from URL: {image_url}")
             return False
     except Exception as e:
-        logger.error(f"⚠️ Error deleting from Cloudinary: {{e}}", exc_info=True)
+        logger.error(f"⚠️ Error deleting from Cloudinary: {e}", exc_info=True)
         return False
 
 # JWT Token verification decorator
@@ -133,10 +158,10 @@ def get_success_stories():
         }), 200
     
     except Exception as e:
-        logger.error(f"Error fetching success stories: {{e}}", exc_info=True)
+        logger.error(f"Error fetching success stories: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to fetch success stories: {{e}}'
+            'message': f'Failed to fetch success stories: {e}'
         }), 500
 
 @success_story_bp.route('/success-stories', methods=['POST'])
@@ -145,20 +170,12 @@ def get_success_stories():
 def create_success_story(current_user):
     """Create a new success story with multiple image uploads"""
     try:
-        # Validation
-        if 'patientName' not in request.form or not request.form['patientName'].strip():
-            return jsonify({
-                'success': False,
-                'message': 'Patient name is required'
-            }), 400
-        
         if 'story' not in request.form or not request.form['story'].strip():
             return jsonify({
                 'success': False,
                 'message': 'Success story content is required'
             }), 400
         
-        patient_name = request.form['patientName'].strip()
         story_content = request.form['story'].strip()
         
         # Handle multiple file uploads to Cloudinary
@@ -196,10 +213,16 @@ def create_success_story(current_user):
                     except Exception as upload_error:
                         print(f"❌ Error uploading image {file.filename}: {str(upload_error)}")
                         failed_uploads.append(file.filename)
+
+        if 'images' in request.files and uploaded_images == [] and failed_uploads:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to upload images. Please check Cloudinary configuration and try again.',
+                'warnings': f'Failed to upload: {", ".join(failed_uploads)}'
+            }), 500
         
         # Create success story document
         success_story = {
-            'patientName': patient_name,
             'images': uploaded_images,
             'story': story_content,
             'createdBy': current_user.get('email'),
@@ -232,10 +255,10 @@ def create_success_story(current_user):
         }), 201
     
     except Exception as e:
-        logger.error(f"Error creating success story: {{e}}", exc_info=True)
+        logger.error(f"Error creating success story: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to create success story: {{e}}'
+            'message': f'Failed to create success story: {e}'
         }), 500
 
 @success_story_bp.route('/success-stories/<story_id>', methods=['PUT'])
@@ -261,24 +284,17 @@ def update_success_story(current_user, story_id):
                 'message': 'Success story not found'
             }), 404
         
-        # Validation
-        if 'patientName' not in request.form or not request.form['patientName'].strip():
-            return jsonify({
-                'success': False,
-                'message': 'Patient name is required'
-            }), 400
-        
         if 'story' not in request.form or not request.form['story'].strip():
             return jsonify({
                 'success': False,
                 'message': 'Success story content is required'
             }), 400
         
-        patient_name = request.form['patientName'].strip()
         story_content = request.form['story'].strip()
         
         # Handle new image uploads to Cloudinary
         uploaded_images = existing_story.get('images', [])
+        failed_uploads = []
         if 'images' in request.files:
             files = request.files.getlist('images')
             
@@ -308,10 +324,10 @@ def update_success_story(current_user, story_id):
                         uploaded_images.append(image_url)
                     except Exception as upload_error:
                         print(f"❌ Error uploading image to Cloudinary: {str(upload_error)}")
+                        failed_uploads.append(file.filename)
         
         # Update document
         update_data = {
-            'patientName': patient_name,
             'images': uploaded_images,
             'story': story_content,
             'updatedAt': datetime.utcnow(),
@@ -334,14 +350,15 @@ def update_success_story(current_user, story_id):
         return jsonify({
             'success': True,
             'message': 'Success story updated successfully',
-            'data': updated_story
+            'data': updated_story,
+            'warnings': f'Failed to upload: {", ".join(failed_uploads)}' if failed_uploads else None
         }), 200
     
     except Exception as e:
-        logger.error(f"Error updating success story: {{e}}", exc_info=True)
+        logger.error(f"Error updating success story: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to update success story: {{e}}'
+            'message': f'Failed to update success story: {e}'
         }), 500
 
 @success_story_bp.route('/success-stories/<story_id>', methods=['DELETE'])
@@ -381,10 +398,10 @@ def delete_success_story(current_user, story_id):
         }), 200
     
     except Exception as e:
-        logger.error(f"Error deleting success story: {{e}}", exc_info=True)
+        logger.error(f"Error deleting success story: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to delete success story: {{e}}'
+            'message': f'Failed to delete success story: {e}'
         }), 500
 
 @success_story_bp.route('/success-stories/<story_id>/remove-image', methods=['POST'])
@@ -441,8 +458,8 @@ def remove_image_from_story(current_user, story_id):
             }), 404
     
     except Exception as e:
-        logger.error(f"Error removing image: {{e}}", exc_info=True)
+        logger.error(f"Error removing image: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': f'Failed to remove image: {{e}}'
+            'message': f'Failed to remove image: {e}'
         }), 500

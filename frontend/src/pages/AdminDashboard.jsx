@@ -518,29 +518,29 @@ function AdminDashboard({ onLogout }) {
   return (
     <>
       {/* Header */}
-      <header className="admin-header">
-        <div className="admin-header-container">
-          <div className="admin-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="admin-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="admin-header-text" />
-            <span className="admin-badge">Admin Panel</span>
+      <header className="sys-admin-header">
+        <div className="sys-admin-header-container">
+          <div className="sys-admin-logo-group">
+            <img src={images.logo} alt="CVAPed Logo" className="sys-admin-header-logo" />
+            <img src={images.cvacareText} alt="CVAPed" className="sys-admin-header-text" />
+            <span className="sys-admin-badge">Admin Panel</span>
           </div>
-          <div className="admin-header-actions">
-            <span className="admin-user-name">
+          <div className="sys-admin-header-actions">
+            <span className="sys-admin-user-name">
               {user.firstName} {user.lastName}
             </span>
-            <button onClick={onLogout} className="logout-btn">
+            <button onClick={onLogout} className="sys-admin-logout-btn">
               Logout
             </button>
           </div>
         </div>
       </header>
 
-      <div className="admin-dashboard">
+      <div className="sys-admin-dashboard">
         {/* Main Content */}
-        <div className="admin-content">
+        <div className="sys-admin-content">
           {/* Sidebar */}
-          <aside className="admin-sidebar">
+          <aside className="sys-admin-sidebar">
             <nav className="sidebar-nav">
               <button
                 className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
@@ -565,7 +565,7 @@ function AdminDashboard({ onLogout }) {
           </aside>
 
           {/* Main Section */}
-          <main className="admin-main">
+          <main className="sys-admin-main">
             {activeTab === 'overview' && renderOverview()}
             {activeTab === 'users' && renderUserManagement()}
           </main>

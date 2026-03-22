@@ -50,6 +50,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
   ];
 
   const speechSubItems = [
+    { id: 'speech-entries', icon: '🧾', label: 'Speech Entries' },
     { id: 'articulation', icon: '🔤', label: 'Articulation' },
     { id: 'language', icon: '📖', label: 'Language' },
     { id: 'fluency', icon: '💬', label: 'Fluency' },
@@ -113,7 +114,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
               <button
                 className={`nav-item ${
                   activeTab === item.id ||
-                  (item.dropdownKey === 'speech' && (activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency')) ||
+                  (item.dropdownKey === 'speech' && (activeTab === 'speech-entries' || activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency')) ||
                   (item.dropdownKey === 'physical' && (activeTab === 'physical' || activeTab === 'detection-problems' || activeTab === 'exercise-recommendations'))
                     ? 'active'
                     : ''

@@ -2801,6 +2801,274 @@ def get_therapist_language_analytics(current_user):
 # APPOINTMENT MANAGEMENT ENDPOINTS
 # ========================================
 
+@app.route('/api/therapist/speech/entries', methods=['GET'])
+@token_required
+def get_therapist_speech_entries(current_user):
+    """
+    Get unified speech therapy trial entries across articulation, language, and fluency.
+    Query params: ?days=30|90|180|365|all (default: 30), ?limit=500 (max 2000)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        try:
+            limit = int(request.args.get('limit', 500))
+        except ValueError:
+            limit = 500
+        limit = max(1, min(limit, 2000))
+
+        trial_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
+        user_cache = {}
+
+        def get_user_info(raw_user_id):
+            if raw_user_id is None:
+                return None
+
+            # Normalize possible user_id formats: ObjectId, string, or {'$oid': '...'}
+            normalized_user_id = raw_user_id
+            if isinstance(raw_user_id, dict) and raw_user_id.get('$oid'):
+                normalized_user_id = raw_user_id.get('$oid')
+
+            user_id_str = str(normalized_user_id)
+            if user_id_str in user_cache:
+                return user_cache[user_id_str]
+
+            user = None
+
+            if isinstance(normalized_user_id, ObjectId):
+                user = users_collection.find_one({'_id': normalized_user_id})
+
+            try:
+                if not user:
+                    user = users_collection.find_one({'_id': ObjectId(user_id_str)})
+            except Exception:
+                pass
+
+            if not user:
+                user = users_collection.find_one({'_id': user_id_str})
+
+            if not user:
+                info = None
+            else:
+                full_name = user.get('name') or f"{user.get('firstName', '')} {user.get('lastName', '')}".strip()
+                info = {
+                    'user_name': full_name if full_name else 'Unknown Patient',
+                    'user_email': user.get('email', '')
+                }
+
+            user_cache[user_id_str] = info
+            return info
+
+        def normalize_score(raw_score, fallback=None):
+            if raw_score is None:
+                return fallback
+            try:
+                score = float(raw_score)
+                return round(score * 100, 1) if score <= 1 else round(score, 1)
+            except Exception:
+                return fallback
+
+        def normalize_timestamp(raw_timestamp):
+            if raw_timestamp is None:
+                return None
+
+            # Datetime from MongoDB
+            if isinstance(raw_timestamp, datetime.datetime):
+                return raw_timestamp
+
+            # Numeric epoch values (seconds or milliseconds)
+            if isinstance(raw_timestamp, (int, float)):
+                ts = float(raw_timestamp)
+                if ts > 1e12:
+                    ts = ts / 1000.0
+                try:
+                    return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                except Exception:
+                    return None
+
+            # String timestamp: ISO, numeric seconds, or numeric milliseconds
+            if isinstance(raw_timestamp, str):
+                value = raw_timestamp.strip()
+                if not value:
+                    return None
+
+                if value.isdigit():
+                    ts = float(value)
+                    if ts > 1e12:
+                        ts = ts / 1000.0
+                    try:
+                        return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                    except Exception:
+                        return None
+
+                try:
+                    return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except Exception:
+                    return None
+
+            return None
+
+        entries = []
+
+        articulation_trials = list(
+            articulation_trials_collection.find(
+                trial_filter,
+                {
+                    '_id': 1,
+                    'user_id': 1,
+                    'timestamp': 1,
+                    'sound_id': 1,
+                    'level': 1,
+                    'scores.computed_score': 1,
+                    'accuracy': 1,
+                    'word': 1,
+                    'target_word': 1,
+                }
+            )
+        )
+        for trial in articulation_trials:
+            user_info = get_user_info(trial.get('user_id'))
+            if not user_info:
+                continue
+
+            entry_time = normalize_timestamp(trial.get('timestamp'))
+            if not entry_time:
+                continue
+
+            score_value = normalize_score(
+                trial.get('scores', {}).get('computed_score'),
+                normalize_score(trial.get('accuracy'))
+            )
+            entries.append({
+                'id': str(trial.get('_id')),
+                'user_id': str(trial.get('user_id', '')),
+                'user_name': user_info['user_name'],
+                'user_email': user_info['user_email'],
+                'therapy_type': 'articulation',
+                'level': trial.get('level'),
+                'score': score_value,
+                'entry_at': entry_time.isoformat(),
+                'details': {
+                    'sound_id': trial.get('sound_id'),
+                    'target_word': trial.get('target_word') or trial.get('word'),
+                }
+            })
+
+        language_trials = list(
+            language_trials_collection.find(
+                trial_filter,
+                {
+                    '_id': 1,
+                    'user_id': 1,
+                    'timestamp': 1,
+                    'mode': 1,
+                    'level': 1,
+                    'score': 1,
+                    'is_correct': 1,
+                    'exercise_id': 1,
+                    'prompt': 1,
+                }
+            )
+        )
+        for trial in language_trials:
+            user_info = get_user_info(trial.get('user_id'))
+            if not user_info:
+                continue
+
+            entry_time = normalize_timestamp(trial.get('timestamp'))
+            if not entry_time:
+                continue
+
+            language_mode = trial.get('mode', 'language')
+            score_value = normalize_score(
+                trial.get('score'),
+                100.0 if trial.get('is_correct') else 0.0
+            )
+            entries.append({
+                'id': str(trial.get('_id')),
+                'user_id': str(trial.get('user_id', '')),
+                'user_name': user_info['user_name'],
+                'user_email': user_info['user_email'],
+                'therapy_type': language_mode if language_mode in ['receptive', 'expressive'] else 'language',
+                'level': trial.get('level'),
+                'score': score_value,
+                'entry_at': entry_time.isoformat(),
+                'details': {
+                    'exercise_id': trial.get('exercise_id'),
+                    'prompt': trial.get('prompt'),
+                }
+            })
+
+        fluency_trials_collection = db['fluency_trials']
+        fluency_trials = list(
+            fluency_trials_collection.find(
+                trial_filter,
+                {
+                    '_id': 1,
+                    'user_id': 1,
+                    'timestamp': 1,
+                    'level': 1,
+                    'scores.computed_score': 1,
+                    'accuracy': 1,
+                    'type': 1,
+                    'instruction': 1,
+                }
+            )
+        )
+        for trial in fluency_trials:
+            user_info = get_user_info(trial.get('user_id'))
+            if not user_info:
+                continue
+
+            entry_time = normalize_timestamp(trial.get('timestamp'))
+            if not entry_time:
+                continue
+
+            score_value = normalize_score(
+                trial.get('scores', {}).get('computed_score'),
+                normalize_score(trial.get('accuracy'))
+            )
+            entries.append({
+                'id': str(trial.get('_id')),
+                'user_id': str(trial.get('user_id', '')),
+                'user_name': user_info['user_name'],
+                'user_email': user_info['user_email'],
+                'therapy_type': 'fluency',
+                'level': trial.get('level'),
+                'score': score_value,
+                'entry_at': entry_time.isoformat(),
+                'details': {
+                    'exercise_type': trial.get('type'),
+                    'instruction': trial.get('instruction'),
+                }
+            })
+
+        entries.sort(key=lambda row: row.get('entry_at') or '', reverse=True)
+        trimmed_entries = entries[:limit]
+
+        return jsonify({
+            'success': True,
+            'data': trimmed_entries,
+            'total': len(entries),
+            'returned': len(trimmed_entries),
+            'days': days_param
+        }), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_speech_entries failed: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to fetch speech entries'}), 500
+
 @app.route('/api/therapist/appointments', methods=['GET'])
 @token_required
 @therapist_required

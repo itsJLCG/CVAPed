@@ -8469,6 +8469,14 @@
   border: 1px solid #fca5a5;
 }
 
+.speech-entry-details-text {
+  margin: 0;
+  color: #334155;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 /* Notes Cell */
 .notes-cell {
   max-width: 200px;

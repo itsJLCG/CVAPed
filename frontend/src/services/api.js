@@ -335,6 +335,16 @@ export const therapistService = {
     });
     return response.data;
   },
+
+  getSpeechEntries: async (days = 30, limit = 500) => {
+    const response = await api.get('/therapist/speech/entries', {
+      params: {
+        days: days === 'all' ? 'all' : days,
+        limit,
+      }
+    });
+    return response.data;
+  },
 };
 
 // Fluency Exercise CRUD API

@@ -346,7 +346,7 @@ function GaitRecording({ onLogout, onFacilityExit }) {
     });
     console.log('='.repeat(60) + '\n');
     
-    if (totalDataPoints < 50) {
+    if (totalDataPoints < 30) {
       setError(`Not enough sensor data. Only ${totalDataPoints} data points collected. Make sure sensors are properly connected and record for at least 30 seconds.`);
       return;
     }

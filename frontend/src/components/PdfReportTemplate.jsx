@@ -1435,6 +1435,7 @@ export const generateExercisePlanPdf = async ({
   patientEmail,
   gaitMetrics,
   gait_metrics,
+  analysisDate: inputAnalysisDate = null,
   detectedProblems,
   exercises,
   filename = 'CVAPed_ExercisePlan',
@@ -1456,8 +1457,9 @@ export const generateExercisePlanPdf = async ({
     day: 'numeric',
     year: 'numeric',
   });
-  const analysisDate = metrics?.created_at
-    ? new Date(metrics.created_at).toLocaleDateString('en-US', {
+  const analysisDateSource = inputAnalysisDate ?? metrics?.created_at;
+  const analysisDate = analysisDateSource
+    ? new Date(analysisDateSource).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',

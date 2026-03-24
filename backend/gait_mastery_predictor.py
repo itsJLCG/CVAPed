@@ -80,7 +80,7 @@ class GaitMasteryPredictor:
         Extract training data from gaitprogresses collection
         Only includes users who achieved healthy gait (completed progression)
         """
-        print("📊 Extracting gait training data from database...")
+        print("[INFO] Extracting gait training data from database...")
         
         training_data = []
         
@@ -116,11 +116,11 @@ class GaitMasteryPredictor:
             training_data.append(features)
         
         df = pd.DataFrame(training_data)
-        print(f"✅ Extracted {len(df)} training samples from users who achieved healthy gait")
+        print(f"[OK] Extracted {len(df)} training samples from users who achieved healthy gait")
         
         if len(df) > 0:
             print(f"   Target range: {df['days_to_mastery'].min():.0f} - {df['days_to_mastery'].max():.0f} days")
-            print(f"   Target mean: {df['days_to_mastery'].mean():.0f} ± {df['days_to_mastery'].std():.0f} days")
+            print(f"   Target mean: {df['days_to_mastery'].mean():.0f} (+/-) {df['days_to_mastery'].std():.0f} days")
         
         return df
     
@@ -380,7 +380,7 @@ class GaitMasteryPredictor:
         Train XGBoost Gradient Boosted Regression model
         Returns training metrics
         """
-        print("\n🤖 Training Gait Mastery XGBoost Model...")
+        print("\n[ROBOT] Training Gait Mastery XGBoost Model...")
         
         # Extract training data
         df = self.extract_training_data()
@@ -431,11 +431,11 @@ class GaitMasteryPredictor:
         r2 = r2_score(y_test, y_pred)
         mape = np.mean(np.abs((y_test - y_pred) / y_test)) * 100
         
-        print(f"\n   ✅ Model Training Complete!")
-        print(f"   ─────────────────────────────")
+        print(f"\n   [OK] Model Training Complete!")
+        print(f"   ----------------------------------------")
         print(f"   MAE:  {mae:.2f} days")
         print(f"   RMSE: {rmse:.2f} days")
-        print(f"   R²:   {r2:.3f}")
+        print(f"   R2:   {r2:.3f}")
         print(f"   MAPE: {mape:.1f}%")
         
         # Feature importance
@@ -616,7 +616,7 @@ class GaitMasteryPredictor:
                 'trained_at': datetime.now()
             }, f)
         
-        print(f"✅ Model saved to {self.model_path}")
+        print(f"[OK] Model saved to {self.model_path}")
     
     def load_model(self):
         """Load trained model from disk"""
@@ -632,6 +632,6 @@ class GaitMasteryPredictor:
             self.feature_columns = data['feature_columns']
             self.healthy_thresholds = data.get('healthy_thresholds', self.healthy_thresholds)
         
-        print(f"✅ Gait mastery model loaded from {self.model_path}")
+        print(f"[OK] Gait mastery model loaded from {self.model_path}")
         if 'trained_at' in data:
             print(f"   Trained at: {data['trained_at'].strftime('%Y-%m-%d %H:%M')}")

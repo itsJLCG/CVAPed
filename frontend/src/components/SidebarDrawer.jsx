@@ -58,6 +58,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
 
   const physicalSubItems = [
     { id: 'physical', icon: '🚶', label: 'Gait Analysis' },
+    { id: 'most-common-problem', icon: '📌', label: 'Most Common Problem' },
     { id: 'detection-problems', icon: '🔍', label: 'Detection Problems' },
     { id: 'exercise-recommendations', icon: '💪', label: 'Exercise Recommendations' },
   ];
@@ -115,7 +116,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
                 className={`nav-item ${
                   activeTab === item.id ||
                   (item.dropdownKey === 'speech' && (activeTab === 'speech-entries' || activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency')) ||
-                  (item.dropdownKey === 'physical' && (activeTab === 'physical' || activeTab === 'detection-problems' || activeTab === 'exercise-recommendations'))
+                  (item.dropdownKey === 'physical' && (activeTab === 'physical' || activeTab === 'most-common-problem' || activeTab === 'detection-problems' || activeTab === 'exercise-recommendations'))
                     ? 'active'
                     : ''
                 }`}

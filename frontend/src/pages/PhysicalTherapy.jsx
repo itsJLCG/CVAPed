@@ -7,6 +7,7 @@ import './TherapyPage.css';
 function PhysicalTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const mobileAppDownloadUrl = 'https://drive.google.com/uc?export=download&id=1CrJYwk6udJO3oVdpfLMSLfbtrhU9v8FD';
 
   // Ensure the category is set to 'physical' when this page is loaded
   useEffect(() => {
@@ -61,18 +62,11 @@ function PhysicalTherapy({ onLogout, onFacilityExit }) {
                   </button>
                 </div>
 
-                {/* Mobile App Option (Locked) */}
+                {/* Mobile App Option */}
                 <div className="therapy-feature-card" style={{ 
-                  opacity: 0.6,
                   position: 'relative',
-                  border: '2px solid #999'
+                  border: '2px solid #FF9800'
                 }}>
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: '10px', 
-                    right: '10px', 
-                    fontSize: '1.5rem' 
-                  }}>🔒</div>
                   <div className="therapy-feature-icon" style={{ fontSize: '3rem' }}>📱</div>
                   <h3>Use Mobile App</h3>
                   <p style={{ marginBottom: '1.5rem' }}>
@@ -82,9 +76,9 @@ function PhysicalTherapy({ onLogout, onFacilityExit }) {
                   <button 
                     className="therapy-page-cta-btn secondary" 
                     style={{ width: '100%', padding: '0.75rem' }}
-                    disabled
+                    onClick={() => window.open(mobileAppDownloadUrl, '_blank', 'noopener,noreferrer')}
                   >
-                    Hardware Not Available
+                    Download Mobile App (APK)
                   </button>
                   <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
                     Download the mobile app when hardware is unavailable

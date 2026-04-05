@@ -6215,6 +6215,77 @@
   table-layout: auto;
 }
 
+.logs-table.common-problem-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+}
+
+.logs-table.common-problem-table thead {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+.logs-table.common-problem-table th {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 3px solid var(--color-primary);
+  white-space: nowrap;
+}
+
+.logs-table.common-problem-table td {
+  padding: 0.9rem 1.1rem;
+  font-size: 0.9rem;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.logs-table.common-problem-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.common-problem-summary {
+  align-items: center;
+}
+
+.common-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.common-rank-badge.rank-1 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.common-rank-badge.rank-2 {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.common-rank-badge.rank-3 {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.common-rank-badge.rank-4,
+.common-rank-badge.rank-5 {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 .logs-table.gait-table thead {
   background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
   position: sticky;

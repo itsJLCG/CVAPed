@@ -133,6 +133,19 @@ function Landing() {
                   </div>
                 )}
               </div>
+
+              <div className="hardware-preview">
+                {hasImage('hardwareFoot') && (
+                  <div className="hardware-item">
+                    <img src={images.hardwareFoot} alt="CVAPed Foot Hardware" className="hardware-image" />
+                  </div>
+                )}
+                {hasImage('hardwareWaist') && (
+                  <div className="hardware-item">
+                    <img src={images.hardwareWaist} alt="CVAPed Waist Hardware" className="hardware-image" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

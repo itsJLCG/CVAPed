@@ -820,7 +820,7 @@ function TherapistDashboard({ onLogout }) {
       loadFluencyExercises(); // Always load exercises for fluency
     }
     if (activeTab === 'speech-entries') loadSpeechEntries();
-    if (activeTab === 'physical') loadPhysical();
+    if (activeTab === 'physical' || activeTab === 'most-common-problem') loadPhysical();
     if (activeTab === 'recommended-exercises') loadRecommendedExercises();
     if (activeTab === 'detection-problems') loadDetectionProblems();
     if (activeTab === 'exercise-recommendations') loadExerciseRecs();
@@ -2056,6 +2056,44 @@ function TherapistDashboard({ onLogout }) {
            (item.user_email && item.user_email.toLowerCase().includes(term));
   });
 
+  const mostCommonProblemStats = useMemo(() => {
+    const problemMap = new Map();
+
+    gaitAnalyses.forEach((analysis) => {
+      const problems = Array.isArray(analysis.problems) ? analysis.problems : [];
+
+      problems.forEach((rawProblem) => {
+        const normalized = String(rawProblem || '').trim().toLowerCase();
+        if (!normalized) return;
+
+        const existing = problemMap.get(normalized) || {
+          key: normalized,
+          label: normalized.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()),
+          count: 0,
+          patientKeys: new Set(),
+        };
+
+        existing.count += 1;
+        const patientKey = analysis.user_email || analysis.user_name || analysis.id;
+        if (patientKey) existing.patientKeys.add(patientKey);
+
+        problemMap.set(normalized, existing);
+      });
+    });
+
+    const ranked = Array.from(problemMap.values())
+      .map(item => ({ ...item, patientCount: item.patientKeys.size }))
+      .sort((a, b) => b.count - a.count || b.patientCount - a.patientCount || a.label.localeCompare(b.label));
+
+    const totalMentions = ranked.reduce((sum, item) => sum + item.count, 0);
+
+    return {
+      ranked,
+      totalMentions,
+      uniqueProblems: ranked.length,
+    };
+  }, [gaitAnalyses]);
+
   return (
     <div className="admin-dashboard">
       <div className="dashboard-wrapper">
@@ -2585,6 +2623,85 @@ function TherapistDashboard({ onLogout }) {
                         </div>
                       );
                     })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'most-common-problem' && (
+            <div className="physical-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Most Common Problem</h2>
+                  <p>Top detected gait problems ranked by how often they were recommended from patient analyses.</p>
+                </div>
+              </div>
+
+              {loadingPhysical ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading common problem rankings...</p>
+                </div>
+              ) : mostCommonProblemStats.ranked.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">📌</span>
+                    <h3>No Ranked Problems Yet</h3>
+                    <p>Rankings will appear after gait analyses detect patient problems.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group common-problem-summary">
+                      <span className="stat-item">
+                        <strong>{gaitAnalyses.length}</strong> Total Analyses
+                      </span>
+                      <span className="stat-item">
+                        <strong>{mostCommonProblemStats.uniqueProblems}</strong> Unique Problems
+                      </span>
+                      <span className="stat-item">
+                        <strong>{mostCommonProblemStats.totalMentions}</strong> Total Recommendations
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="datatable-container">
+                    <table className="logs-table common-problem-table">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Detected Problem</th>
+                          <th>Times Recommended</th>
+                          <th>Patients Affected</th>
+                          <th>Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mostCommonProblemStats.ranked.map((problem, index) => {
+                          const share = mostCommonProblemStats.totalMentions
+                            ? ((problem.count / mostCommonProblemStats.totalMentions) * 100).toFixed(1)
+                            : '0.0';
+
+                          return (
+                            <tr key={problem.key}>
+                              <td>
+                                <span className={`common-rank-badge rank-${index + 1}`}>
+                                  #{index + 1}
+                                </span>
+                              </td>
+                              <td>
+                                <strong>{problem.label}</strong>
+                              </td>
+                              <td>{problem.count}</td>
+                              <td>{problem.patientCount}</td>
+                              <td>{share}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

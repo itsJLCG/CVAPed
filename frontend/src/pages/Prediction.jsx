@@ -1,9 +1,160 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { predictionService } from '../services/api';
 import './Prediction.css';
 import './BlankPage.css';
+
+const clampPercent = (value) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+
+const formatPercent = (value) => `${Math.round(clampPercent(value))}%`;
+
+const buildProgressMeta = (prediction) => {
+  if (!prediction) {
+    return {
+      progressPercent: 0,
+      confidencePercent: 0,
+      performancePercent: 0,
+    };
+  }
+
+  const confidencePercent = clampPercent((prediction.confidence || 0) * 100);
+  const performancePercent = clampPercent((prediction.current_performance || prediction.current_accuracy || 0) * 100);
+
+  if (typeof prediction.current_exercises_completed === 'number' && typeof prediction.total_exercises === 'number' && prediction.total_exercises > 0) {
+    return {
+      progressPercent: clampPercent((prediction.current_exercises_completed / prediction.total_exercises) * 100),
+      confidencePercent,
+      performancePercent,
+    };
+  }
+
+  if (typeof prediction.current_level === 'number') {
+    return {
+      progressPercent: clampPercent(((prediction.current_level - 1) / 4) * 100),
+      confidencePercent,
+      performancePercent,
+    };
+  }
+
+  return {
+    progressPercent: performancePercent,
+    confidencePercent,
+    performancePercent,
+  };
+};
+
+function PredictionProgress({ label, value, tone = 'primary' }) {
+  return (
+    <div className="prediction-progress-block">
+      <div className="prediction-progress-header">
+        <span className="prediction-progress-label">{label}</span>
+        <span className="prediction-progress-value">{formatPercent(value)}</span>
+      </div>
+      <div className="prediction-progress-track">
+        <div className={`prediction-progress-fill ${tone}`} style={{ width: `${clampPercent(value)}%` }}></div>
+      </div>
+    </div>
+  );
+}
+
+function SpeechPredictionCharts({ predictions }) {
+  const articulationEntries = Object.entries(predictions?.articulation || {}).map(([soundKey, prediction]) => {
+    const progressMeta = buildProgressMeta(prediction);
+    return {
+      key: `articulation-${soundKey}`,
+      label: `${soundKey.toUpperCase()} Sound`,
+      days: prediction.predicted_days || 0,
+      progress: progressMeta.progressPercent,
+      confidence: progressMeta.confidencePercent,
+      color: '#3b82f6',
+    };
+  });
+
+  const therapyEntries = [
+    predictions?.fluency && {
+      key: 'fluency',
+      label: 'Fluency',
+      days: predictions.fluency.predicted_days || 0,
+      progress: buildProgressMeta(predictions.fluency).progressPercent,
+      confidence: buildProgressMeta(predictions.fluency).confidencePercent,
+      color: '#10b981',
+    },
+    predictions?.receptive && {
+      key: 'receptive',
+      label: 'Receptive',
+      days: predictions.receptive.predicted_days || 0,
+      progress: buildProgressMeta(predictions.receptive).progressPercent,
+      confidence: buildProgressMeta(predictions.receptive).confidencePercent,
+      color: '#f59e0b',
+    },
+    predictions?.expressive && {
+      key: 'expressive',
+      label: 'Expressive',
+      days: predictions.expressive.predicted_days || 0,
+      progress: buildProgressMeta(predictions.expressive).progressPercent,
+      confidence: buildProgressMeta(predictions.expressive).confidencePercent,
+      color: '#8b5cf6',
+    },
+  ].filter(Boolean);
+
+  const timelineData = [...articulationEntries, ...therapyEntries];
+  const progressData = timelineData.map((item) => ({
+    key: item.key,
+    label: item.label,
+    progress: Math.round(item.progress),
+    confidence: Math.round(item.confidence),
+    color: item.color,
+  }));
+
+  if (!timelineData.length) return null;
+
+  return (
+    <div className="speech-chart-grid">
+      <div className="speech-chart-card">
+        <div className="speech-chart-header">
+          <h3>Predicted Days to Mastery</h3>
+          <p>Estimated therapy days needed based on the current speech prediction models.</p>
+        </div>
+        <div className="speech-chart-body">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={timelineData} margin={{ top: 10, right: 10, left: -10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-15} textAnchor="end" height={58} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
+              <Tooltip formatter={(value) => [`${value} days`, 'Prediction']} />
+              <Bar dataKey="days" radius={[8, 8, 0, 0]}>
+                {timelineData.map((item) => (
+                  <Cell key={item.key} fill={item.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="speech-chart-card">
+        <div className="speech-chart-header">
+          <h3>Progress and Confidence</h3>
+          <p>Percent-based view of current progress versus model confidence across speech therapies.</p>
+        </div>
+        <div className="speech-chart-body">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={progressData} margin={{ top: 10, right: 10, left: -10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-15} textAnchor="end" height={58} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <Tooltip formatter={(value) => [`${value}%`, '']} />
+              <Bar dataKey="progress" name="Progress" radius={[8, 8, 0, 0]} fill="#ce3630" />
+              <Bar dataKey="confidence" name="Confidence" radius={[8, 8, 0, 0]} fill="#94a3b8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Prediction({ onLogout, onFacilityExit }) {
   const { selectedCategory } = useTherapyCategory();
@@ -11,18 +162,7 @@ function Prediction({ onLogout, onFacilityExit }) {
   const [error, setError] = useState(null);
   const [predictions, setPredictions] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    // Fetch predictions for both speech and physical therapy
-    if (selectedCategory === 'speech' || selectedCategory === 'physical') {
-      fetchPredictions();
-    } else {
-      if (!cancelled) setLoading(false);
-    }
-    return () => { cancelled = true; };
-  }, [selectedCategory]);
-
-  const fetchPredictions = async () => {
+  const fetchPredictions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -39,7 +179,15 @@ function Prediction({ onLogout, onFacilityExit }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (selectedCategory === 'speech' || selectedCategory === 'physical') {
+      fetchPredictions();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchPredictions, selectedCategory]);
 
   const renderOverallCard = () => {
     if (!predictions?.overall) return null;
@@ -72,7 +220,8 @@ function Prediction({ onLogout, onFacilityExit }) {
 
         <div className="prediction-hero-right">
           <div className="accuracy-circle">
-            <svg viewBox="0 0 36 36" className="circular-chart">
+            <svg viewBox="0 0 36 36" className="circular-chart" role="img" aria-label="Overall speech progress">
+              <title>Overall speech progress</title>
               <path className="circle-bg"
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
@@ -115,11 +264,16 @@ function Prediction({ onLogout, onFacilityExit }) {
         <div className="prediction-table">
           {Object.entries(predictions.articulation).map(([sound, prediction]) => {
             const confidencePercent = Math.round(prediction.confidence * 100);
+            const { progressPercent, performancePercent } = buildProgressMeta(prediction);
             return (
               <div key={sound} className="table-row">
                 <div className="row-left">
                   <span className="row-name">{soundNames[sound]}</span>
                   <span className="row-meta">Level {prediction.current_level}/5 • {confidencePercent}% confidence</span>
+                  <div className="prediction-inline-metrics">
+                    <PredictionProgress label="Level Progress" value={progressPercent} tone="primary" />
+                    <PredictionProgress label="Current Accuracy" value={performancePercent} tone="warm" />
+                  </div>
                 </div>
                 <div className="row-right">
                   <span className="row-value">{prediction.predicted_days}</span>
@@ -138,6 +292,7 @@ function Prediction({ onLogout, onFacilityExit }) {
 
     const fluency = predictions.fluency;
     const confidencePercent = Math.round(fluency.confidence * 100);
+    const { progressPercent, performancePercent } = buildProgressMeta(fluency);
 
     return (
       <div className="therapy-section">
@@ -161,6 +316,12 @@ function Prediction({ onLogout, onFacilityExit }) {
             <span className="detail-separator">•</span>
             <span className="detail-item confidence-text">{confidencePercent}% confidence</span>
           </div>
+        </div>
+
+        <div className="prediction-progress-panel">
+          <PredictionProgress label="Therapy Progress" value={progressPercent} tone="success" />
+          <PredictionProgress label="Current Fluency Score" value={performancePercent} tone="success-soft" />
+          <PredictionProgress label="Prediction Confidence" value={confidencePercent} tone="neutral" />
         </div>
       </div>
     );
@@ -197,6 +358,24 @@ function Prediction({ onLogout, onFacilityExit }) {
                 <span className="detail-item confidence-text">{Math.round(predictions.receptive.confidence * 100)}% confidence</span>
               </div>
             </div>
+
+            <div className="prediction-progress-panel">
+              <PredictionProgress
+                label="Exercises Completed"
+                value={buildProgressMeta(predictions.receptive).progressPercent}
+                tone="warm"
+              />
+              <PredictionProgress
+                label="Current Accuracy"
+                value={(predictions.receptive.current_accuracy || 0) * 100}
+                tone="warm-soft"
+              />
+              <PredictionProgress
+                label="Prediction Confidence"
+                value={(predictions.receptive.confidence || 0) * 100}
+                tone="neutral"
+              />
+            </div>
           </div>
         )}
 
@@ -222,6 +401,24 @@ function Prediction({ onLogout, onFacilityExit }) {
                 <span className="detail-separator">•</span>
                 <span className="detail-item confidence-text">{Math.round(predictions.expressive.confidence * 100)}% confidence</span>
               </div>
+            </div>
+
+            <div className="prediction-progress-panel">
+              <PredictionProgress
+                label="Exercises Completed"
+                value={buildProgressMeta(predictions.expressive).progressPercent}
+                tone="purple"
+              />
+              <PredictionProgress
+                label="Current Accuracy"
+                value={(predictions.expressive.current_accuracy || 0) * 100}
+                tone="purple-soft"
+              />
+              <PredictionProgress
+                label="Prediction Confidence"
+                value={(predictions.expressive.confidence || 0) * 100}
+                tone="neutral"
+              />
             </div>
           </div>
         )}
@@ -607,7 +804,7 @@ function Prediction({ onLogout, onFacilityExit }) {
               <i className="fas fa-exclamation-circle"></i>
               <h2>Error Loading Predictions</h2>
               <p>{error}</p>
-              <button onClick={fetchPredictions} className="retry-button">
+              <button type="button" onClick={fetchPredictions} className="retry-button">
                 <i className="fas fa-redo"></i>
                 Try Again
               </button>
@@ -638,6 +835,8 @@ function Prediction({ onLogout, onFacilityExit }) {
           ) : (
             <>
               {renderOverallCard()}
+
+              <SpeechPredictionCharts predictions={predictions} />
               
               <div className="therapies-list">
                 {renderArticulationCard()}

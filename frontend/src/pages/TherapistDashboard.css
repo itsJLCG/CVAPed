@@ -7521,10 +7521,160 @@
 }
 
 .reports-container {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2rem;
+  display: block;
   padding: 1rem 0;
+}
+
+.reports-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reports-main-full {
+  width: 100%;
+}
+
+.report-overview-card .report-card-body {
+  padding-top: 1.5rem;
+}
+
+.reports-therapy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.report-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.report-breakdown-list-overview {
+  gap: 1.25rem;
+}
+
+.report-breakdown-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.report-breakdown-item.overview {
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+}
+
+.report-breakdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.report-breakdown-label {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.report-breakdown-meta {
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-weight: 600;
+  text-align: right;
+}
+
+.report-breakdown-track {
+  height: 10px;
+  background: #e9ecef;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.report-breakdown-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-secondary) 0%, #74b9ff 100%);
+}
+
+.report-problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.report-problem-item {
+  border: 2px solid #e9ecef;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: #f8f9fa;
+}
+
+.report-problem-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.report-problem-title {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.report-problem-subtitle {
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.85rem;
+}
+
+.problem-dominant-badge {
+  background: linear-gradient(135deg, rgba(206, 54, 48, 0.12) 0%, rgba(181, 46, 41, 0.08) 100%);
+  color: var(--color-primary);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.problem-gender-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.problem-gender-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 0.85rem;
+}
+
+.problem-gender-icon {
+  font-size: 1.15rem;
+}
+
+.problem-gender-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.problem-gender-count {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--color-primary);
 }
 
 .report-card {
@@ -7890,6 +8040,10 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .reports-therapy-grid {
+    grid-template-columns: 1fr;
+  }
+
   .age-brackets-grid,
   .gender-distribution-grid {
     grid-template-columns: 1fr;
@@ -7902,6 +8056,12 @@
   .report-card-header,
   .report-card-body {
     padding: 1.5rem;
+  }
+
+  .report-problem-top,
+  .report-breakdown-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

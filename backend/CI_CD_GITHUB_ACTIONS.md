@@ -124,6 +124,7 @@ The workflow file contains the non-secret project settings directly, and Google 
 ## Notes
 
 - This workflow assumes the Cloud Run service already exists once from your initial manual deploy.
-- The workflow deploys a new container image; it does not rotate or rewrite your runtime secrets.
+- The workflow deploys a new container image and updates plain Cloud Run env vars for the facility heat-index location.
+- It does not rotate or rewrite your runtime secrets in Secret Manager.
 - If you want staging and production later, duplicate this workflow with separate services and GitHub environments.
 - The only remaining step for activation is to commit and push `.github/workflows/backend-cloud-run.yml` to GitHub.

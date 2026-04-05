@@ -27,6 +27,9 @@ env:
   GCP_WORKLOAD_IDENTITY_PROVIDER: projects/592360297121/locations/global/workloadIdentityPools/github-actions-cicd/providers/github-provider
   CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: 592360297121-compute@developer.gserviceaccount.com
   IMAGE_NAME: cvaped-backend
+  FACILITY_LOCATION_NAME: Taguig City Disability Resource and Development Center
+  FACILITY_LATITUDE: "14.514722"
+  FACILITY_LONGITUDE: "121.055833"
 
 jobs:
   deploy:
@@ -100,6 +103,7 @@ jobs:
         run: |
           gcloud run services update "$CLOUD_RUN_SERVICE" \
             --image "$IMAGE_URI" \
+            --update-env-vars "FACILITY_LOCATION_NAME=${FACILITY_LOCATION_NAME},FACILITY_LATITUDE=${FACILITY_LATITUDE},FACILITY_LONGITUDE=${FACILITY_LONGITUDE}" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --quiet

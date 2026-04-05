@@ -79,7 +79,7 @@
    =================================== */
 .do-metrics-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
 
@@ -167,6 +167,38 @@
   letter-spacing: 0.3px;
 }
 
+.do-metric-badge.normal {
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.do-metric-badge.caution {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.do-metric-badge.warning {
+  color: #c2410c;
+  background: rgba(249, 115, 22, 0.14);
+}
+
+.do-metric-badge.danger {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.do-metric-badge.neutral {
+  color: #475569;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.do-metric-note {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
 .do-metric-filter {
   font-size: 0.72rem;
   font-weight: 600;
@@ -204,6 +236,168 @@
     "demographics  demographics activities";
   gap: 20px;
   align-items: stretch;
+}
+
+.do-climate-section {
+  width: 100%;
+}
+
+.do-climate-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) 1fr;
+  gap: 20px;
+  align-items: center;
+  min-height: 230px;
+}
+
+.do-climate-gauge-wrap {
+  position: relative;
+  min-height: 220px;
+}
+
+.do-climate-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.do-climate-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.do-climate-risk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.do-climate-risk.normal { background: rgba(20, 184, 166, 0.12); color: #0f766e; }
+.do-climate-risk.caution { background: rgba(245, 158, 11, 0.14); color: #b45309; }
+.do-climate-risk.warning { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
+.do-climate-risk.danger { background: rgba(239, 68, 68, 0.14); color: #b91c1c; }
+.do-climate-risk.neutral { background: rgba(148, 163, 184, 0.18); color: #475569; }
+
+.do-climate-details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.do-climate-location {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  border: 1px solid #e2e8f0;
+}
+
+.do-climate-location-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.do-climate-location-name {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.do-climate-stats-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.do-climate-stat-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.do-climate-stat-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.do-climate-stat-value {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.do-climate-thresholds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.do-climate-threshold-item {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.do-climate-threshold-label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.do-climate-threshold-limit {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.do-climate-advisory {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.do-climate-advisory-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c2410c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.do-climate-advisory p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #7c2d12;
+  line-height: 1.5;
 }
 
 /* ===================================
@@ -757,6 +951,10 @@
       "weekly        scoredist"
       "demographics  activities";
   }
+
+  .do-climate-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===================================
@@ -816,6 +1014,11 @@
       "scoredist"
       "demographics"
       "activities";
+  }
+
+  .do-climate-thresholds,
+  .do-climate-stats-row {
+    grid-template-columns: 1fr;
   }
 
   .do-chart-header {

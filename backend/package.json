@@ -1,0 +1,8 @@
+{
+  "name": "cvaped-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "venv\\Scripts\\python.exe app.py",
+    "dev": "venv\\Scripts\\python.exe app.py"
+  }
+}

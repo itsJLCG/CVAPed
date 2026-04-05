@@ -10,6 +10,19 @@ import SidebarDrawer from '../components/SidebarDrawer';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
+const REPORT_CATEGORY_OPTIONS = [
+  { key: 'age', label: 'Age', icon: '👥' },
+  { key: 'gender', label: 'Gender', icon: '⚧️' },
+  { key: 'work', label: 'Work', icon: '💼' },
+];
+
+const REPORT_GENDER_META = {
+  male: { label: 'Male', icon: '👨' },
+  female: { label: 'Female', icon: '👩' },
+  other: { label: 'Other', icon: '🧑' },
+  'prefer-not-to-say': { label: 'Prefer not to say', icon: '❓' },
+};
+
 function TherapistDashboard({ onLogout }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -148,6 +161,8 @@ function TherapistDashboard({ onLogout }) {
   // Reports state
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [activeReportCategory, setActiveReportCategory] = useState('age');
+  const [reportsDropdownOpen, setReportsDropdownOpen] = useState(true);
 
   // Speech therapy analytics state (for PDF export)
   const [articulationAnalytics, setArticulationAnalytics] = useState(null);
@@ -2094,6 +2109,59 @@ function TherapistDashboard({ onLogout }) {
     };
   }, [gaitAnalyses]);
 
+  const activeReportData = reportsData?.categories?.[activeReportCategory] || null;
+  const reportTherapyPanels = useMemo(() => {
+    if (!activeReportData?.byTherapy) return [];
+    return ['speech', 'physical']
+      .map((therapyKey) => activeReportData.byTherapy[therapyKey])
+      .filter(Boolean);
+  }, [activeReportData]);
+
+  const overallReportItems = useMemo(() => {
+    if (activeReportCategory === 'age') {
+      return reportsData?.ageBrackets || [];
+    }
+
+    if (activeReportCategory === 'gender') {
+      return reportsData?.genderDistribution || [];
+    }
+
+    if (!activeReportData?.byTherapy) return [];
+
+    const aggregateMap = new Map();
+
+    Object.values(activeReportData.byTherapy).forEach((panel) => {
+      (panel?.items || []).forEach((item) => {
+        const existing = aggregateMap.get(item.key) || {
+          key: item.key,
+          label: getReportItemLabel(item),
+          count: 0,
+        };
+
+        existing.count += item.count || 0;
+        aggregateMap.set(item.key, existing);
+      });
+    });
+
+    const total = Array.from(aggregateMap.values()).reduce((sum, item) => sum + item.count, 0);
+
+    return Array.from(aggregateMap.values())
+      .map((item) => ({
+        ...item,
+        percentage: total > 0 ? Number(((item.count / total) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [activeReportCategory, activeReportData, reportsData]);
+
+  const getReportItemsForDisplay = (items = []) => {
+    if (activeReportCategory === 'age') return items;
+    return items.filter(item => item.count > 0);
+  };
+
+  const getReportItemLabel = (item) => item.label || item.range || item.gender || item.key || 'Unknown';
+
+  const getProblemGenderMeta = (genderKey) => REPORT_GENDER_META[genderKey] || { label: genderKey, icon: '❓' };
+
   return (
     <div className="admin-dashboard">
       <div className="dashboard-wrapper">
@@ -2135,10 +2203,14 @@ function TherapistDashboard({ onLogout }) {
             onClose={closeSidebarDrawer}
             activeTab={activeTab}
             onTabChange={handleTabChange}
+            activeReportCategory={activeReportCategory}
+            onReportCategoryChange={setActiveReportCategory}
             speechDropdownOpen={speechDropdownOpen}
             onSpeechDropdownToggle={() => setSpeechDropdownOpen(prev => !prev)}
             physicalDropdownOpen={physicalDropdownOpen}
             onPhysicalDropdownToggle={() => setPhysicalDropdownOpen(prev => !prev)}
+            reportsDropdownOpen={reportsDropdownOpen}
+            onReportsDropdownToggle={() => setReportsDropdownOpen(prev => !prev)}
             sidebarCollapsed={sidebarCollapsed}
             onToggleCollapse={toggleSidebar}
             isMobile={isMobile}
@@ -4672,121 +4744,231 @@ function TherapistDashboard({ onLogout }) {
                   <div className="loading-spinner"></div>
                   <p>Loading reports...</p>
                 </div>
-              ) : reportsData ? (
+              ) : reportsData && (reportsData.totalPatients || 0) > 0 ? (
                 <div className="reports-container">
-                  {/* Age Bracket Analysis */}
-                  <div className="report-card">
-                    <div className="report-card-header">
-                      <h3 className="report-card-title">
-                        <span className="report-icon">👥</span>
-                        Age Distribution
-                      </h3>
-                      <p className="report-card-subtitle">Patient distribution across age brackets</p>
+                  <div className="reports-main reports-main-full">
+                    <div className="report-card report-overview-card">
+                      <div className="report-card-header">
+                        <h3 className="report-card-title">
+                          <span className="report-icon">
+                            {REPORT_CATEGORY_OPTIONS.find(option => option.key === activeReportCategory)?.icon || '📈'}
+                          </span>
+                          {activeReportData?.title || 'Reports Overview'}
+                        </h3>
+                        <p className="report-card-subtitle">{activeReportData?.description || 'Demographic reporting by therapy type.'}</p>
+                      </div>
+                      <div className="report-card-body">
+                        <div className="report-summary">
+                          <div className="summary-stats-row">
+                            <div className="summary-stat">
+                              <span className="stat-label">Total Patients</span>
+                              <span className="stat-value">{reportsData.totalPatients || 0}</span>
+                            </div>
+                            <div className="summary-stat">
+                              <span className="stat-label">Speech Therapy</span>
+                              <span className="stat-value">{reportsData.therapyTotals?.speech?.totalPatients || 0}</span>
+                            </div>
+                            <div className="summary-stat">
+                              <span className="stat-label">Physical Therapy</span>
+                              <span className="stat-value">{reportsData.therapyTotals?.physical?.totalPatients || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="report-card-body">
-                      {reportsData.ageBrackets && reportsData.ageBrackets.length > 0 ? (
-                        <>
+
+                    {activeReportCategory === 'age' && overallReportItems.length > 0 && (
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">👥</span>
+                            Age Distribution Overview
+                          </h3>
+                          <p className="report-card-subtitle">Patient distribution across age brackets, matching the previous dashboard summary.</p>
+                        </div>
+                        <div className="report-card-body">
                           <div className="age-brackets-grid">
-                            {reportsData.ageBrackets.map((bracket, index) => (
-                              <div 
-                                key={index} 
-                                className={`age-bracket-item ${bracket.isHighest ? 'highest' : ''}`}
-                              >
+                            {overallReportItems.map((bracket) => (
+                              <div key={bracket.range} className={`age-bracket-item ${bracket.isHighest ? 'highest' : ''}`}>
                                 <div className="bracket-label">{bracket.range}</div>
                                 <div className="bracket-count">{bracket.count}</div>
                                 <div className="bracket-percentage">{bracket.percentage}%</div>
-                                {bracket.isHighest && (
-                                  <div className="highest-badge">Highest</div>
-                                )}
+                                {bracket.isHighest && <div className="highest-badge">Highest</div>}
                                 <div className="bracket-bar">
-                                  <div 
-                                    className="bracket-bar-fill" 
-                                    style={{ width: `${bracket.percentage}%` }}
-                                  ></div>
+                                  <div className="bracket-bar-fill" style={{ width: `${bracket.percentage}%` }}></div>
                                 </div>
                               </div>
                             ))}
                           </div>
+
                           <div className="report-summary">
                             <div className="summary-item highlight">
                               <span className="summary-icon">🎯</span>
                               <div className="summary-content">
-                                <span className="summary-label">Highest Age Bracket:</span>
-                                <span className="summary-value">{reportsData.highestAgeBracket?.range || 'N/A'}</span>
+                                <span className="summary-label">Highest Age Bracket</span>
+                                <span className="summary-value">{reportsData?.highestAgeBracket?.range || 'N/A'}</span>
                               </div>
-                              <div className="summary-count">{reportsData.highestAgeBracket?.count || 0} patients</div>
+                              <div className="summary-count">{reportsData?.highestAgeBracket?.count || 0} patients</div>
                             </div>
                           </div>
-                        </>
-                      ) : (
-                        <div className="no-data">
-                          <div className="no-data-icon">📊</div>
-                          <p>No age data available</p>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    )}
 
-                  {/* Gender Distribution */}
-                  <div className="report-card">
-                    <div className="report-card-header">
-                      <h3 className="report-card-title">
-                        <span className="report-icon">⚧️</span>
-                        Gender Distribution
-                      </h3>
-                      <p className="report-card-subtitle">Patient distribution by gender</p>
-                    </div>
-                    <div className="report-card-body">
-                      {reportsData.genderDistribution && reportsData.genderDistribution.length > 0 ? (
-                        <>
+                    {activeReportCategory === 'gender' && overallReportItems.length > 0 && (
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">⚧️</span>
+                            Gender Distribution Overview
+                          </h3>
+                          <p className="report-card-subtitle">Overall gender distribution before the therapy-specific breakdown below.</p>
+                        </div>
+                        <div className="report-card-body">
                           <div className="gender-distribution-grid">
-                            {reportsData.genderDistribution.map((gender, index) => (
-                              <div key={index} className="gender-item">
-                                <div className="gender-icon-wrapper">
-                                  <span className="gender-emoji">
-                                    {gender.gender === 'male' ? '👨' : 
-                                     gender.gender === 'female' ? '👩' : 
-                                     gender.gender === 'other' ? '🧑' : '❓'}
-                                  </span>
+                            {overallReportItems.map((gender) => {
+                              const meta = getProblemGenderMeta(gender.gender || gender.key);
+                              const barKey = gender.gender || gender.key;
+
+                              return (
+                                <div key={gender.key || gender.gender} className="gender-item">
+                                  <div className="gender-icon-wrapper">
+                                    <span className="gender-emoji">{meta.icon}</span>
+                                  </div>
+                                  <div className="gender-info">
+                                    <div className="gender-label">{meta.label}</div>
+                                    <div className="gender-stats">
+                                      <span className="gender-count">{gender.count} patients</span>
+                                      <span className="gender-percentage">{gender.percentage}%</span>
+                                    </div>
+                                    <div className="gender-bar">
+                                      <div className={`gender-bar-fill ${barKey}`} style={{ width: `${gender.percentage}%` }}></div>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="gender-info">
-                                  <div className="gender-label">
-                                    {gender.gender.charAt(0).toUpperCase() + gender.gender.slice(1)}
-                                  </div>
-                                  <div className="gender-stats">
-                                    <span className="gender-count">{gender.count} patients</span>
-                                    <span className="gender-percentage">{gender.percentage}%</span>
-                                  </div>
-                                  <div className="gender-bar">
-                                    <div 
-                                      className={`gender-bar-fill ${gender.gender}`}
-                                      style={{ width: `${gender.percentage}%` }}
-                                    ></div>
-                                  </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeReportCategory === 'work' && overallReportItems.length > 0 && (
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">💼</span>
+                            Work Distribution Overview
+                          </h3>
+                          <p className="report-card-subtitle">Overall occupation and employment status before the therapy-specific breakdown below.</p>
+                        </div>
+                        <div className="report-card-body">
+                          <div className="report-breakdown-list report-breakdown-list-overview">
+                            {overallReportItems.map((item) => (
+                              <div key={item.key} className="report-breakdown-item overview">
+                                <div className="report-breakdown-header">
+                                  <span className="report-breakdown-label">{item.label}</span>
+                                  <span className="report-breakdown-meta">{item.count} patients • {item.percentage}%</span>
+                                </div>
+                                <div className="report-breakdown-track">
+                                  <div className="report-breakdown-fill" style={{ width: `${item.percentage}%` }}></div>
                                 </div>
                               </div>
                             ))}
                           </div>
-                          <div className="report-summary">
-                            <div className="summary-stats-row">
-                              <div className="summary-stat">
-                                <span className="stat-label">Total Patients</span>
-                                <span className="stat-value">{reportsData.totalPatients || 0}</span>
-                              </div>
-                              <div className="summary-stat">
-                                <span className="stat-label">Gender Categories</span>
-                                <span className="stat-value">{reportsData.genderDistribution.length}</span>
-                              </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="reports-therapy-grid">
+                      {reportTherapyPanels.map((panel) => {
+                        const displayItems = getReportItemsForDisplay(panel.items || []);
+                        const maxCount = displayItems.reduce((highest, item) => Math.max(highest, item.count || 0), 0);
+
+                        return (
+                          <div key={panel.therapyType} className="report-card report-therapy-card">
+                            <div className="report-card-header">
+                              <h3 className="report-card-title">
+                                <span className="report-icon">{panel.therapyType === 'speech' ? '🎤' : '🏃'}</span>
+                                {panel.therapyLabel}
+                              </h3>
+                              <p className="report-card-subtitle">{panel.totalPatients || 0} patients in this therapy group</p>
+                            </div>
+                            <div className="report-card-body">
+                              {displayItems.length > 0 ? (
+                                <div className="report-breakdown-list">
+                                  {displayItems.map((item) => (
+                                    <div key={`${panel.therapyType}-${item.key}`} className="report-breakdown-item">
+                                      <div className="report-breakdown-header">
+                                        <span className="report-breakdown-label">{getReportItemLabel(item)}</span>
+                                        <span className="report-breakdown-meta">{item.count} patients • {item.percentage}%</span>
+                                      </div>
+                                      <div className="report-breakdown-track">
+                                        <div
+                                          className="report-breakdown-fill"
+                                          style={{ width: `${maxCount > 0 ? ((item.count / maxCount) * 100).toFixed(1) : 0}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="no-data">
+                                  <div className="no-data-icon">📂</div>
+                                  <p>No {activeReportCategory} data available for this therapy type</p>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </>
-                      ) : (
-                        <div className="no-data">
-                          <div className="no-data-icon">⚧️</div>
-                          <p>No gender data available</p>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
+
+                    {activeReportCategory === 'gender' && (
+                      <div className="report-card report-problems-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">🦿</span>
+                            Detected Physical Problems by Gender
+                          </h3>
+                          <p className="report-card-subtitle">Physical gait problems detected from therapist-viewable analyses and the gender most commonly affected.</p>
+                        </div>
+                        <div className="report-card-body">
+                          {activeReportData?.detectedProblems?.length > 0 ? (
+                            <div className="report-problem-list">
+                              {activeReportData.detectedProblems.map((problem) => (
+                                <div key={problem.key} className="report-problem-item">
+                                  <div className="report-problem-top">
+                                    <div>
+                                      <h4 className="report-problem-title">{problem.label}</h4>
+                                      <p className="report-problem-subtitle">{problem.totalPatients} patients affected</p>
+                                    </div>
+                                    <span className="problem-dominant-badge">Most common: {problem.dominantGenderLabel}</span>
+                                  </div>
+                                  <div className="problem-gender-grid">
+                                    {Object.entries(problem.countsByGender || {}).map(([genderKey, count]) => {
+                                      const meta = getProblemGenderMeta(genderKey);
+                                      return (
+                                        <div key={`${problem.key}-${genderKey}`} className="problem-gender-card">
+                                          <span className="problem-gender-icon">{meta.icon}</span>
+                                          <span className="problem-gender-name">{meta.label}</span>
+                                          <span className="problem-gender-count">{count}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="no-data">
+                              <div className="no-data-icon">🦿</div>
+                              <p>No detected physical problems available yet</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

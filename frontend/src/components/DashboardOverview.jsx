@@ -4,7 +4,8 @@ import {
   BarChart, Bar,
   PieChart, Pie, Cell,
   ResponsiveContainer,
-  XAxis, YAxis, Tooltip, CartesianGrid
+  XAxis, YAxis, Tooltip, CartesianGrid,
+  RadialBarChart, RadialBar, PolarAngleAxis
 } from 'recharts';
 import './DashboardOverview.css';
 
@@ -103,6 +104,77 @@ function ChartCard({ title, icon, children, gridArea, className = '' }) {
   );
 }
 
+function ClimateAdvisoryChart({ climate }) {
+  if (!climate?.available || climate.heat_index_c == null) {
+    return <EmptyState icon="☀️" message="No climate data available" />;
+  }
+
+  const gaugeMax = 54;
+  const gaugeData = [{ name: 'Heat Index', value: Math.min(climate.heat_index_c, gaugeMax), fill: '#f97316' }];
+  const thresholdLabels = [
+    { label: 'Normal', limit: '< 27°C' },
+    { label: 'Caution', limit: '27-31°C' },
+    { label: 'Extreme Caution', limit: '32-40°C' },
+    { label: 'Danger', limit: '41°C+' },
+  ];
+
+  return (
+    <div className="do-climate-layout">
+      <div className="do-climate-gauge-wrap">
+        <ResponsiveContainer width="100%" height={230}>
+          <RadialBarChart
+            innerRadius="68%"
+            outerRadius="100%"
+            data={gaugeData}
+            startAngle={210}
+            endAngle={-30}
+            barSize={18}
+          >
+            <PolarAngleAxis type="number" domain={[0, gaugeMax]} angleAxisId={0} tick={false} />
+            <RadialBar background dataKey="value" cornerRadius={10} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        <div className="do-climate-center">
+          <span className="do-climate-value">{climate.heat_index_c}°C</span>
+          <span className={`do-climate-risk ${climate.risk_tone || 'neutral'}`}>{climate.risk_level}</span>
+        </div>
+      </div>
+
+      <div className="do-climate-details">
+        <div className="do-climate-location">
+          <span className="do-climate-location-label">Facility</span>
+          <span className="do-climate-location-name">{climate.location || 'Taguig City Disability Resource and Development Center'}</span>
+        </div>
+
+        <div className="do-climate-stats-row">
+          <div className="do-climate-stat-card">
+            <span className="do-climate-stat-label">Temperature</span>
+            <span className="do-climate-stat-value">{climate.temperature_c}°C</span>
+          </div>
+          <div className="do-climate-stat-card">
+            <span className="do-climate-stat-label">Humidity</span>
+            <span className="do-climate-stat-value">{climate.humidity_percent}%</span>
+          </div>
+        </div>
+
+        <div className="do-climate-thresholds">
+          {thresholdLabels.map((item) => (
+            <div key={item.label} className="do-climate-threshold-item">
+              <span className="do-climate-threshold-label">{item.label}</span>
+              <span className="do-climate-threshold-limit">{item.limit}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="do-climate-advisory">
+          <span className="do-climate-advisory-label">Facility Advisory</span>
+          <p>{climate.advisory}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ====== CHART 1: Metric Cards ====== */
 function MetricCards({ stats, selectedDays, setSelectedDays }) {
   const avgScore = useMemo(() => {
@@ -166,8 +238,9 @@ function MetricCards({ stats, selectedDays, setSelectedDays }) {
                 <option value="all">All Time</option>
               </select>
             ) : card.badge ? (
-              <span className="do-metric-badge">{card.badge}</span>
+              <span className={`do-metric-badge ${card.badgeClassName || ''}`}>{card.badge}</span>
             ) : null}
+            {card.note ? <p className="do-metric-note">{card.note}</p> : null}
           </div>
         </div>
       ))}
@@ -698,6 +771,12 @@ function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelect
         selectedDays={selectedDays}
         setSelectedDays={setSelectedDays}
       />
+
+      <div className="do-climate-section">
+        <ChartCard title="Climate Responsive (Heat Index)" icon={'☀️'}>
+          <ClimateAdvisoryChart climate={overviewStats.climate} />
+        </ChartCard>
+      </div>
 
       {/* Charts Grid */}
       <div className="do-charts-grid">

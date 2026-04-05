@@ -666,7 +666,7 @@ function InitialDiagnosticModal({ isOpen, onClose, onConfirm, loading }) {
     return (
       <div className="wizard-step-content wizard-summary">
         <div className="wizard-summary-header">
-          <div className="wizard-summary-check">✓</div>
+          <div className="wizard-summary-check" aria-hidden="true">🩺</div>
           <h3>Profile Complete!</h3>
           <p>Your condition summary and recommended starting point</p>
         </div>
@@ -730,7 +730,7 @@ function InitialDiagnosticModal({ isOpen, onClose, onConfirm, loading }) {
               </span>
             </div>
             {currentStep === 1 && (
-              <button className="diagnostic-modal-close" onClick={onClose} aria-label="Close">×</button>
+              <button type="button" className="diagnostic-modal-close" onClick={onClose} aria-label="Close">×</button>
             )}
           </div>
           <StepBar currentStep={currentStep} total={TOTAL_STEPS} titles={STEP_TITLES} />
@@ -749,7 +749,7 @@ function InitialDiagnosticModal({ isOpen, onClose, onConfirm, loading }) {
         {/* Footer */}
         <div className="diagnostic-modal-footer wizard-footer">
           {currentStep > 1 ? (
-            <button className="btn-diagnostic btn-wizard-back" onClick={handleBack} disabled={loading}>
+            <button type="button" className="btn-diagnostic btn-wizard-back" onClick={handleBack} disabled={loading}>
               ← Back
             </button>
           ) : (
@@ -757,12 +757,13 @@ function InitialDiagnosticModal({ isOpen, onClose, onConfirm, loading }) {
           )}
           <div className="wizard-footer-actions">
             {currentStep >= 3 && currentStep <= 4 && (
-              <button className="btn-wizard-skip" onClick={handleSkip} disabled={loading}>
+              <button type="button" className="btn-wizard-skip" onClick={handleSkip} disabled={loading}>
                 Skip
               </button>
             )}
             {currentStep < 5 && (
               <button
+                type="button"
                 className="btn-diagnostic btn-diagnostic-yes"
                 onClick={handleNext}
               >
@@ -771,6 +772,7 @@ function InitialDiagnosticModal({ isOpen, onClose, onConfirm, loading }) {
             )}
             {currentStep === 5 && (
               <button
+                type="button"
                 className="btn-diagnostic btn-diagnostic-yes"
                 onClick={handleFinish}
                 disabled={loading}

@@ -10,6 +10,7 @@ function CompleteProfile({ onLogin }) {
   const [formData, setFormData] = useState({
     age: '',
     gender: '',
+    workStatus: 'unspecified',
     therapyType: '',
     patientType: '',
     // Pediatric Speech Therapy fields
@@ -270,6 +271,25 @@ function CompleteProfile({ onLogin }) {
                         <option value="prefer-not-to-say">Prefer not to say</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="workStatus">Occupation / Employment Status</label>
+                    <select
+                      id="workStatus"
+                      name="workStatus"
+                      value={formData.workStatus}
+                      onChange={handleChange}
+                    >
+                      <option value="unspecified">Prefer not to say / Unspecified</option>
+                      <option value="employed">Employed</option>
+                      <option value="self_employed">Self-Employed</option>
+                      <option value="student">Student</option>
+                      <option value="unemployed">Unemployed</option>
+                      <option value="homemaker">Homemaker</option>
+                      <option value="retired">Retired</option>
+                      <option value="unable_to_work">Unable to Work</option>
+                    </select>
                   </div>
                 </div>
 

@@ -17,6 +17,7 @@ import socket
 import threading
 import atexit
 import logging
+from urllib import parse, request as urllib_request
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,352 @@ def get_int_env(name, default):
         return int(value)
     except ValueError:
         return default
+
+
+def get_float_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+FACILITY_LOCATION_NAME = os.getenv('FACILITY_LOCATION_NAME', 'Taguig City Disability Resource and Development Center')
+FACILITY_LATITUDE = get_float_env('FACILITY_LATITUDE', 14.514722)
+FACILITY_LONGITUDE = get_float_env('FACILITY_LONGITUDE', 121.055833)
+
+WORK_STATUS_LABELS = {
+    'employed': 'Employed',
+    'self_employed': 'Self-Employed',
+    'student': 'Student',
+    'unemployed': 'Unemployed',
+    'homemaker': 'Homemaker',
+    'retired': 'Retired',
+    'unable_to_work': 'Unable to Work',
+    'unspecified': 'Unspecified'
+}
+
+AGE_BRACKET_ORDER = ['0-12', '13-17', '18-25', '26-35', '36-45', '46-55', '56-65', '66+']
+GENDER_ORDER = ['male', 'female', 'other', 'prefer-not-to-say']
+
+
+def normalize_therapy_type(raw_value):
+    value = str(raw_value or '').strip().lower()
+    if value == 'speech':
+        return 'speech'
+    if value == 'physical':
+        return 'physical'
+    return 'other'
+
+
+def normalize_gender(raw_value):
+    value = str(raw_value or '').strip().lower()
+    if value in GENDER_ORDER:
+        return value
+    return 'other'
+
+
+def normalize_work_status(raw_value):
+    value = str(raw_value or '').strip().lower().replace('-', '_').replace(' ', '_')
+    if value in WORK_STATUS_LABELS:
+        return value
+    return 'unspecified'
+
+
+def get_age_bracket(age):
+    try:
+        age_int = int(age)
+    except (TypeError, ValueError):
+        return None
+
+    if age_int <= 12:
+        return '0-12'
+    if age_int <= 17:
+        return '13-17'
+    if age_int <= 25:
+        return '18-25'
+    if age_int <= 35:
+        return '26-35'
+    if age_int <= 45:
+        return '36-45'
+    if age_int <= 55:
+        return '46-55'
+    if age_int <= 65:
+        return '56-65'
+    return '66+'
+
+
+def compute_heat_index_celsius(temperature_c, humidity_percent):
+    if temperature_c is None or humidity_percent is None:
+        return None
+
+    if temperature_c < 27 or humidity_percent < 40:
+        return round(float(temperature_c), 1)
+
+    t = float(temperature_c)
+    rh = float(humidity_percent)
+    heat_index = (
+        -8.784695 +
+        (1.61139411 * t) +
+        (2.338549 * rh) +
+        (-0.14611605 * t * rh) +
+        (-0.012308094 * (t ** 2)) +
+        (-0.016424828 * (rh ** 2)) +
+        (0.002211732 * (t ** 2) * rh) +
+        (0.00072546 * t * (rh ** 2)) +
+        (-0.000003582 * (t ** 2) * (rh ** 2))
+    )
+    return round(heat_index, 1)
+
+
+def classify_heat_index(heat_index_c):
+    if heat_index_c is None:
+        return {
+            'risk_level': 'Unavailable',
+            'risk_tone': 'neutral',
+            'advisory': 'Weather data is unavailable right now.'
+        }
+
+    if heat_index_c < 27:
+        return {
+            'risk_level': 'Normal',
+            'risk_tone': 'normal',
+            'advisory': 'Conditions are generally comfortable for scheduled therapy sessions.'
+        }
+    if heat_index_c < 32:
+        return {
+            'risk_level': 'Caution',
+            'risk_tone': 'caution',
+            'advisory': 'Monitor hydration and rest breaks during physical therapy activity.'
+        }
+    if heat_index_c < 41:
+        return {
+            'risk_level': 'Extreme Caution',
+            'risk_tone': 'warning',
+            'advisory': 'Reduce prolonged exertion and consider lighter indoor therapy routines.'
+        }
+    if heat_index_c < 54:
+        return {
+            'risk_level': 'Danger',
+            'risk_tone': 'danger',
+            'advisory': 'Avoid strenuous outdoor activity and prioritize closely monitored sessions.'
+        }
+    return {
+        'risk_level': 'Extreme Danger',
+        'risk_tone': 'danger',
+        'advisory': 'Suspend outdoor exertion and keep therapy activity in a controlled indoor environment.'
+    }
+
+
+def get_heat_index_snapshot():
+    query = parse.urlencode({
+        'latitude': FACILITY_LATITUDE,
+        'longitude': FACILITY_LONGITUDE,
+        'current': 'temperature_2m,relative_humidity_2m',
+        'timezone': 'auto'
+    })
+    url = f'https://api.open-meteo.com/v1/forecast?{query}'
+
+    try:
+        with urllib_request.urlopen(url, timeout=5) as response:
+            payload = json.loads(response.read().decode('utf-8'))
+
+        current = payload.get('current', {})
+        temperature_c = current.get('temperature_2m')
+        humidity_percent = current.get('relative_humidity_2m')
+        heat_index_c = compute_heat_index_celsius(temperature_c, humidity_percent)
+        classification = classify_heat_index(heat_index_c)
+
+        return {
+            'available': temperature_c is not None and humidity_percent is not None,
+            'location': FACILITY_LOCATION_NAME,
+            'temperature_c': round(float(temperature_c), 1) if temperature_c is not None else None,
+            'humidity_percent': int(round(float(humidity_percent))) if humidity_percent is not None else None,
+            'heat_index_c': heat_index_c,
+            'fetched_at': current.get('time'),
+            **classification
+        }
+    except Exception:
+        classification = classify_heat_index(None)
+        return {
+            'available': False,
+            'location': FACILITY_LOCATION_NAME,
+            'temperature_c': None,
+            'humidity_percent': None,
+            'heat_index_c': None,
+            'fetched_at': None,
+            **classification
+        }
+
+
+def build_ranked_items(counts, total, label_key='label', value_key='count', preferred_order=None, label_map=None):
+    keys = preferred_order if preferred_order is not None else list(counts.keys())
+    items = []
+
+    for key in keys:
+        count = counts.get(key, 0)
+        percentage = round((count / total) * 100, 1) if total > 0 else 0
+        items.append({
+            'key': key,
+            label_key: label_map.get(key, key) if label_map else key,
+            value_key: count,
+            'percentage': percentage
+        })
+
+    return items
+
+
+def build_patient_report_payload(patients):
+    total_patients = len(patients)
+    therapy_keys = ['speech', 'physical']
+    therapy_labels = {'speech': 'Speech Therapy', 'physical': 'Physical Therapy'}
+
+    age_counts = {key: {bracket: 0 for bracket in AGE_BRACKET_ORDER} for key in therapy_keys + ['overall']}
+    gender_counts = {key: {gender: 0 for gender in GENDER_ORDER} for key in therapy_keys + ['overall']}
+    work_counts = {key: {status: 0 for status in WORK_STATUS_LABELS.keys()} for key in therapy_keys + ['overall']}
+    therapy_totals = {key: 0 for key in therapy_keys}
+
+    for patient in patients:
+        therapy = normalize_therapy_type(patient.get('therapyType'))
+        if therapy in therapy_totals:
+            therapy_totals[therapy] += 1
+
+        bracket = get_age_bracket(patient.get('age'))
+        if bracket:
+            age_counts['overall'][bracket] += 1
+            if therapy in therapy_totals:
+                age_counts[therapy][bracket] += 1
+
+        gender = normalize_gender(patient.get('gender'))
+        gender_counts['overall'][gender] += 1
+        if therapy in therapy_totals:
+            gender_counts[therapy][gender] += 1
+
+        work_status = normalize_work_status(patient.get('workStatus'))
+        work_counts['overall'][work_status] += 1
+        if therapy in therapy_totals:
+            work_counts[therapy][work_status] += 1
+
+    age_brackets_list = build_ranked_items(age_counts['overall'], total_patients, label_key='range', preferred_order=AGE_BRACKET_ORDER)
+    highest_age_bracket = None
+    if age_brackets_list:
+        highest_age_bracket = max(age_brackets_list, key=lambda item: item['count'])
+        for item in age_brackets_list:
+            item['isHighest'] = item['range'] == highest_age_bracket['range'] and highest_age_bracket['count'] > 0
+        highest_age_bracket = next((item for item in age_brackets_list if item.get('isHighest')), None)
+
+    gender_distribution = build_ranked_items(gender_counts['overall'], total_patients, label_key='gender', preferred_order=GENDER_ORDER)
+    gender_distribution = [item for item in gender_distribution if item['count'] > 0]
+    gender_distribution.sort(key=lambda item: item['count'], reverse=True)
+
+    def build_by_therapy(source_counts, preferred_order, label_map=None, label_key='label'):
+        result = {}
+        for therapy_key in therapy_keys:
+            therapy_total = therapy_totals.get(therapy_key, 0)
+            items = build_ranked_items(
+                source_counts[therapy_key],
+                therapy_total,
+                label_key=label_key,
+                preferred_order=preferred_order,
+                label_map=label_map
+            )
+            result[therapy_key] = {
+                'therapyType': therapy_key,
+                'therapyLabel': therapy_labels[therapy_key],
+                'totalPatients': therapy_total,
+                'items': items
+            }
+        return result
+
+    detected_problem_map = {}
+    patient_gender_cache = {}
+    gait_records = list(db['gaitprogresses'].find({}, {'user_id': 1, 'detected_problems': 1}))
+
+    for record in gait_records:
+        user_id = str(record.get('user_id') or '')
+        if not user_id:
+            continue
+
+        if user_id not in patient_gender_cache:
+            user_doc = None
+            try:
+                user_doc = users_collection.find_one({'_id': ObjectId(user_id)}, {'gender': 1})
+            except Exception:
+                user_doc = users_collection.find_one({'_id': user_id}, {'gender': 1})
+            patient_gender_cache[user_id] = normalize_gender(user_doc.get('gender')) if user_doc else 'other'
+
+        gender = patient_gender_cache[user_id]
+        for raw_problem in record.get('detected_problems', []):
+            problem_key = raw_problem.get('problem') if isinstance(raw_problem, dict) else raw_problem
+            normalized_problem = str(problem_key or '').strip().lower()
+            if not normalized_problem:
+                continue
+
+            entry = detected_problem_map.setdefault(normalized_problem, {
+                'key': normalized_problem,
+                'label': normalized_problem.replace('_', ' ').title(),
+                'patient_sets': {g: set() for g in GENDER_ORDER}
+            })
+            entry['patient_sets'].setdefault(gender, set()).add(user_id)
+
+    detected_problem_rows = []
+    for entry in detected_problem_map.values():
+        counts_by_gender = {gender: len(entry['patient_sets'].get(gender, set())) for gender in GENDER_ORDER}
+        max_count = max(counts_by_gender.values()) if counts_by_gender else 0
+        dominant = [gender for gender, count in counts_by_gender.items() if count == max_count and count > 0]
+        detected_problem_rows.append({
+            'key': entry['key'],
+            'label': entry['label'],
+            'countsByGender': counts_by_gender,
+            'totalPatients': sum(counts_by_gender.values()),
+            'dominantGender': dominant[0] if len(dominant) == 1 else ('tie' if len(dominant) > 1 else None),
+            'dominantGenderLabel': (
+                'Tie' if len(dominant) > 1 else
+                (dominant[0].replace('-', ' ').title() if dominant else 'N/A')
+            )
+        })
+
+    detected_problem_rows.sort(key=lambda item: (-item['totalPatients'], item['label']))
+
+    return {
+        'totalPatients': total_patients,
+        'ageBrackets': age_brackets_list,
+        'genderDistribution': gender_distribution,
+        'highestAgeBracket': highest_age_bracket,
+        'therapyTotals': {
+            therapy_key: {
+                'therapyType': therapy_key,
+                'therapyLabel': therapy_labels[therapy_key],
+                'totalPatients': therapy_totals[therapy_key]
+            }
+            for therapy_key in therapy_keys
+        },
+        'categories': {
+            'age': {
+                'title': 'Age',
+                'description': 'Age groups currently using each therapy type.',
+                'byTherapy': build_by_therapy(age_counts, AGE_BRACKET_ORDER, label_key='label')
+            },
+            'gender': {
+                'title': 'Gender',
+                'description': 'Gender distribution under each therapy type and detected physical gait problems by gender.',
+                'byTherapy': build_by_therapy(gender_counts, GENDER_ORDER, label_map={
+                    'male': 'Male',
+                    'female': 'Female',
+                    'other': 'Other',
+                    'prefer-not-to-say': 'Prefer not to say'
+                }, label_key='label'),
+                'detectedProblems': detected_problem_rows
+            },
+            'work': {
+                'title': 'Work',
+                'description': 'Occupation and employment status across each therapy type.',
+                'byTherapy': build_by_therapy(work_counts, list(WORK_STATUS_LABELS.keys()), label_map=WORK_STATUS_LABELS, label_key='label')
+            }
+        }
+    }
 
 # Helper function for timezone-aware UTC datetime
 def utc_now():
@@ -375,6 +722,7 @@ def register():
             'lastName': last_name,
             'age': age_int,
             'gender': gender,
+            'workStatus': normalize_work_status(data.get('workStatus')),
             'role': role,
             'therapyType': therapy_type,
             'patientType': patient_type,
@@ -446,6 +794,7 @@ def register():
                     'lastName': last_name,
                 'age': age_int,
                 'gender': gender,
+                'workStatus': user.get('workStatus'),
                 'role': role,
                 'therapyType': therapy_type,
                 'patientType': patient_type
@@ -498,6 +847,7 @@ def login():
                 'role': user.get('role', 'user'),
                 'therapyType': user.get('therapyType'),
                 'patientType': user.get('patientType'),
+                'workStatus': user.get('workStatus'),
                 'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
                 'diagnosticData': user.get('diagnosticData')
             }
@@ -904,6 +1254,7 @@ def complete_profile(current_user):
         update_data = {
             'age': age_int,
             'gender': gender,
+            'workStatus': normalize_work_status(data.get('workStatus')),
             'therapyType': therapy_type,
             'patientType': patient_type,
             'isProfileComplete': True,
@@ -971,6 +1322,7 @@ def complete_profile(current_user):
                 'lastName': updated_user['lastName'],
                 'age': updated_user.get('age'),
                 'gender': updated_user.get('gender'),
+                'workStatus': updated_user.get('workStatus'),
                 'role': updated_user.get('role', 'patient'),
                 'isProfileComplete': True,
                 'therapyType': updated_user['therapyType'],
@@ -995,6 +1347,7 @@ def get_user(current_user):
                 'role': current_user.get('role', 'user'),
                 'therapyType': current_user.get('therapyType'),
                 'patientType': current_user.get('patientType'),
+                'workStatus': current_user.get('workStatus'),
                 'hasInitialDiagnostic': current_user.get('hasInitialDiagnostic'),
                 'diagnosticData': current_user.get('diagnosticData'),
                 'diagnosticDataUpdatedAt': str(current_user.get('diagnosticDataUpdatedAt', ''))
@@ -1048,7 +1401,8 @@ def update_user(current_user):
                 'lastName': updated_user['lastName'],
                 'role': updated_user.get('role', 'patient'),
                 'therapyType': updated_user.get('therapyType'),
-                'patientType': updated_user.get('patientType')
+                'patientType': updated_user.get('patientType'),
+                'workStatus': updated_user.get('workStatus')
             }
         }), 200
         
@@ -2188,6 +2542,8 @@ def get_therapist_stats(current_user):
             'cancelled': cancelled_appointments,
             'completion_rate': round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0
         }
+
+        stats['climate'] = get_heat_index_snapshot()
         
         # ---- Enhanced chart data for dashboard ----
 
@@ -2328,118 +2684,12 @@ def get_therapist_reports(current_user):
                 'message': 'Unauthorized. Only therapists can access this endpoint.'
             }), 403
         
-        # Get all patients
         patients = list(users_collection.find({'role': 'patient'}))
-        
-        if not patients:
-            return jsonify({
-                'success': True,
-                'data': {
-                    'totalPatients': 0,
-                    'ageBrackets': [],
-                    'genderDistribution': [],
-                    'highestAgeBracket': None
-                }
-            }), 200
-        
-        total_patients = len(patients)
-        
-        # Calculate age brackets
-        age_brackets = {
-            '0-12': 0,
-            '13-17': 0,
-            '18-25': 0,
-            '26-35': 0,
-            '36-45': 0,
-            '46-55': 0,
-            '56-65': 0,
-            '66+': 0
-        }
-        
-        # Calculate gender distribution
-        gender_counts = {
-            'male': 0,
-            'female': 0,
-            'other': 0,
-            'prefer-not-to-say': 0
-        }
-        
-        for patient in patients:
-            # Age bracket calculation
-            age = patient.get('age')
-            if age is not None:
-                if age <= 12:
-                    age_brackets['0-12'] += 1
-                elif age <= 17:
-                    age_brackets['13-17'] += 1
-                elif age <= 25:
-                    age_brackets['18-25'] += 1
-                elif age <= 35:
-                    age_brackets['26-35'] += 1
-                elif age <= 45:
-                    age_brackets['36-45'] += 1
-                elif age <= 55:
-                    age_brackets['46-55'] += 1
-                elif age <= 65:
-                    age_brackets['56-65'] += 1
-                else:
-                    age_brackets['66+'] += 1
-            
-            # Gender distribution
-            gender = patient.get('gender', 'prefer-not-to-say')
-            if gender in gender_counts:
-                gender_counts[gender] += 1
-            else:
-                gender_counts['other'] += 1
-        
-        # Format age brackets data
-        age_brackets_list = []
-        highest_bracket = None
-        highest_count = 0
-        
-        for bracket_range, count in age_brackets.items():
-            percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
-            bracket_data = {
-                'range': bracket_range,
-                'count': count,
-                'percentage': percentage,
-                'isHighest': False
-            }
-            age_brackets_list.append(bracket_data)
-            
-            if count > highest_count:
-                highest_count = count
-                highest_bracket = bracket_data
-        
-        # Mark the highest bracket
-        if highest_bracket:
-            highest_bracket['isHighest'] = True
-            for bracket in age_brackets_list:
-                if bracket['range'] == highest_bracket['range']:
-                    bracket['isHighest'] = True
-        
-        # Format gender distribution data
-        gender_distribution_list = []
-        for gender, count in gender_counts.items():
-            if count > 0:  # Only include genders with patients
-                percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
-                gender_distribution_list.append({
-                    'gender': gender,
-                    'count': count,
-                    'percentage': percentage
-                })
-        
-        # Sort by count descending
-        gender_distribution_list.sort(key=lambda x: x['count'], reverse=True)
+        report_payload = build_patient_report_payload(patients)
         
         return jsonify({
             'success': True,
-            'data': {
-                'totalPatients': total_patients,
-                'ageBrackets': age_brackets_list,
-                'genderDistribution': gender_distribution_list,
-                'highestAgeBracket': highest_bracket
-            }
+            'data': report_payload
         }), 200
     
     except Exception as e:

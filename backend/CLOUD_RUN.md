@@ -69,7 +69,7 @@ gcloud run deploy cvaped-backend \
   --timeout 300 \
   --min-instances 1 \
   --max-instances 10 \
-  --set-env-vars "ENABLE_MDNS=false,CORS_ORIGINS=https://your-frontend.example,FRONTEND_URL=https://your-frontend.example" \
+  --set-env-vars "ENABLE_MDNS=false,CORS_ORIGINS=https://your-frontend.example,FRONTEND_URL=https://your-frontend.example,FACILITY_LOCATION_NAME=Taguig City Disability Resource and Development Center,FACILITY_LATITUDE=14.514722,FACILITY_LONGITUDE=121.055833" \
   --update-secrets "SECRET_KEY=SECRET_KEY:latest,MONGO_URI=MONGO_URI:latest,FIREBASE_SERVICE_ACCOUNT_JSON=FIREBASE_SERVICE_ACCOUNT_JSON:latest,WEARABLE_INGEST_TOKEN=WEARABLE_INGEST_TOKEN:latest"
 ```
 

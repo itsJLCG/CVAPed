@@ -6,10 +6,14 @@ const SidebarDrawer = memo(function SidebarDrawer({
   onClose, 
   activeTab, 
   onTabChange,
+  activeReportCategory,
+  onReportCategoryChange,
   speechDropdownOpen,
   onSpeechDropdownToggle,
   physicalDropdownOpen,
   onPhysicalDropdownToggle,
+  reportsDropdownOpen,
+  onReportsDropdownToggle,
   sidebarCollapsed,
   onToggleCollapse,
   isMobile 
@@ -44,7 +48,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
     { id: 'recommended-exercises', icon: '🧩', label: 'Recommended Exercise' },
     { id: 'appointments', icon: '📅', label: 'Appointments' },
     { id: 'success-stories', icon: '⭐', label: 'Success Stories' },
-    { id: 'reports', icon: '📈', label: 'Reports' },
+    { id: 'reports', icon: '📈', label: 'Reports', hasDropdown: true, dropdownKey: 'reports' },
     { id: 'diagnostics', icon: '🔬', label: 'Diagnostic Comparison' },
     { id: 'pre-evaluation', icon: '📋', label: 'Pre-Evaluation' },
   ];
@@ -63,13 +67,31 @@ const SidebarDrawer = memo(function SidebarDrawer({
     { id: 'exercise-recommendations', icon: '💪', label: 'Exercise Recommendations' },
   ];
 
-  const getDropdownOpen = (item) => item.dropdownKey === 'physical' ? physicalDropdownOpen : speechDropdownOpen;
-  const getSubItems = (item) => item.dropdownKey === 'physical' ? physicalSubItems : speechSubItems;
+  const reportSubItems = [
+    { id: 'age', icon: '👥', label: 'Age' },
+    { id: 'gender', icon: '⚧️', label: 'Gender' },
+    { id: 'work', icon: '💼', label: 'Work' },
+  ];
+
+  const getDropdownOpen = (item) => {
+    if (item.dropdownKey === 'physical') return physicalDropdownOpen;
+    if (item.dropdownKey === 'reports') return reportsDropdownOpen;
+    return speechDropdownOpen;
+  };
+
+  const getSubItems = (item) => {
+    if (item.dropdownKey === 'physical') return physicalSubItems;
+    if (item.dropdownKey === 'reports') return reportSubItems;
+    return speechSubItems;
+  };
 
   const handleNavClick = useCallback((item) => {
     if (item.hasDropdown) {
       if (item.dropdownKey === 'physical') {
         onPhysicalDropdownToggle();
+      } else if (item.dropdownKey === 'reports') {
+        onTabChange('reports');
+        onReportsDropdownToggle();
       } else {
         onSpeechDropdownToggle();
       }
@@ -77,12 +99,17 @@ const SidebarDrawer = memo(function SidebarDrawer({
       onTabChange(item.id);
       if (isMobile) onClose();
     }
-  }, [isMobile, onClose, onSpeechDropdownToggle, onPhysicalDropdownToggle, onTabChange]);
+  }, [isMobile, onClose, onSpeechDropdownToggle, onPhysicalDropdownToggle, onReportsDropdownToggle, onTabChange]);
 
   const handleSubItemClick = useCallback((subItemId) => {
-    onTabChange(subItemId);
+    if (reportSubItems.some(item => item.id === subItemId)) {
+      onReportCategoryChange(subItemId);
+      onTabChange('reports');
+    } else {
+      onTabChange(subItemId);
+    }
     if (isMobile) onClose();
-  }, [isMobile, onClose, onTabChange]);
+  }, [isMobile, onClose, onReportCategoryChange, onTabChange]);
 
   return (
     <>
@@ -116,7 +143,8 @@ const SidebarDrawer = memo(function SidebarDrawer({
                 className={`nav-item ${
                   activeTab === item.id ||
                   (item.dropdownKey === 'speech' && (activeTab === 'speech-entries' || activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency')) ||
-                  (item.dropdownKey === 'physical' && (activeTab === 'physical' || activeTab === 'most-common-problem' || activeTab === 'detection-problems' || activeTab === 'exercise-recommendations'))
+                  (item.dropdownKey === 'physical' && (activeTab === 'physical' || activeTab === 'most-common-problem' || activeTab === 'detection-problems' || activeTab === 'exercise-recommendations')) ||
+                  (item.dropdownKey === 'reports' && activeTab === 'reports')
                     ? 'active'
                     : ''
                 }`}
@@ -134,7 +162,7 @@ const SidebarDrawer = memo(function SidebarDrawer({
                   {getSubItems(item).map((subItem) => (
                     <button
                       key={subItem.id}
-                      className={`nav-item sub-item ${activeTab === subItem.id ? 'active' : ''}`}
+                      className={`nav-item sub-item ${(item.dropdownKey === 'reports' ? activeReportCategory === subItem.id : activeTab === subItem.id) ? 'active' : ''}`}
                       onClick={() => handleSubItemClick(subItem.id)}
                     >
                       <span className="nav-icon">{subItem.icon}</span>

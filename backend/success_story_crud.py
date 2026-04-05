@@ -155,7 +155,9 @@ def get_success_stories():
             'success': True,
             'data': stories,
             'count': len(stories)
-        }), 200
+        }), 200, {
+            'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600'
+        }
     
     except Exception as e:
         logger.error(f"Error fetching success stories: {e}", exc_info=True)

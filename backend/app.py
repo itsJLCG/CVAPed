@@ -17,6 +17,7 @@ import socket
 import threading
 import atexit
 import logging
+import time
 from urllib import parse, request as urllib_request
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,8 @@ load_dotenv()
 
 IS_CLOUD_RUN = bool(os.getenv('K_SERVICE'))
 DEFAULT_FIREBASE_SERVICE_ACCOUNT_PATH = 'cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json'
+RESPONSE_CACHE = {}
+RESPONSE_CACHE_LOCK = threading.Lock()
 
 
 def get_bool_env(name, default=False):
@@ -71,6 +74,134 @@ def get_float_env(name, default):
         return float(value)
     except ValueError:
         return default
+
+
+def _normalize_cache_value(value):
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _normalize_cache_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_normalize_cache_value(item) for item in value]
+    return value
+
+
+def build_response_cache_key(namespace, scope='public', **parts):
+    normalized_parts = _normalize_cache_value(parts)
+    payload = json.dumps(normalized_parts, sort_keys=True, default=str)
+    return f'{namespace}:{scope}:{payload}'
+
+
+def get_cached_response(cache_key):
+    now = time.time()
+    with RESPONSE_CACHE_LOCK:
+        entry = RESPONSE_CACHE.get(cache_key)
+        if not entry:
+            return None
+        if entry['expires_at'] <= now:
+            RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return entry['value']
+
+
+def set_cached_response(cache_key, value, ttl_seconds):
+    with RESPONSE_CACHE_LOCK:
+        RESPONSE_CACHE[cache_key] = {
+            'value': value,
+            'expires_at': time.time() + ttl_seconds,
+        }
+
+
+def get_or_set_cached_response(cache_key, ttl_seconds, builder):
+    cached_value = get_cached_response(cache_key)
+    if cached_value is not None:
+        return cached_value
+
+    built_value = builder()
+    set_cached_response(cache_key, built_value, ttl_seconds)
+    return built_value
+
+
+def _build_health_summary_payload(user_id):
+    articulation_count = articulation_trials_collection.count_documents({'user_id': user_id})
+
+    receptive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'receptive'})
+    expressive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'expressive'})
+
+    articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}))
+    articulation_scores = [t.get('scores', {}).get('computed_score', 0) * 100 for t in articulation_trials]
+    articulation_avg = sum(articulation_scores) / len(articulation_scores) if articulation_scores else 0
+
+    receptive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'receptive'}))
+    receptive_scores = []
+    for t in receptive_trials:
+        score = t.get('score', None)
+        if score is not None:
+            receptive_scores.append(score * 100 if score <= 1 else score)
+        else:
+            receptive_scores.append(100 if t.get('is_correct') else 0)
+    receptive_avg = sum(receptive_scores) / len(receptive_scores) if receptive_scores else 0
+
+    expressive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'expressive'}))
+    expressive_scores = []
+    for t in expressive_trials:
+        score = t.get('score', None)
+        if score is not None:
+            expressive_scores.append(score * 100 if score <= 1 else score)
+        else:
+            expressive_scores.append(100 if t.get('is_correct') else 0)
+    expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
+
+    fluency_count = fluency_trials_collection.count_documents({'user_id': user_id})
+    fluency_trials = list(fluency_trials_collection.find({'user_id': user_id}))
+    fluency_scores = [t.get('fluency_score', 0) for t in fluency_trials]
+    fluency_avg = sum(fluency_scores) / len(fluency_scores) if fluency_scores else 0
+
+    gait_progress_collection = db['gaitprogresses']
+    gait_records = list(gait_progress_collection.find({'user_id': user_id}))
+    gait_count = len(gait_records)
+
+    gait_scores = []
+    for gait in gait_records:
+        metrics = gait.get('metrics', {})
+        stability = metrics.get('stability_score', 0) * 100
+        symmetry = metrics.get('gait_symmetry', 0) * 100
+        regularity = metrics.get('step_regularity', 0) * 100
+        if any([stability, symmetry, regularity]):
+            gait_scores.append((stability + symmetry + regularity) / 3)
+    gait_avg = sum(gait_scores) / len(gait_scores) if gait_scores else 0
+
+    return {
+        'success': True,
+        'summary': {
+            'articulation': {
+                'sessions': articulation_count,
+                'avgScore': round(articulation_avg, 1)
+            },
+            'receptive': {
+                'sessions': receptive_count,
+                'avgScore': round(receptive_avg, 1)
+            },
+            'expressive': {
+                'sessions': expressive_count,
+                'avgScore': round(expressive_avg, 1)
+            },
+            'language': {
+                'sessions': receptive_count + expressive_count,
+                'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
+            },
+            'fluency': {
+                'sessions': fluency_count,
+                'avgScore': round(fluency_avg, 1)
+            },
+            'gait': {
+                'sessions': gait_count,
+                'avgScore': round(gait_avg, 1)
+            }
+        }
+    }
 
 
 FACILITY_LOCATION_NAME = os.getenv('FACILITY_LOCATION_NAME', 'Taguig City Disability Resource and Development Center')
@@ -201,6 +332,18 @@ def classify_heat_index(heat_index_c):
 
 
 def get_heat_index_snapshot():
+    cache_key = build_response_cache_key(
+        'heat-index-snapshot',
+        scope='public',
+        location=FACILITY_LOCATION_NAME,
+        latitude=FACILITY_LATITUDE,
+        longitude=FACILITY_LONGITUDE,
+    )
+
+    cached_snapshot = get_cached_response(cache_key)
+    if cached_snapshot is not None:
+        return cached_snapshot
+
     query = parse.urlencode({
         'latitude': FACILITY_LATITUDE,
         'longitude': FACILITY_LONGITUDE,
@@ -219,7 +362,7 @@ def get_heat_index_snapshot():
         heat_index_c = compute_heat_index_celsius(temperature_c, humidity_percent)
         classification = classify_heat_index(heat_index_c)
 
-        return {
+        snapshot = {
             'available': temperature_c is not None and humidity_percent is not None,
             'location': FACILITY_LOCATION_NAME,
             'temperature_c': round(float(temperature_c), 1) if temperature_c is not None else None,
@@ -228,9 +371,11 @@ def get_heat_index_snapshot():
             'fetched_at': current.get('time'),
             **classification
         }
+        set_cached_response(cache_key, snapshot, 15 * 60)
+        return snapshot
     except Exception:
         classification = classify_heat_index(None)
-        return {
+        snapshot = {
             'available': False,
             'location': FACILITY_LOCATION_NAME,
             'temperature_c': None,
@@ -239,6 +384,8 @@ def get_heat_index_snapshot():
             'fetched_at': None,
             **classification
         }
+        set_cached_response(cache_key, snapshot, 5 * 60)
+        return snapshot
 
 
 def build_ranked_items(counts, total, label_key='label', value_key='count', preferred_order=None, label_map=None):
@@ -1603,6 +1750,10 @@ def get_health_logs(current_user):
         logs = []
         fetch_all = request.args.get('all') == 'true'
         limit = int(request.args.get('limit', 50))
+        cache_key = build_response_cache_key('health-logs', scope=f'user:{user_id}', fetch_all=fetch_all, limit=limit)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
 
         def make_json_safe(value):
             if isinstance(value, ObjectId):
@@ -1771,12 +1922,14 @@ def get_health_logs(current_user):
         # Return limited or all logs
         recent_logs = logs if fetch_all else logs[:limit]
         
-        return jsonify({
+        payload = {
             'success': True,
             'logs': recent_logs,
             'total': len(logs),
             'hasMore': len(logs) > limit
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 45)
+        return jsonify(payload), 200
 
     except Exception as e:
         import traceback
@@ -1791,97 +1944,11 @@ def get_health_summary(current_user):
     """Get health summary statistics for authenticated user"""
     try:
         user_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('health-summary', scope=f'user:{user_id}')
 
-        # Count trials per therapy type
-        articulation_count = articulation_trials_collection.count_documents({'user_id': user_id})
-        
-        # Get language trials by mode
-        receptive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'receptive'})
-        expressive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'expressive'})
-        
-        # Calculate average scores
-        articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}))
-        # computed_score is 0.0-1.0, convert to percentage
-        articulation_scores = [t.get('scores', {}).get('computed_score', 0) * 100 for t in articulation_trials]
-        articulation_avg = sum(articulation_scores) / len(articulation_scores) if articulation_scores else 0
+        payload = get_or_set_cached_response(cache_key, 45, lambda: _build_health_summary_payload(user_id))
 
-        receptive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'receptive'}))
-        # Language stores score as 0.0/1.0, convert to percentage
-        receptive_scores = []
-        for t in receptive_trials:
-            score = t.get('score', None)
-            if score is not None:
-                receptive_scores.append(score * 100 if score <= 1 else score)
-            else:
-                receptive_scores.append(100 if t.get('is_correct') else 0)
-        receptive_avg = sum(receptive_scores) / len(receptive_scores) if receptive_scores else 0
-
-        expressive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'expressive'}))
-        # Language stores score as 0.0/1.0, convert to percentage
-        expressive_scores = []
-        for t in expressive_trials:
-            score = t.get('score', None)
-            if score is not None:
-                expressive_scores.append(score * 100 if score <= 1 else score)
-            else:
-                expressive_scores.append(100 if t.get('is_correct') else 0)
-        expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
-
-        # Get fluency trials
-        fluency_count = fluency_trials_collection.count_documents({'user_id': user_id})
-        fluency_trials = list(fluency_trials_collection.find({'user_id': user_id}))
-        # Fluency stores score as 0-100
-        fluency_scores = [t.get('fluency_score', 0) for t in fluency_trials]
-        fluency_avg = sum(fluency_scores) / len(fluency_scores) if fluency_scores else 0
-
-        # Get gait analysis records
-        gait_progress_collection = db['gaitprogresses']
-        gait_records = list(gait_progress_collection.find({'user_id': user_id}))
-        gait_count = len(gait_records)
-        
-        # Calculate average gait score (based on stability, symmetry, regularity)
-        gait_scores = []
-        for gait in gait_records:
-            metrics = gait.get('metrics', {})
-            stability = metrics.get('stability_score', 0) * 100
-            symmetry = metrics.get('gait_symmetry', 0) * 100
-            regularity = metrics.get('step_regularity', 0) * 100
-            if any([stability, symmetry, regularity]):
-                avg_score = (stability + symmetry + regularity) / 3
-                gait_scores.append(avg_score)
-        gait_avg = sum(gait_scores) / len(gait_scores) if gait_scores else 0
-
-        summary = {
-            'articulation': {
-                'sessions': articulation_count,
-                'avgScore': round(articulation_avg, 1)
-            },
-            'receptive': {
-                'sessions': receptive_count,
-                'avgScore': round(receptive_avg, 1)
-            },
-            'expressive': {
-                'sessions': expressive_count,
-                'avgScore': round(expressive_avg, 1)
-            },
-            'language': {
-                'sessions': receptive_count + expressive_count,
-                'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
-            },
-            'fluency': {
-                'sessions': fluency_count,
-                'avgScore': round(fluency_avg, 1)
-            },
-            'gait': {
-                'sessions': gait_count,
-                'avgScore': round(gait_avg, 1)
-            }
-        }
-
-        return jsonify({
-            'success': True,
-            'summary': summary
-        }), 200
+        return jsonify(payload), 200
 
     except Exception as e:
         import traceback
@@ -1899,18 +1966,20 @@ def get_health_summary(current_user):
 def get_prescriptive_analysis(current_user):
     """Get intelligent therapy prioritization using Decision Rules + Graph-Based Recommendations (Speech Therapy)"""
     try:
-        from therapy_prioritization import generate_therapy_prioritization
-        
-        # Get user_id from authenticated user
         user_id = str(current_user['_id'])
-        
-        # Generate prescriptive analysis
-        analysis = generate_therapy_prioritization(user_id)
-        
-        return jsonify({
-            'success': True,
-            'analysis': analysis
-        }), 200
+        cache_key = build_response_cache_key('prescriptive-analysis', scope=f'user:{user_id}')
+
+        def build_payload():
+            from therapy_prioritization import generate_therapy_prioritization
+            analysis = generate_therapy_prioritization(user_id)
+            return {
+                'success': True,
+                'analysis': analysis
+            }
+
+        payload = get_or_set_cached_response(cache_key, 180, build_payload)
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
@@ -1928,37 +1997,37 @@ def get_prescriptive_analysis(current_user):
 def get_gait_prescriptive_analysis(current_user):
     """Get intelligent gait therapy prioritization using Decision Rules + Graph-Based Recommendations (Physical Therapy)"""
     try:
-        from gait_therapy_prioritization import generate_gait_prioritization
-        
-        # Get user_id from authenticated user
         user_id = str(current_user['_id'])
-        
-        # Get predicted days from gait predictor if available
-        predicted_days = None
-        try:
-            from gait_mastery_predictor import GaitMasteryPredictor
-            gait_predictor = GaitMasteryPredictor(db)
-            gait_predictor.load_model()
-            prediction = gait_predictor.predict_days_to_mastery(user_id)
-            if prediction:
-                predicted_days = prediction.get('predicted_days') or prediction.get('predicted_days_to_mastery')
-        except Exception as e:
-            print(f"Could not get gait prediction for prescriptive analysis: {e}")
-        
-        # Generate prescriptive analysis
-        analysis = generate_gait_prioritization(user_id, predicted_days)
-        
-        # Check if there's an error (no data)
-        if 'error' in analysis:
-            return jsonify({
-                'success': False,
-                'message': analysis['message']
-            }), 400
-        
-        return jsonify({
-            'success': True,
-            'analysis': analysis
-        }), 200
+        cache_key = build_response_cache_key('gait-prescriptive-analysis', scope=f'user:{user_id}')
+
+        def build_payload():
+            from gait_therapy_prioritization import generate_gait_prioritization
+
+            predicted_days = None
+            try:
+                from gait_mastery_predictor import GaitMasteryPredictor
+                gait_predictor = GaitMasteryPredictor(db)
+                gait_predictor.load_model()
+                prediction = gait_predictor.predict_days_to_mastery(user_id)
+                if prediction:
+                    predicted_days = prediction.get('predicted_days') or prediction.get('predicted_days_to_mastery')
+            except Exception as e:
+                print(f"Could not get gait prediction for prescriptive analysis: {e}")
+
+            analysis = generate_gait_prioritization(user_id, predicted_days)
+
+            return {
+                'success': 'error' not in analysis,
+                'message': analysis.get('message') if 'error' in analysis else None,
+                'analysis': analysis if 'error' not in analysis else None
+            }
+
+        payload = get_or_set_cached_response(cache_key, 180, build_payload)
+
+        if not payload.get('success'):
+            return jsonify(payload), 400
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
@@ -1984,97 +2053,79 @@ def get_all_predictions(current_user):
     """
     try:
         user_id = str(current_user['_id'])
-        
-        print(f"\n{'='*60}")
-        print(f"🔮 Fetching All Predictions for User: {user_id}")
-        print(f"{'='*60}\n")
-        
-        predictions = {}
-        
-        # 1. Articulation predictions for all 5 sounds
-        try:
-            from articulation_mastery_predictor import ArticulationMasteryPredictor
-            articulation_predictor = ArticulationMasteryPredictor(db)
-            articulation_predictor.load_model()
-            
-            articulation_predictions = {}
-            sounds = ['r', 's', 'l', 'th', 'k']
-            for sound in sounds:
-                try:
-                    pred = articulation_predictor.predict_days_to_mastery(user_id, sound)
-                    articulation_predictions[sound] = pred
-                except Exception as e:
-                    print(f"Could not predict {sound}: {e}")
-            
-            if articulation_predictions:
-                predictions['articulation'] = articulation_predictions
-        except Exception as e:
-            print(f"Articulation predictor error: {e}")
-        
-        # 2. Fluency prediction
-        try:
-            from fluency_mastery_predictor import FluencyMasteryPredictor
-            fluency_predictor = FluencyMasteryPredictor(db)
-            fluency_predictor.load_model()
-            fluency_pred = fluency_predictor.predict_days_to_mastery(user_id)
-            predictions['fluency'] = fluency_pred
-        except Exception as e:
-            print(f"Fluency predictor error: {e}")
-        
-        # 3. Receptive language prediction
-        try:
-            from language_mastery_predictor import LanguageMasteryPredictor
-            receptive_predictor = LanguageMasteryPredictor(db, mode='receptive')
-            receptive_predictor.load_model()
-            receptive_pred = receptive_predictor.predict_days_to_mastery(user_id)
-            predictions['receptive'] = receptive_pred
-        except Exception as e:
-            print(f"Receptive predictor error: {e}")
-        
-        # 4. Expressive language prediction
-        try:
-            from language_mastery_predictor import LanguageMasteryPredictor
-            expressive_predictor = LanguageMasteryPredictor(db, mode='expressive')
-            expressive_predictor.load_model()
-            expressive_pred = expressive_predictor.predict_days_to_mastery(user_id)
-            predictions['expressive'] = expressive_pred
-        except Exception as e:
-            print(f"Expressive predictor error: {e}")
-        
-        # 5. Overall speech improvement prediction
-        try:
-            from overall_speech_predictor import OverallSpeechPredictor
-            overall_predictor = OverallSpeechPredictor(db)
-            overall_predictor.load_model()
-            overall_pred = overall_predictor.predict_improvement(user_id)
-            predictions['overall'] = overall_pred
-        except Exception as e:
-            print(f"Overall predictor error: {e}")
-        
-        # 6. Gait prediction for physical therapy users (always try regardless of therapyType)
-        if gait_predictor:
+        cache_key = build_response_cache_key('all-predictions', scope=f'user:{user_id}')
+
+        def build_payload():
+            print(f"\n{'='*60}")
+            print(f"🔮 Fetching All Predictions for User: {user_id}")
+            print(f"{'='*60}\n")
+            predictions = {}
             try:
-                gait_pred = gait_predictor.predict_days_to_mastery(user_id)
-                if gait_pred:  # Only add if prediction exists
-                    predictions['gait'] = gait_pred
-                    print(f"   Gait: ✅")
-                else:
-                    print(f"   Gait: ⏳ No data yet")
+                from articulation_mastery_predictor import ArticulationMasteryPredictor
+                articulation_predictor = ArticulationMasteryPredictor(db)
+                articulation_predictor.load_model()
+
+                articulation_predictions = {}
+                sounds = ['r', 's', 'l', 'th', 'k']
+                for sound in sounds:
+                    try:
+                        pred = articulation_predictor.predict_days_to_mastery(user_id, sound)
+                        articulation_predictions[sound] = pred
+                    except Exception as e:
+                        print(f"Could not predict {sound}: {e}")
+
+                if articulation_predictions:
+                    predictions['articulation'] = articulation_predictions
             except Exception as e:
-                print(f"   Gait: ❌ {e}")
-        
-        print(f"✅ Predictions retrieved successfully")
-        print(f"   Articulation sounds: {len(predictions.get('articulation', {}))}")
-        print(f"   Fluency: {'✅' if 'fluency' in predictions else '❌'}")
-        print(f"   Receptive: {'✅' if 'receptive' in predictions else '❌'}")
-        print(f"   Expressive: {'✅' if 'expressive' in predictions else '❌'}")
-        print(f"   Overall: {'✅' if 'overall' in predictions else '❌'}")
-        print(f"   Gait: {'✅' if 'gait' in predictions else '❌'}\n")
-        
-        return jsonify({
-            'success': True,
-            'predictions': predictions
-        }), 200
+                print(f"Articulation predictor error: {e}")
+
+            try:
+                from fluency_mastery_predictor import FluencyMasteryPredictor
+                fluency_predictor = FluencyMasteryPredictor(db)
+                fluency_predictor.load_model()
+                predictions['fluency'] = fluency_predictor.predict_days_to_mastery(user_id)
+            except Exception as e:
+                print(f"Fluency predictor error: {e}")
+
+            try:
+                from language_mastery_predictor import LanguageMasteryPredictor
+                receptive_predictor = LanguageMasteryPredictor(db, mode='receptive')
+                receptive_predictor.load_model()
+                predictions['receptive'] = receptive_predictor.predict_days_to_mastery(user_id)
+            except Exception as e:
+                print(f"Receptive predictor error: {e}")
+
+            try:
+                from language_mastery_predictor import LanguageMasteryPredictor
+                expressive_predictor = LanguageMasteryPredictor(db, mode='expressive')
+                expressive_predictor.load_model()
+                predictions['expressive'] = expressive_predictor.predict_days_to_mastery(user_id)
+            except Exception as e:
+                print(f"Expressive predictor error: {e}")
+
+            try:
+                from overall_speech_predictor import OverallSpeechPredictor
+                overall_predictor = OverallSpeechPredictor(db)
+                overall_predictor.load_model()
+                predictions['overall'] = overall_predictor.predict_improvement(user_id)
+            except Exception as e:
+                print(f"Overall predictor error: {e}")
+
+            if gait_predictor:
+                try:
+                    gait_pred = gait_predictor.predict_days_to_mastery(user_id)
+                    if gait_pred:
+                        predictions['gait'] = gait_pred
+                except Exception as e:
+                    print(f"   Gait: ❌ {e}")
+
+            return {
+                'success': True,
+                'predictions': predictions
+            }
+
+        payload = get_or_set_cached_response(cache_key, 180, build_payload)
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
@@ -2264,6 +2315,12 @@ def get_therapist_stats(current_user):
             except ValueError:
                 # Default to 30 days if invalid
                 time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-stats', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
         
         stats = {}
         
@@ -2654,10 +2711,13 @@ def get_therapist_stats(current_user):
         print(f"   Total Sessions: {stats['total_sessions']}")
         print(f"   Total Appointments: {total_appointments}")
         
-        return jsonify({
+        payload = {
             'success': True,
             'stats': stats
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 60)
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
@@ -2684,13 +2744,22 @@ def get_therapist_reports(current_user):
                 'message': 'Unauthorized. Only therapists can access this endpoint.'
             }), 403
         
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-reports', scope=f'user:{therapist_id}')
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
         patients = list(users_collection.find({'role': 'patient'}))
         report_payload = build_patient_report_payload(patients)
-        
-        return jsonify({
+
+        payload = {
             'success': True,
             'data': report_payload
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 300)
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
@@ -2728,6 +2797,12 @@ def get_therapist_articulation_analytics(current_user):
                 time_filter = utc_now() - datetime.timedelta(days=days)
             except ValueError:
                 time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-articulation-analytics', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
 
         match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
 
@@ -2826,7 +2901,7 @@ def get_therapist_articulation_analytics(current_user):
         top_sound = sounds_formatted[0] if sounds_formatted else None
         bottom_sound = sounds_formatted[-1] if len(sounds_formatted) > 1 else None
 
-        return jsonify({
+        payload = {
             'success': True,
             'data': {
                 'days': days_param,
@@ -2838,7 +2913,9 @@ def get_therapist_articulation_analytics(current_user):
                 'top_sound': top_sound,
                 'bottom_sound': bottom_sound
             }
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 300)
+        return jsonify(payload), 200
 
     except Exception as e:
         logger.error(f'get_therapist_articulation_analytics failed: {e}')
@@ -2866,6 +2943,12 @@ def get_therapist_fluency_analytics(current_user):
                 time_filter = utc_now() - datetime.timedelta(days=days)
             except ValueError:
                 time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-fluency-analytics', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
 
         fluency_trials = db['fluency_trials']
         fluency_progress = db['fluency_progress']
@@ -2943,7 +3026,7 @@ def get_therapist_fluency_analytics(current_user):
                 'patient_count': lv.get('patient_count', 0)
             })
 
-        return jsonify({
+        payload = {
             'success': True,
             'data': {
                 'days': days_param,
@@ -2953,7 +3036,9 @@ def get_therapist_fluency_analytics(current_user):
                 'per_level': levels_formatted,
                 'mastery_distribution': mastery_buckets
             }
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 300)
+        return jsonify(payload), 200
 
     except Exception as e:
         logger.error(f'get_therapist_fluency_analytics failed: {e}')
@@ -2981,6 +3066,12 @@ def get_therapist_language_analytics(current_user):
                 time_filter = utc_now() - datetime.timedelta(days=days)
             except ValueError:
                 time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-language-analytics', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
 
         match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
         match_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
@@ -3052,7 +3143,7 @@ def get_therapist_language_analytics(current_user):
             elif mode == 'expressive':
                 expressive_levels.append(entry)
 
-        return jsonify({
+        payload = {
             'success': True,
             'data': {
                 'days': days_param,
@@ -3069,7 +3160,9 @@ def get_therapist_language_analytics(current_user):
                     'per_level': expressive_levels
                 }
             }
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 300)
+        return jsonify(payload), 200
 
     except Exception as e:
         logger.error(f'get_therapist_language_analytics failed: {e}')
@@ -3106,6 +3199,12 @@ def get_therapist_speech_entries(current_user):
         except ValueError:
             limit = 500
         limit = max(1, min(limit, 2000))
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-speech-entries', scope=f'user:{therapist_id}', days=days_param, limit=limit)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
 
         trial_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
         user_cache = {}
@@ -3336,13 +3435,15 @@ def get_therapist_speech_entries(current_user):
         entries.sort(key=lambda row: row.get('entry_at') or '', reverse=True)
         trimmed_entries = entries[:limit]
 
-        return jsonify({
+        payload = {
             'success': True,
             'data': trimmed_entries,
             'total': len(entries),
             'returned': len(trimmed_entries),
             'days': days_param
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 60)
+        return jsonify(payload), 200
 
     except Exception as e:
         logger.error(f'get_therapist_speech_entries failed: {e}', exc_info=True)
@@ -6839,6 +6940,12 @@ def get_physical_therapy_patients(current_user):
                 'success': False,
                 'message': 'Unauthorized. Therapist access required.'
             }), 403
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-physical-patients', scope=f'user:{therapist_id}')
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
         
         gait_progress_collection = db['gaitprogresses']
         
@@ -6916,11 +7023,13 @@ def get_physical_therapy_patients(current_user):
                 
                 analyses_data.append(analysis_info)
         
-        return jsonify({
+        payload = {
             'success': True,
             'data': analyses_data,
             'total': len(analyses_data)
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 60)
+        return jsonify(payload), 200
         
     except Exception as e:
         import traceback
@@ -6939,6 +7048,12 @@ def get_physical_therapy_patients(current_user):
 def get_therapist_recommended_exercises(current_user):
     """Get recommended physical therapy exercises from exercise plans (therapist only)."""
     try:
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-recommended-exercises', scope=f'user:{therapist_id}')
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
         exercise_plans_collection = db['exerciseplans']
         gait_progress_collection = db['gaitprogresses']
 
@@ -7006,11 +7121,13 @@ def get_therapist_recommended_exercises(current_user):
                 )
             })
 
-        return jsonify({
+        payload = {
             'success': True,
             'data': recommended_rows,
             'total': len(recommended_rows)
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 60)
+        return jsonify(payload), 200
 
     except Exception as e:
         logger.error(f"Error fetching recommended exercises: {e}", exc_info=True)
@@ -7129,7 +7246,11 @@ def serve_uploaded_file(filename):
     """Serve uploaded files (images, etc.)"""
     from flask import send_from_directory
     upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
-    return send_from_directory(upload_dir, filename)
+    response = send_from_directory(upload_dir, filename)
+    response.cache_control.public = True
+    response.cache_control.max_age = 86400
+    response.headers['Cache-Control'] = 'public, max-age=86400, stale-while-revalidate=604800'
+    return response
 
 # ======================
 # DIAGNOSTIC COMPARISON ENDPOINTS

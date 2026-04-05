@@ -7696,6 +7696,10 @@
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   border-bottom: 2px solid #dee2e6;
   border-radius: 14px 14px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .report-card-title {
@@ -7716,6 +7720,11 @@
   margin: 0;
   color: #6c757d;
   font-size: 0.95rem;
+}
+
+.report-export-btn {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .report-card-body {
@@ -8056,6 +8065,16 @@
   .report-card-header,
   .report-card-body {
     padding: 1.5rem;
+  }
+
+  .report-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .report-export-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .report-problem-top,

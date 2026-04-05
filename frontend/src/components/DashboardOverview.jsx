@@ -605,19 +605,78 @@ const GENDER_META = {
 
 /* ====== CHART 9: Patient Demographics (Horizontal Bar) ====== */
 function PatientDemographicsChart({ reportsData }) {
+  const ageData = useMemo(() => {
+    if (reportsData?.ageBrackets?.length) {
+      return reportsData.ageBrackets.map(b => ({
+        range: b.range,
+        count: b.count,
+        isHighest: b.isHighest,
+        fill: b.isHighest ? 'var(--color-primary)' : 'var(--color-secondary)',
+      }));
+    }
+
+    const byTherapy = reportsData?.categories?.age?.byTherapy;
+    if (!byTherapy) return [];
+
+    const aggregated = new Map();
+    Object.values(byTherapy).forEach((panel) => {
+      (panel?.items || []).forEach((item) => {
+        const key = item.label || item.range || item.key;
+        if (!key) return;
+        const existing = aggregated.get(key) || { range: key, count: 0 };
+        existing.count += item.count || 0;
+        aggregated.set(key, existing);
+      });
+    });
+
+    const normalized = Array.from(aggregated.values());
+    const maxCount = normalized.reduce((highest, item) => Math.max(highest, item.count), 0);
+
+    return normalized.map((item) => ({
+      ...item,
+      isHighest: maxCount > 0 && item.count === maxCount,
+      fill: maxCount > 0 && item.count === maxCount ? 'var(--color-primary)' : 'var(--color-secondary)',
+    }));
+  }, [reportsData]);
+
+  const genderData = useMemo(() => {
+    if (reportsData?.genderDistribution?.length) {
+      return reportsData.genderDistribution;
+    }
+
+    const byTherapy = reportsData?.categories?.gender?.byTherapy;
+    if (!byTherapy) return [];
+
+    const aggregated = new Map();
+    Object.values(byTherapy).forEach((panel) => {
+      (panel?.items || []).forEach((item) => {
+        const key = item.key || item.gender || item.label;
+        if (!key) return;
+        const existing = aggregated.get(key) || { gender: key, count: 0 };
+        existing.count += item.count || 0;
+        aggregated.set(key, existing);
+      });
+    });
+
+    const total = Array.from(aggregated.values()).reduce((sum, item) => sum + item.count, 0);
+    return Array.from(aggregated.values())
+      .map((item) => ({
+        ...item,
+        percentage: total > 0 ? Number(((item.count / total) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [reportsData]);
+
   const data = useMemo(() => {
-    if (!reportsData?.ageBrackets?.length) return [];
-    return reportsData.ageBrackets.map(b => ({
+    return ageData.map(b => ({
       range: b.range,
       count: b.count,
       isHighest: b.isHighest,
       fill: b.isHighest ? 'var(--color-primary)' : 'var(--color-secondary)',
     }));
-  }, [reportsData]);
+  }, [ageData]);
 
   if (!data.length) return <EmptyState icon="\u{1F465}" message="No demographic data available" />;
-
-  const genderData = reportsData?.genderDistribution ?? [];
   const totalGender = genderData.reduce((s, g) => s + (g.count || 0), 0);
 
   return (

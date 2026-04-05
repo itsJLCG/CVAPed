@@ -90,7 +90,6 @@ const SidebarDrawer = memo(function SidebarDrawer({
       if (item.dropdownKey === 'physical') {
         onPhysicalDropdownToggle();
       } else if (item.dropdownKey === 'reports') {
-        onTabChange('reports');
         onReportsDropdownToggle();
       } else {
         onSpeechDropdownToggle();

@@ -4,7 +4,7 @@ import { therapistService, authService, fluencyExerciseService, languageExercise
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
-import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf } from '../components/PdfReportTemplate';
+import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf, generateTherapistReportsPdf } from '../components/PdfReportTemplate';
 import DashboardOverview from '../components/DashboardOverview';
 import SidebarDrawer from '../components/SidebarDrawer';
 
@@ -162,7 +162,8 @@ function TherapistDashboard({ onLogout }) {
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
   const [activeReportCategory, setActiveReportCategory] = useState('age');
-  const [reportsDropdownOpen, setReportsDropdownOpen] = useState(true);
+  const [reportsDropdownOpen, setReportsDropdownOpen] = useState(false);
+  const [exportingReports, setExportingReports] = useState(false);
 
   // Speech therapy analytics state (for PDF export)
   const [articulationAnalytics, setArticulationAnalytics] = useState(null);
@@ -2117,6 +2118,8 @@ function TherapistDashboard({ onLogout }) {
       .filter(Boolean);
   }, [activeReportData]);
 
+  const getReportItemLabel = (item) => item.label || item.range || item.gender || item.key || 'Unknown';
+
   const overallReportItems = useMemo(() => {
     if (activeReportCategory === 'age') {
       return reportsData?.ageBrackets || [];
@@ -2158,9 +2161,39 @@ function TherapistDashboard({ onLogout }) {
     return items.filter(item => item.count > 0);
   };
 
-  const getReportItemLabel = (item) => item.label || item.range || item.gender || item.key || 'Unknown';
-
   const getProblemGenderMeta = (genderKey) => REPORT_GENDER_META[genderKey] || { label: genderKey, icon: '❓' };
+
+  const handleExportReportsPdf = useCallback(async () => {
+    if (!reportsData || !activeReportData) return;
+
+    setExportingReports(true);
+    try {
+      await generateTherapistReportsPdf({
+        reportTitle: `${activeReportData.title || 'Therapist'} Reports`,
+        reportDescription: activeReportData.description || 'Therapist demographic report.',
+        categoryLabel: activeReportData.title || 'Report',
+        summaryStats: [
+          { label: 'Total Patients', value: reportsData.totalPatients || 0 },
+          { label: 'Speech Therapy', value: reportsData.therapyTotals?.speech?.totalPatients || 0 },
+          { label: 'Physical Therapy', value: reportsData.therapyTotals?.physical?.totalPatients || 0 },
+        ],
+        overallItems: overallReportItems,
+        therapyPanels: reportTherapyPanels.map((panel) => ({
+          ...panel,
+          items: getReportItemsForDisplay(panel.items || []),
+        })),
+        detectedProblems: activeReportCategory === 'gender' ? (activeReportData.detectedProblems || []) : [],
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_${(activeReportData.title || 'Report').replace(/\s+/g, '_')}_Report_${new Date().toISOString().split('T')[0]}`,
+      });
+      toast.success(`${activeReportData.title || 'Report'} PDF exported successfully.`);
+    } catch (error) {
+      console.error('Reports PDF export failed:', error);
+      toast.error('Failed to export report PDF. Please try again.');
+    } finally {
+      setExportingReports(false);
+    }
+  }, [activeReportCategory, activeReportData, overallReportItems, reportTherapyPanels, reportsData, toast, user]);
 
   return (
     <div className="admin-dashboard">
@@ -4749,13 +4782,23 @@ function TherapistDashboard({ onLogout }) {
                   <div className="reports-main reports-main-full">
                     <div className="report-card report-overview-card">
                       <div className="report-card-header">
-                        <h3 className="report-card-title">
-                          <span className="report-icon">
-                            {REPORT_CATEGORY_OPTIONS.find(option => option.key === activeReportCategory)?.icon || '📈'}
-                          </span>
-                          {activeReportData?.title || 'Reports Overview'}
-                        </h3>
-                        <p className="report-card-subtitle">{activeReportData?.description || 'Demographic reporting by therapy type.'}</p>
+                        <div>
+                          <h3 className="report-card-title">
+                            <span className="report-icon">
+                              {REPORT_CATEGORY_OPTIONS.find(option => option.key === activeReportCategory)?.icon || '📈'}
+                            </span>
+                            {activeReportData?.title || 'Reports Overview'}
+                          </h3>
+                          <p className="report-card-subtitle">{activeReportData?.description || 'Demographic reporting by therapy type.'}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-export-pdf report-export-btn"
+                          onClick={handleExportReportsPdf}
+                          disabled={exportingReports}
+                        >
+                          {exportingReports ? '⏳ Generating...' : '📄 Export PDF'}
+                        </button>
                       </div>
                       <div className="report-card-body">
                         <div className="report-summary">

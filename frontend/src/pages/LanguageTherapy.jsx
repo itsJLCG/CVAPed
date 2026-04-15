@@ -2,8 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
+import { useVoiceSettings } from '../components/VoiceSettingsContext';
 import { languageService, languageExerciseService, receptiveExerciseService } from '../services/api';
+import audioManager from '../services/audioManager';
 import './LanguageTherapy.css';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Language Therapy mode metadata (exercises loaded from database)
 const languageExercises = {
@@ -24,15 +28,16 @@ const languageExercises = {
   }
 };
 
-function LanguageTherapy({ onLogout }) {
+function LanguageTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const { voiceSpeed, setVoiceSpeed } = useVoiceSettings();
   
   // Ensure the category is set to 'speech' when this page is loaded
   useEffect(() => {
     selectCategory('speech');
   }, [selectCategory]);
-  
+
   // State for exercises - both will be loaded from database
   const [expressiveExercises, setExpressiveExercises] = useState([]);
   const [receptiveExercises, setReceptiveExercises] = useState([]);
@@ -54,6 +59,28 @@ function LanguageTherapy({ onLogout }) {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const speechTimeoutRef = useRef(null);
+  // Set to true on unmount so all in-flight async speech chains abort immediately
+  const isCancelledRef = useRef(false);
+
+  // Stop all speech synthesis when this component unmounts (e.g. on logout)
+  useEffect(() => {
+    // Register with audioManager so Header logout can abort this chain immediately
+    const unregister = audioManager.registerAbortCallback('LanguageTherapy', () => {
+      isCancelledRef.current = true;
+      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+      window.speechSynthesis.cancel();
+    });
+    return () => {
+      unregister();
+      isCancelledRef.current = true;
+      if (speechTimeoutRef.current) {
+        clearTimeout(speechTimeoutRef.current);
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   // Load expressive exercises from database when component mounts
   useEffect(() => {
@@ -211,6 +238,11 @@ function LanguageTherapy({ onLogout }) {
   // Text-to-Speech for instructions with visual feedback
   const speakText = (text, repeatCount = 2) => {
     return new Promise((resolve) => {
+      // Abort immediately if the component has been unmounted (e.g. logout)
+      if (isCancelledRef.current) {
+        resolve();
+        return;
+      }
       if ('speechSynthesis' in window) {
         // Cancel any ongoing speech
         window.speechSynthesis.cancel();
@@ -218,6 +250,12 @@ function LanguageTherapy({ onLogout }) {
         let currentRepeat = 0;
         
         const speakOnce = () => {
+          // Guard every re-entry point so queued repeats also abort
+          if (isCancelledRef.current) {
+            setIsSpeaking(false);
+            resolve();
+            return;
+          }
           if (currentRepeat >= repeatCount) {
             setIsSpeaking(false);
             resolve();
@@ -226,7 +264,7 @@ function LanguageTherapy({ onLogout }) {
           
           setIsSpeaking(true);
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = 0.85;
+          utterance.rate = 0.85 * voiceSpeed;
           utterance.pitch = 1;
           utterance.volume = 1;
           
@@ -271,6 +309,9 @@ function LanguageTherapy({ onLogout }) {
           target: currentExercise.target
         });
         
+        // Reset cancelled state so auto-play works after any previous stop
+        isCancelledRef.current = false;
+
         // Cancel any ongoing speech first
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
@@ -313,6 +354,8 @@ function LanguageTherapy({ onLogout }) {
 
   // Text-to-Speech for manual play button
   const speakInstruction = (text) => {
+    // Reset cancelled state so replay works after a previous stop
+    isCancelledRef.current = false;
     speakText(text, 1);
   };
 
@@ -342,14 +385,15 @@ function LanguageTherapy({ onLogout }) {
 
     // Save progress to database
     try {
-      await languageService.saveProgress({
+      const receptivePayload = {
         mode: 'receptive',
         exercise_index: currentExerciseIndex,
         exercise_id: currentExercise.id,
         is_correct: isCorrect,
         score: isCorrect ? 1.0 : 0.0,
         user_answer: selectedOption.text
-      });
+      };
+      await languageService.saveProgress(receptivePayload);
       console.log('Progress saved successfully');
     } catch (error) {
       console.error('Error saving progress:', error);
@@ -499,7 +543,7 @@ function LanguageTherapy({ onLogout }) {
       formData.append('expected_keywords', JSON.stringify(currentExercise.expectedKeywords));
       formData.append('min_words', currentExercise.minWords);
 
-      const response = await fetch('http://localhost:5000/api/language/assess-expressive', {
+      const response = await fetch(`${API_URL}/language/assess-expressive`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -535,14 +579,15 @@ function LanguageTherapy({ onLogout }) {
 
         // Save progress to database
         try {
-          await languageService.saveProgress({
+          const expressivePayload = {
             mode: 'expressive',
             exercise_index: currentExerciseIndex,
             exercise_id: currentExercise.id,
             is_correct: isCorrect,
             score: result.score,
             transcription: result.transcription
-          });
+          };
+          await languageService.saveProgress(expressivePayload);
           console.log('Expressive progress saved successfully');
         } catch (error) {
           console.error('Error saving expressive progress:', error);
@@ -617,7 +662,7 @@ function LanguageTherapy({ onLogout }) {
     return (
       <div className="language-therapy-page">
         {/* Header */}
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
         {/* Mode Selection */}
         <main className="language-main">
@@ -717,7 +762,7 @@ function LanguageTherapy({ onLogout }) {
 
     return (
       <div className="language-therapy-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
         <main className="language-main">
           <div className="language-container">
@@ -802,7 +847,7 @@ function LanguageTherapy({ onLogout }) {
   return (
     <div className="language-therapy-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Exercise */}
       <main className="language-main">
@@ -867,6 +912,26 @@ function LanguageTherapy({ onLogout }) {
                 </button>
               </div>
               <p className="instruction-text">{currentExercise.instruction}</p>
+            </div>
+
+            {/* Voice Speed Control */}
+            <div className="voice-speed-control">
+              <span className="voice-speed-label">🔊 Voice Speed</span>
+              <div className="voice-speed-slider-row">
+                <span className="speed-tag">Slow</span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.1"
+                  value={voiceSpeed}
+                  onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                  className="voice-speed-slider"
+                  style={{ accentColor: modeData.color }}
+                />
+                <span className="speed-tag">Fast</span>
+              </div>
+              <span className="voice-speed-value">{voiceSpeed === 1.0 ? 'Normal' : voiceSpeed < 1.0 ? `${voiceSpeed}x (Slower)` : `${voiceSpeed}x (Faster)`}</span>
             </div>
 
             {therapyMode === 'receptive' && (

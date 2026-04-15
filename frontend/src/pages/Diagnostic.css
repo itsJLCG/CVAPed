@@ -1,0 +1,129 @@
+.diagnostic-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+
+.diagnostic-main {
+  flex: 1;
+  padding: 2.5rem 1.5rem;
+}
+
+.diagnostic-container {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.diagnostic-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 6rem 0;
+  font-size: 1rem;
+  color: #64748b;
+}
+
+/* ── Page Header ──────────────────────────────────────── */
+.diagnostic-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.diagnostic-page-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0 0 0.25rem 0;
+}
+
+.diagnostic-page-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.diagnostic-update-btn {
+  padding: 0.6rem 1.4rem;
+  background: #1e293b;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diagnostic-update-btn:hover {
+  background: #0f172a;
+  transform: translateY(-1px);
+}
+
+/* ── Empty State ──────────────────────────────────────── */
+.diagnostic-empty-state {
+  background: #fff;
+  border: 2px dashed #e2e8f0;
+  border-radius: 16px;
+  padding: 4rem 2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.diagnostic-empty-icon {
+  font-size: 3.5rem;
+  line-height: 1;
+}
+
+.diagnostic-empty-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0;
+}
+
+.diagnostic-empty-text {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0;
+  max-width: 420px;
+}
+
+.diagnostic-start-btn {
+  margin-top: 0.5rem;
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.diagnostic-start-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .diagnostic-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .diagnostic-update-btn {
+    align-self: flex-start;
+  }
+}

@@ -25,14 +25,14 @@ class LanguageMasteryPredictor:
         self.trials_collection = self.db['language_trials']
         self.progress_collection = self.db['language_progress']
         
-        print(f"✅ Language {mode.capitalize()} Predictor initialized")
+        print(f"[OK] Language {mode.capitalize()} Predictor initialized")
     
     def extract_training_data(self):
         """
         Extract training data from MongoDB
         Returns: X (features), y (days_to_mastery), user_ids
         """
-        print(f"\n📊 Extracting training data for {self.mode} language therapy...")
+        print(f"\n[INFO] Extracting training data for {self.mode} language therapy...")
         
         # Get all progress records for this mode
         progress_records = list(self.progress_collection.find({'mode': self.mode}))
@@ -77,7 +77,7 @@ class LanguageMasteryPredictor:
             y.append(days_to_mastery)
             user_ids.append(user_id)
         
-        print(f"✅ Extracted {len(X)} training samples")
+        print(f"[OK] Extracted {len(X)} training samples")
         return np.array(X), np.array(y), user_ids
     
     def _extract_features(self, trials, progress):
@@ -177,7 +177,7 @@ class LanguageMasteryPredictor:
     
     def train_model(self):
         """Train XGBoost model"""
-        print(f"\n🤖 Training {self.mode} language mastery prediction model...")
+        print(f"\n[ROBOT] Training {self.mode} language mastery prediction model...")
         
         # Extract training data
         X, y, user_ids = self.extract_training_data()
@@ -207,10 +207,10 @@ class LanguageMasteryPredictor:
         rmse = np.sqrt(mean_squared_error(y_test, y_pred))
         r2 = r2_score(y_test, y_pred)
         
-        print(f"\n📊 Model Performance ({self.mode}):")
+        print(f"\n[INFO] Model Performance ({self.mode}):")
         print(f"   MAE: {mae:.2f} days")
         print(f"   RMSE: {rmse:.2f} days")
-        print(f"   R² Score: {r2:.4f}")
+        print(f"   R2 Score: {r2:.4f}")
         print(f"   Training samples: {len(X_train)}")
         print(f"   Test samples: {len(X_test)}")
         
@@ -219,7 +219,7 @@ class LanguageMasteryPredictor:
         with open(self.model_path, 'wb') as f:
             pickle.dump(self.model, f)
         
-        print(f"✅ Model saved to {self.model_path}")
+        print(f"[OK] Model saved to {self.model_path}")
         
         return {
             'mae': float(mae),
@@ -236,7 +236,7 @@ class LanguageMasteryPredictor:
             try:
                 with open(self.model_path, 'rb') as f:
                     self.model = pickle.load(f)
-                print(f"✅ Loaded {self.mode} language mastery model from {self.model_path}")
+                print(f"[OK] Loaded {self.mode} language mastery model from {self.model_path}")
                 return True
             except Exception as e:
                 return False
@@ -301,7 +301,7 @@ class LanguageMasteryPredictor:
         # Calculate confidence based on data quality
         confidence = self._calculate_confidence(trials, progress)
         
-        print(f"✅ Prediction: {predicted_days} days")
+        print(f"[OK] Prediction: {predicted_days} days")
         print(f"   Confidence: {int(confidence * 100)}%")
         
         return {

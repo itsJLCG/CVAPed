@@ -4,9 +4,10 @@ import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import './TherapyPage.css';
 
-function PhysicalTherapy({ onLogout }) {
+function PhysicalTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const mobileAppDownloadUrl = 'https://drive.google.com/uc?export=download&id=1CrJYwk6udJO3oVdpfLMSLfbtrhU9v8FD';
 
   // Ensure the category is set to 'physical' when this page is loaded
   useEffect(() => {
@@ -16,7 +17,7 @@ function PhysicalTherapy({ onLogout }) {
   return (
     <div className="therapy-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="therapy-page-main">
@@ -61,18 +62,11 @@ function PhysicalTherapy({ onLogout }) {
                   </button>
                 </div>
 
-                {/* Mobile App Option (Locked) */}
+                {/* Mobile App Option */}
                 <div className="therapy-feature-card" style={{ 
-                  opacity: 0.6,
                   position: 'relative',
-                  border: '2px solid #999'
+                  border: '2px solid #FF9800'
                 }}>
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: '10px', 
-                    right: '10px', 
-                    fontSize: '1.5rem' 
-                  }}>🔒</div>
                   <div className="therapy-feature-icon" style={{ fontSize: '3rem' }}>📱</div>
                   <h3>Use Mobile App</h3>
                   <p style={{ marginBottom: '1.5rem' }}>
@@ -82,9 +76,9 @@ function PhysicalTherapy({ onLogout }) {
                   <button 
                     className="therapy-page-cta-btn secondary" 
                     style={{ width: '100%', padding: '0.75rem' }}
-                    disabled
+                    onClick={() => window.open(mobileAppDownloadUrl, '_blank', 'noopener,noreferrer')}
                   >
-                    Hardware Not Available
+                    Download Mobile App (APK)
                   </button>
                   <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.5rem' }}>
                     Download the mobile app when hardware is unavailable
@@ -92,6 +86,63 @@ function PhysicalTherapy({ onLogout }) {
                 </div>
               </div>
             </div>
+
+            {/* Detection Problems & Exercise Recommendations */}
+            <div className="therapy-page-card" style={{ marginTop: '2rem' }}>
+              <h2>🩺 Assessment & Exercises</h2>
+              <p style={{ marginBottom: '2rem' }}>
+                Review common physical problems detected in stroke patients and browse tailored exercise 
+                recommendations for your rehabilitation programme.
+              </p>
+              <div className="therapy-page-features" style={{ gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                <div
+                  className="therapy-feature-card"
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: 'pointer', border: '2px solid #2196F3', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                  onClick={() => navigate('/detection-problems')}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate('/detection-problems')}
+                >
+                  <div className="therapy-feature-icon" style={{ fontSize: '3rem' }}>🔍</div>
+                  <h3>Detection Problems</h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Explore a catalogue of gait and physical problems commonly detected in CVA patients, 
+                    with severity levels, indicators, and affected areas.
+                  </p>
+                  <button
+                    className="therapy-page-cta-btn"
+                    style={{ width: '100%', padding: '0.75rem' }}
+                    onClick={(e) => { e.stopPropagation(); navigate('/detection-problems'); }}
+                  >
+                    View Detection Problems
+                  </button>
+                </div>
+
+                <div
+                  className="therapy-feature-card"
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: 'pointer', border: '2px solid #4CAF50', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                  onClick={() => navigate('/exercise-recommendations')}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate('/exercise-recommendations')}
+                >
+                  <div className="therapy-feature-icon" style={{ fontSize: '3rem' }}>💪</div>
+                  <h3>Exercise Recommendations</h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Browse therapist-curated exercises with step-by-step instructions, difficulty ratings, 
+                    equipment needs, and precautions tailored to your condition.
+                  </p>
+                  <button
+                    className="therapy-page-cta-btn"
+                    style={{ width: '100%', padding: '0.75rem' }}
+                    onClick={(e) => { e.stopPropagation(); navigate('/exercise-recommendations'); }}
+                  >
+                    View Exercise Recommendations
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </main>

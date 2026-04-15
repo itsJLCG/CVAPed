@@ -410,3 +410,18 @@ Therapist Dashboard → Diagnostic Comparison tab
 - Firebase ID tokens are verified server-side using the Firebase Admin SDK
 - The `@therapist_required` decorator enforces role checks on all therapist-only endpoints
 - Cloudinary credentials are server-side only; image uploads are proxied through the Flask backend
+
+
+
+
+
+
+
+
+I’ve confirmed from the project documentation that this is a stroke and pediatric therapy platform with rehabilitation workflows, diagnostics, and access to care features. Next I’ll map it to the closest SDG and note secondary SDGs it also supports.This project primarily falls under SDG 3: Good Health and Well-Being.
+
+Why:
+
+Its core purpose is rehabilitation and therapy delivery for stroke and speech patients, which is directly health-focused.
+It includes diagnostic support, therapy planning, monitoring, and follow-up workflows that improve treatment continuity and outcomes.
+The platform is explicitly described as a therapy management and rehabilitation system in README.md.

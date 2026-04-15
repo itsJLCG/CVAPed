@@ -1,18 +1,29 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from pymongo import MongoClient
 from bson import ObjectId
 import jwt
 import datetime
 from functools import wraps
 import os
+import json
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, auth
 import socket
 import threading
 import atexit
+import logging
+import time
+from urllib import parse, request as urllib_request
+
+logger = logging.getLogger(__name__)
+
+SESSION_EXPIRY_HOURS = 3
+FACILITY_SESSION_EXPIRY_HOURS = 3
 
 # Import fluency CRUD blueprint
 from fluency_crud import fluency_bp, init_fluency_crud
@@ -26,23 +37,628 @@ from articulation_crud import articulation_bp, init_articulation_crud
 from admin.AdminManagement import admin_bp, init_admin_management
 # Import success story CRUD blueprint
 from success_story_crud import success_story_bp, init_success_story_crud
+# Import physical therapy CRUD blueprint
+from physical_therapy_crud import physical_therapy_bp, init_physical_therapy_crud
 
 # Load environment variables from .env file
 load_dotenv()
+
+IS_CLOUD_RUN = bool(os.getenv('K_SERVICE'))
+DEFAULT_FIREBASE_SERVICE_ACCOUNT_PATH = 'cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json'
+RESPONSE_CACHE = {}
+RESPONSE_CACHE_LOCK = threading.Lock()
+
+
+def get_bool_env(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def get_int_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def get_float_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def _normalize_cache_value(value):
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _normalize_cache_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_normalize_cache_value(item) for item in value]
+    return value
+
+
+def build_response_cache_key(namespace, scope='public', **parts):
+    normalized_parts = _normalize_cache_value(parts)
+    payload = json.dumps(normalized_parts, sort_keys=True, default=str)
+    return f'{namespace}:{scope}:{payload}'
+
+
+def get_cached_response(cache_key):
+    now = time.time()
+    with RESPONSE_CACHE_LOCK:
+        entry = RESPONSE_CACHE.get(cache_key)
+        if not entry:
+            return None
+        if entry['expires_at'] <= now:
+            RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return entry['value']
+
+
+def set_cached_response(cache_key, value, ttl_seconds):
+    with RESPONSE_CACHE_LOCK:
+        RESPONSE_CACHE[cache_key] = {
+            'value': value,
+            'expires_at': time.time() + ttl_seconds,
+        }
+
+
+def get_or_set_cached_response(cache_key, ttl_seconds, builder):
+    cached_value = get_cached_response(cache_key)
+    if cached_value is not None:
+        return cached_value
+
+    built_value = builder()
+    set_cached_response(cache_key, built_value, ttl_seconds)
+    return built_value
+
+
+def _build_health_summary_payload(user_id):
+    articulation_count = articulation_trials_collection.count_documents({'user_id': user_id})
+
+    receptive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'receptive'})
+    expressive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'expressive'})
+
+    articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}))
+    articulation_scores = [t.get('scores', {}).get('computed_score', 0) * 100 for t in articulation_trials]
+    articulation_avg = sum(articulation_scores) / len(articulation_scores) if articulation_scores else 0
+
+    receptive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'receptive'}))
+    receptive_scores = []
+    for t in receptive_trials:
+        score = t.get('score', None)
+        if score is not None:
+            receptive_scores.append(score * 100 if score <= 1 else score)
+        else:
+            receptive_scores.append(100 if t.get('is_correct') else 0)
+    receptive_avg = sum(receptive_scores) / len(receptive_scores) if receptive_scores else 0
+
+    expressive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'expressive'}))
+    expressive_scores = []
+    for t in expressive_trials:
+        score = t.get('score', None)
+        if score is not None:
+            expressive_scores.append(score * 100 if score <= 1 else score)
+        else:
+            expressive_scores.append(100 if t.get('is_correct') else 0)
+    expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
+
+    fluency_count = fluency_trials_collection.count_documents({'user_id': user_id})
+    fluency_trials = list(fluency_trials_collection.find({'user_id': user_id}))
+    fluency_scores = [t.get('fluency_score', 0) for t in fluency_trials]
+    fluency_avg = sum(fluency_scores) / len(fluency_scores) if fluency_scores else 0
+
+    gait_progress_collection = db['gaitprogresses']
+    gait_records = list(gait_progress_collection.find({'user_id': user_id}))
+    gait_count = len(gait_records)
+
+    gait_scores = []
+    for gait in gait_records:
+        metrics = gait.get('metrics', {})
+        stability = metrics.get('stability_score', 0) * 100
+        symmetry = metrics.get('gait_symmetry', 0) * 100
+        regularity = metrics.get('step_regularity', 0) * 100
+        if any([stability, symmetry, regularity]):
+            gait_scores.append((stability + symmetry + regularity) / 3)
+    gait_avg = sum(gait_scores) / len(gait_scores) if gait_scores else 0
+
+    return {
+        'success': True,
+        'summary': {
+            'articulation': {
+                'sessions': articulation_count,
+                'avgScore': round(articulation_avg, 1)
+            },
+            'receptive': {
+                'sessions': receptive_count,
+                'avgScore': round(receptive_avg, 1)
+            },
+            'expressive': {
+                'sessions': expressive_count,
+                'avgScore': round(expressive_avg, 1)
+            },
+            'language': {
+                'sessions': receptive_count + expressive_count,
+                'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
+            },
+            'fluency': {
+                'sessions': fluency_count,
+                'avgScore': round(fluency_avg, 1)
+            },
+            'gait': {
+                'sessions': gait_count,
+                'avgScore': round(gait_avg, 1)
+            }
+        }
+    }
+
+
+FACILITY_LOCATION_NAME = os.getenv('FACILITY_LOCATION_NAME', 'Taguig City Disability Resource and Development Center')
+FACILITY_LATITUDE = get_float_env('FACILITY_LATITUDE', 14.514722)
+FACILITY_LONGITUDE = get_float_env('FACILITY_LONGITUDE', 121.055833)
+
+WORK_STATUS_LABELS = {
+    'employed': 'Employed',
+    'self_employed': 'Self-Employed',
+    'student': 'Student',
+    'unemployed': 'Unemployed',
+    'homemaker': 'Homemaker',
+    'retired': 'Retired',
+    'unable_to_work': 'Unable to Work',
+    'unspecified': 'Unspecified'
+}
+
+AGE_BRACKET_ORDER = ['0-12', '13-17', '18-25', '26-35', '36-45', '46-55', '56-65', '66+']
+GENDER_ORDER = ['male', 'female', 'other', 'prefer-not-to-say']
+
+
+def normalize_therapy_type(raw_value):
+    value = str(raw_value or '').strip().lower()
+    if value == 'speech':
+        return 'speech'
+    if value == 'physical':
+        return 'physical'
+    return 'other'
+
+
+def normalize_gender(raw_value):
+    value = str(raw_value or '').strip().lower()
+    if value in GENDER_ORDER:
+        return value
+    return 'other'
+
+
+def normalize_work_status(raw_value):
+    value = str(raw_value or '').strip().lower().replace('-', '_').replace(' ', '_')
+    if value in WORK_STATUS_LABELS:
+        return value
+    return 'unspecified'
+
+
+def get_age_bracket(age):
+    try:
+        age_int = int(age)
+    except (TypeError, ValueError):
+        return None
+
+    if age_int <= 12:
+        return '0-12'
+    if age_int <= 17:
+        return '13-17'
+    if age_int <= 25:
+        return '18-25'
+    if age_int <= 35:
+        return '26-35'
+    if age_int <= 45:
+        return '36-45'
+    if age_int <= 55:
+        return '46-55'
+    if age_int <= 65:
+        return '56-65'
+    return '66+'
+
+
+def compute_heat_index_celsius(temperature_c, humidity_percent):
+    if temperature_c is None or humidity_percent is None:
+        return None
+
+    if temperature_c < 27 or humidity_percent < 40:
+        return round(float(temperature_c), 1)
+
+    t = float(temperature_c)
+    rh = float(humidity_percent)
+    heat_index = (
+        -8.784695 +
+        (1.61139411 * t) +
+        (2.338549 * rh) +
+        (-0.14611605 * t * rh) +
+        (-0.012308094 * (t ** 2)) +
+        (-0.016424828 * (rh ** 2)) +
+        (0.002211732 * (t ** 2) * rh) +
+        (0.00072546 * t * (rh ** 2)) +
+        (-0.000003582 * (t ** 2) * (rh ** 2))
+    )
+    return round(heat_index, 1)
+
+
+def classify_heat_index(heat_index_c):
+    if heat_index_c is None:
+        return {
+            'risk_level': 'Unavailable',
+            'risk_tone': 'neutral',
+            'advisory': 'Weather data is unavailable right now.'
+        }
+
+    if heat_index_c < 27:
+        return {
+            'risk_level': 'Normal',
+            'risk_tone': 'normal',
+            'advisory': 'Conditions are generally comfortable for scheduled therapy sessions.'
+        }
+    if heat_index_c < 32:
+        return {
+            'risk_level': 'Caution',
+            'risk_tone': 'caution',
+            'advisory': 'Monitor hydration and rest breaks during physical therapy activity.'
+        }
+    if heat_index_c < 41:
+        return {
+            'risk_level': 'Extreme Caution',
+            'risk_tone': 'warning',
+            'advisory': 'Reduce prolonged exertion and consider lighter indoor therapy routines.'
+        }
+    if heat_index_c < 54:
+        return {
+            'risk_level': 'Danger',
+            'risk_tone': 'danger',
+            'advisory': 'Avoid strenuous outdoor activity and prioritize closely monitored sessions.'
+        }
+    return {
+        'risk_level': 'Extreme Danger',
+        'risk_tone': 'danger',
+        'advisory': 'Suspend outdoor exertion and keep therapy activity in a controlled indoor environment.'
+    }
+
+
+def get_heat_index_snapshot():
+    cache_key = build_response_cache_key(
+        'heat-index-snapshot',
+        scope='public',
+        location=FACILITY_LOCATION_NAME,
+        latitude=FACILITY_LATITUDE,
+        longitude=FACILITY_LONGITUDE,
+    )
+
+    cached_snapshot = get_cached_response(cache_key)
+    if cached_snapshot is not None:
+        return cached_snapshot
+
+    query = parse.urlencode({
+        'latitude': FACILITY_LATITUDE,
+        'longitude': FACILITY_LONGITUDE,
+        'current': 'temperature_2m,relative_humidity_2m',
+        'timezone': 'auto'
+    })
+    url = f'https://api.open-meteo.com/v1/forecast?{query}'
+
+    try:
+        with urllib_request.urlopen(url, timeout=5) as response:
+            payload = json.loads(response.read().decode('utf-8'))
+
+        current = payload.get('current', {})
+        temperature_c = current.get('temperature_2m')
+        humidity_percent = current.get('relative_humidity_2m')
+        heat_index_c = compute_heat_index_celsius(temperature_c, humidity_percent)
+        classification = classify_heat_index(heat_index_c)
+
+        snapshot = {
+            'available': temperature_c is not None and humidity_percent is not None,
+            'location': FACILITY_LOCATION_NAME,
+            'temperature_c': round(float(temperature_c), 1) if temperature_c is not None else None,
+            'humidity_percent': int(round(float(humidity_percent))) if humidity_percent is not None else None,
+            'heat_index_c': heat_index_c,
+            'fetched_at': current.get('time'),
+            **classification
+        }
+        set_cached_response(cache_key, snapshot, 15 * 60)
+        return snapshot
+    except Exception:
+        classification = classify_heat_index(None)
+        snapshot = {
+            'available': False,
+            'location': FACILITY_LOCATION_NAME,
+            'temperature_c': None,
+            'humidity_percent': None,
+            'heat_index_c': None,
+            'fetched_at': None,
+            **classification
+        }
+        set_cached_response(cache_key, snapshot, 5 * 60)
+        return snapshot
+
+
+def build_ranked_items(counts, total, label_key='label', value_key='count', preferred_order=None, label_map=None):
+    keys = preferred_order if preferred_order is not None else list(counts.keys())
+    items = []
+
+    for key in keys:
+        count = counts.get(key, 0)
+        percentage = round((count / total) * 100, 1) if total > 0 else 0
+        items.append({
+            'key': key,
+            label_key: label_map.get(key, key) if label_map else key,
+            value_key: count,
+            'percentage': percentage
+        })
+
+    return items
+
+
+def build_patient_report_payload(patients):
+    total_patients = len(patients)
+    therapy_keys = ['speech', 'physical']
+    therapy_labels = {'speech': 'Speech Therapy', 'physical': 'Physical Therapy'}
+
+    age_counts = {key: {bracket: 0 for bracket in AGE_BRACKET_ORDER} for key in therapy_keys + ['overall']}
+    gender_counts = {key: {gender: 0 for gender in GENDER_ORDER} for key in therapy_keys + ['overall']}
+    work_counts = {key: {status: 0 for status in WORK_STATUS_LABELS.keys()} for key in therapy_keys + ['overall']}
+    therapy_totals = {key: 0 for key in therapy_keys}
+
+    for patient in patients:
+        therapy = normalize_therapy_type(patient.get('therapyType'))
+        if therapy in therapy_totals:
+            therapy_totals[therapy] += 1
+
+        bracket = get_age_bracket(patient.get('age'))
+        if bracket:
+            age_counts['overall'][bracket] += 1
+            if therapy in therapy_totals:
+                age_counts[therapy][bracket] += 1
+
+        gender = normalize_gender(patient.get('gender'))
+        gender_counts['overall'][gender] += 1
+        if therapy in therapy_totals:
+            gender_counts[therapy][gender] += 1
+
+        work_status = normalize_work_status(patient.get('workStatus'))
+        work_counts['overall'][work_status] += 1
+        if therapy in therapy_totals:
+            work_counts[therapy][work_status] += 1
+
+    age_brackets_list = build_ranked_items(age_counts['overall'], total_patients, label_key='range', preferred_order=AGE_BRACKET_ORDER)
+    highest_age_bracket = None
+    if age_brackets_list:
+        highest_age_bracket = max(age_brackets_list, key=lambda item: item['count'])
+        for item in age_brackets_list:
+            item['isHighest'] = item['range'] == highest_age_bracket['range'] and highest_age_bracket['count'] > 0
+        highest_age_bracket = next((item for item in age_brackets_list if item.get('isHighest')), None)
+
+    gender_distribution = build_ranked_items(gender_counts['overall'], total_patients, label_key='gender', preferred_order=GENDER_ORDER)
+    gender_distribution = [item for item in gender_distribution if item['count'] > 0]
+    gender_distribution.sort(key=lambda item: item['count'], reverse=True)
+
+    def build_by_therapy(source_counts, preferred_order, label_map=None, label_key='label'):
+        result = {}
+        for therapy_key in therapy_keys:
+            therapy_total = therapy_totals.get(therapy_key, 0)
+            items = build_ranked_items(
+                source_counts[therapy_key],
+                therapy_total,
+                label_key=label_key,
+                preferred_order=preferred_order,
+                label_map=label_map
+            )
+            result[therapy_key] = {
+                'therapyType': therapy_key,
+                'therapyLabel': therapy_labels[therapy_key],
+                'totalPatients': therapy_total,
+                'items': items
+            }
+        return result
+
+    detected_problem_map = {}
+    patient_gender_cache = {}
+    gait_records = list(db['gaitprogresses'].find({}, {'user_id': 1, 'detected_problems': 1}))
+
+    for record in gait_records:
+        user_id = str(record.get('user_id') or '')
+        if not user_id:
+            continue
+
+        if user_id not in patient_gender_cache:
+            user_doc = None
+            try:
+                user_doc = users_collection.find_one({'_id': ObjectId(user_id)}, {'gender': 1})
+            except Exception:
+                user_doc = users_collection.find_one({'_id': user_id}, {'gender': 1})
+            patient_gender_cache[user_id] = normalize_gender(user_doc.get('gender')) if user_doc else 'other'
+
+        gender = patient_gender_cache[user_id]
+        for raw_problem in record.get('detected_problems', []):
+            problem_key = raw_problem.get('problem') if isinstance(raw_problem, dict) else raw_problem
+            normalized_problem = str(problem_key or '').strip().lower()
+            if not normalized_problem:
+                continue
+
+            entry = detected_problem_map.setdefault(normalized_problem, {
+                'key': normalized_problem,
+                'label': normalized_problem.replace('_', ' ').title(),
+                'patient_sets': {g: set() for g in GENDER_ORDER}
+            })
+            entry['patient_sets'].setdefault(gender, set()).add(user_id)
+
+    detected_problem_rows = []
+    for entry in detected_problem_map.values():
+        counts_by_gender = {gender: len(entry['patient_sets'].get(gender, set())) for gender in GENDER_ORDER}
+        max_count = max(counts_by_gender.values()) if counts_by_gender else 0
+        dominant = [gender for gender, count in counts_by_gender.items() if count == max_count and count > 0]
+        detected_problem_rows.append({
+            'key': entry['key'],
+            'label': entry['label'],
+            'countsByGender': counts_by_gender,
+            'totalPatients': sum(counts_by_gender.values()),
+            'dominantGender': dominant[0] if len(dominant) == 1 else ('tie' if len(dominant) > 1 else None),
+            'dominantGenderLabel': (
+                'Tie' if len(dominant) > 1 else
+                (dominant[0].replace('-', ' ').title() if dominant else 'N/A')
+            )
+        })
+
+    detected_problem_rows.sort(key=lambda item: (-item['totalPatients'], item['label']))
+
+    return {
+        'totalPatients': total_patients,
+        'ageBrackets': age_brackets_list,
+        'genderDistribution': gender_distribution,
+        'highestAgeBracket': highest_age_bracket,
+        'therapyTotals': {
+            therapy_key: {
+                'therapyType': therapy_key,
+                'therapyLabel': therapy_labels[therapy_key],
+                'totalPatients': therapy_totals[therapy_key]
+            }
+            for therapy_key in therapy_keys
+        },
+        'categories': {
+            'age': {
+                'title': 'Age',
+                'description': 'Age groups currently using each therapy type.',
+                'byTherapy': build_by_therapy(age_counts, AGE_BRACKET_ORDER, label_key='label')
+            },
+            'gender': {
+                'title': 'Gender',
+                'description': 'Gender distribution under each therapy type and detected physical gait problems by gender.',
+                'byTherapy': build_by_therapy(gender_counts, GENDER_ORDER, label_map={
+                    'male': 'Male',
+                    'female': 'Female',
+                    'other': 'Other',
+                    'prefer-not-to-say': 'Prefer not to say'
+                }, label_key='label'),
+                'detectedProblems': detected_problem_rows
+            },
+            'work': {
+                'title': 'Work',
+                'description': 'Occupation and employment status across each therapy type.',
+                'byTherapy': build_by_therapy(work_counts, list(WORK_STATUS_LABELS.keys()), label_map=WORK_STATUS_LABELS, label_key='label')
+            }
+        }
+    }
 
 # Helper function for timezone-aware UTC datetime
 def utc_now():
     """Returns current UTC time as timezone-aware datetime"""
     return datetime.datetime.now(datetime.timezone.utc)
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate('cvaped-fa8b2-firebase-adminsdk-fbsvc-92b2666b41.json')
-firebase_admin.initialize_app(cred)
+def initialize_firebase_admin():
+    """Initialize Firebase Admin using JSON content or a service-account file path."""
+    service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+
+    if service_account_json:
+        try:
+            cred_data = json.loads(service_account_json)
+            cred = credentials.Certificate(cred_data)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON: {e}")
+    else:
+        candidate_paths = []
+        configured_service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
+
+        if configured_service_account_path:
+            candidate_paths.append(configured_service_account_path)
+
+        if not IS_CLOUD_RUN:
+            candidate_paths.append(DEFAULT_FIREBASE_SERVICE_ACCOUNT_PATH)
+
+        resolved_service_account_path = None
+        for candidate_path in candidate_paths:
+            path_to_check = candidate_path
+            if not os.path.isabs(path_to_check):
+                path_to_check = os.path.join(os.path.dirname(__file__), path_to_check)
+            if os.path.exists(path_to_check):
+                resolved_service_account_path = path_to_check
+                break
+
+        if not resolved_service_account_path:
+            raise RuntimeError(
+                'Firebase service account credentials are not configured. '
+                'Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH.'
+            )
+
+        cred = credentials.Certificate(resolved_service_account_path)
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+
+
+initialize_firebase_admin()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key')
-CORS(app)
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set. Cannot start application.")
+
+app.config['SECRET_KEY'] = SECRET_KEY
+
+# Parse comma-separated origins from environment for production-safe CORS.
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        'CORS_ORIGINS',
+        'http://localhost:3000,http://localhost:5000,http://localhost:5173,https://cva-ped.vercel.app,https://www.cva-ped.vercel.app'
+    ).split(',')
+    if origin.strip()
+]
+
+frontend_url = os.getenv('FRONTEND_URL')
+if frontend_url and frontend_url not in cors_origins:
+    cors_origins.append(frontend_url)
+
+# Enable CORS with full configuration
+CORS(
+    app,
+    origins=cors_origins,
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "X-Wearable-Token"],
+    expose_headers=["Content-Type", "Authorization"],
+    supports_credentials=True,
+    max_age=86400,  # Cache preflight response for 24 hours
+)
+
+# Print confirmation
+print("✅ CORS initialized for allowed origins")
+print(f"   - Allowed origins: {', '.join(cors_origins)}")
+print("   - Allowed methods: GET, POST, PUT, DELETE, PATCH, OPTIONS")
+print("   - Allowed headers: Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Wearable-Token")
+print("   - Credentials: enabled")
+
+# Rate limiting
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
 bcrypt = Bcrypt(app)
+
+# Handle OPTIONS preflight requests before any route processing
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'ok'})
+        response.status_code = 200
+        return response
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGO_URI')
@@ -59,10 +675,18 @@ language_progress_collection = db['language_progress']
 language_trials_collection = db['language_trials']
 appointments_collection = db['appointments']
 facility_diagnostics_collection = db['facility_diagnostics']
+wearable_latest_collection = db['wearable_latest']
+
+try:
+    wearable_latest_collection.create_index('device_id', unique=True)
+    wearable_latest_collection.create_index([('updated_at', -1)])
+    wearable_latest_collection.create_index([('user_id', 1), ('updated_at', -1)])
+except Exception as e:
+    logger.warning(f'Wearable index initialization failed: {e}')
 
 # Register fluency CRUD blueprint
 app.register_blueprint(fluency_bp)
-init_fluency_crud(db)
+init_fluency_crud(db, app.config['SECRET_KEY'])
 
 # Register language CRUD blueprint
 app.register_blueprint(language_bp)
@@ -78,13 +702,17 @@ init_articulation_crud(db, app.config['SECRET_KEY'])
 
 # Register admin management blueprint
 app.register_blueprint(admin_bp)
-init_admin_management(db)
+init_admin_management(db, app.config['SECRET_KEY'])
 
 # Register success story CRUD blueprint
 app.register_blueprint(success_story_bp, url_prefix='/api')
 init_success_story_crud(db)
 
-# Initialize XGBoost Prediction Service (Standalone - all 4 predictors)
+# Register physical therapy CRUD blueprint
+app.register_blueprint(physical_therapy_bp)
+init_physical_therapy_crud(db, app.config['SECRET_KEY'])
+
+# Initialize XGBoost Prediction Service (Standalone - all 5 predictors)
 print("\n🤖 Initializing XGBoost Prediction Models...")
 print("="*60)
 try:
@@ -93,16 +721,30 @@ try:
     from language_mastery_predictor import LanguageMasteryPredictor
     from overall_speech_predictor import OverallSpeechPredictor
     
-    print("✅ All 4 XGBoost predictors loaded successfully!")
+    print("✅ All 4 Speech XGBoost predictors loaded successfully!")
     print("   - Articulation Mastery Predictor")
     print("   - Fluency Mastery Predictor")
     print("   - Language Mastery Predictor (Receptive & Expressive)")
     print("   - Overall Speech Improvement Predictor")
-    print("="*60)
 except Exception as e:
-    print(f"⚠️  Could not initialize all prediction models: {e}")
+    print(f"⚠️  Could not initialize speech prediction models: {e}")
     print("   Predictions will use baseline estimates")
-    print("="*60)
+
+# Initialize Gait Mastery Predictor for Physical Therapy
+try:
+    from gait_mastery_predictor import GaitMasteryPredictor
+    gait_predictor = GaitMasteryPredictor(db)
+    gait_predictor.load_model()
+    print("✅ Gait Mastery Predictor loaded successfully!")
+    print("   - Physical Therapy Gait Prediction")
+except FileNotFoundError:
+    print("⚠️  Gait model not found. Train the model using train_gait_model.py")
+    gait_predictor = None
+except Exception as e:
+    print(f"⚠️  Could not initialize gait predictor: {e}")
+    gait_predictor = None
+
+print("="*60)
 
 # Token required decorator
 def token_required(f):
@@ -111,18 +753,55 @@ def token_required(f):
         token = request.headers.get('Authorization')
         
         if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
+            return jsonify({
+                'message': 'Token is missing!',
+                'error': 'TOKEN_MISSING',
+                'code': 'session/missing'
+            }), 401
         
         try:
-            # Remove 'Bearer ' prefix if present
             if token.startswith('Bearer '):
                 token = token[7:]
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            
+            data = jwt.decode(
+                token, 
+                app.config['SECRET_KEY'], 
+                algorithms=["HS256"],
+                options={"require_exp": True}
+            )
+            
+            issued_at = data.get('iat')
+            if issued_at:
+                issued_time = datetime.datetime.fromtimestamp(issued_at, tz=datetime.timezone.utc)
+                logger.info(f"Token check: user_id={data['user_id']}, issued_at={issued_at}, expires_in={SESSION_EXPIRY_HOURS}h")
+            
+            g.token_data = data
             current_user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not current_user:
+                logger.warning(f"Token validation failed: user {data['user_id']} not found in database")
                 return jsonify({'message': 'User not found!'}), 401
+                
+        except jwt.ExpiredSignatureError:
+            logger.warning(f"Session expired: token has exceeded {SESSION_EXPIRY_HOURS}-hour expiration")
+            return jsonify({
+                'message': 'Session expired. Please log in again.',
+                'error': 'SESSION_EXPIRED',
+                'code': 'session/expired'
+            }), 401
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"Invalid token: {e}")
+            return jsonify({
+                'message': 'Token is invalid!',
+                'error': 'TOKEN_INVALID',
+                'code': 'session/invalid'
+            }), 401
         except Exception as e:
-            return jsonify({'message': 'Token is invalid!', 'error': str(e)}), 401
+            logger.error(f"Token validation error: {e}", exc_info=True)
+            return jsonify({
+                'message': 'Token validation failed!',
+                'error': 'TOKEN_INVALID',
+                'code': 'session/invalid'
+            }), 401
         
         return f(current_user, *args, **kwargs)
     
@@ -141,6 +820,7 @@ def therapist_required(f):
     return decorated
 
 @app.route('/api/register', methods=['POST'])
+@limiter.limit("5 per minute")
 def register():
     try:
         data = request.get_json()
@@ -189,6 +869,7 @@ def register():
             'lastName': last_name,
             'age': age_int,
             'gender': gender,
+            'workStatus': normalize_work_status(data.get('workStatus')),
             'role': role,
             'therapyType': therapy_type,
             'patientType': patient_type,
@@ -246,7 +927,8 @@ def register():
         token = jwt.encode({
             'user_id': str(result.inserted_id),
             'role': role,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
         return jsonify({
@@ -256,9 +938,10 @@ def register():
                 'id': str(result.inserted_id),
                 'email': email,
                 'firstName': first_name,
-                'lastName': last_name,
+                    'lastName': last_name,
                 'age': age_int,
                 'gender': gender,
+                'workStatus': user.get('workStatus'),
                 'role': role,
                 'therapyType': therapy_type,
                 'patientType': patient_type
@@ -266,9 +949,11 @@ def register():
         }), 201
         
     except Exception as e:
-        return jsonify({'message': 'Registration failed', 'error': str(e)}), 500
+        logger.error(f"Registration error: {e}", exc_info=True)
+        return jsonify({'message': 'Registration failed'}), 500
 
 @app.route('/api/login', methods=['POST'])
+@limiter.limit("5 per minute")
 def login():
     try:
         data = request.get_json()
@@ -294,7 +979,8 @@ def login():
         token = jwt.encode({
             'user_id': str(user['_id']),
             'role': user.get('role', 'patient'),
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
         return jsonify({
@@ -306,14 +992,179 @@ def login():
                 'firstName': user['firstName'],
                 'lastName': user['lastName'],
                 'role': user.get('role', 'user'),
-                'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
+                'therapyType': user.get('therapyType'),
+                'patientType': user.get('patientType'),
+                'workStatus': user.get('workStatus'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                'diagnosticData': user.get('diagnosticData')
             }
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Login failed', 'error': str(e)}), 500
+        logger.error(f"Login error: {e}", exc_info=True)
+        return jsonify({'message': 'Login failed'}), 500
+
+@app.route('/api/facility-login', methods=['POST'])
+@limiter.limit("5 per minute")
+def facility_login():
+    """Patient email/password login during a therapist-initiated facility session.
+    Requires a valid therapistToken to prove a therapist legitimately started facility mode.
+    Returns a JWT with facility_mode=True so the backend can set location='facility' on saves.
+    """
+    try:
+        data = request.get_json()
+
+        if not data.get('email') or not data.get('password'):
+            return jsonify({'message': 'Email and password are required'}), 400
+        if not data.get('therapistToken'):
+            return jsonify({'message': 'Facility mode requires an active therapist session'}), 400
+
+        # Validate the therapist token
+        raw_therapist_token = data['therapistToken']
+        if raw_therapist_token.startswith('Bearer '):
+            raw_therapist_token = raw_therapist_token[7:]
+        try:
+            therapist_data = jwt.decode(raw_therapist_token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            therapist_user = users_collection.find_one({'_id': ObjectId(therapist_data['user_id'])})
+            if not therapist_user or therapist_user.get('role') != 'therapist':
+                return jsonify({'message': 'Invalid therapist session for facility mode'}), 403
+        except Exception:
+            return jsonify({'message': 'Invalid or expired therapist session. Please re-activate facility mode.'}), 403
+
+        # Validate patient credentials
+        email = data['email'].lower()
+        user = users_collection.find_one({'email': email})
+        if not user or not bcrypt.check_password_hash(user.get('password', ''), data['password']):
+            return jsonify({'message': 'Invalid email or password'}), 401
+        if user.get('role') != 'patient':
+            return jsonify({'message': 'Only patient accounts can log in during facility mode'}), 403
+
+        # Issue a facility JWT — backend will trust this to set location='facility' on saves
+        token = jwt.encode({
+            'user_id': str(user['_id']),
+            'role': user.get('role', 'patient'),
+            'facility_mode': True,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=FACILITY_SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+
+        return jsonify({
+            'message': 'Facility login successful',
+            'token': token,
+            'user': {
+                'id': str(user['_id']),
+                'email': user['email'],
+                'firstName': user['firstName'],
+                'lastName': user['lastName'],
+                'role': user.get('role', 'patient'),
+                'isProfileComplete': user.get('isProfileComplete', True),
+                'therapyType': user.get('therapyType'),
+                'patientType': user.get('patientType'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                'diagnosticData': user.get('diagnosticData')
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Facility login error: {e}", exc_info=True)
+        return jsonify({'message': 'Facility login failed'}), 500
+
+@app.route('/api/facility-firebase-auth', methods=['POST'])
+@limiter.limit("10 per minute")
+def facility_firebase_auth():
+    """Firebase/Google sign-in during a therapist-initiated facility session.
+    Validates the therapistToken and the Firebase token, returns a JWT with facility_mode=True.
+    """
+    try:
+        data = request.get_json()
+
+        if not data.get('firebaseToken'):
+            return jsonify({'message': 'Firebase token is required'}), 400
+        if not data.get('therapistToken'):
+            return jsonify({'message': 'Facility mode requires an active therapist session'}), 400
+
+        # Validate the therapist token
+        raw_therapist_token = data['therapistToken']
+        if raw_therapist_token.startswith('Bearer '):
+            raw_therapist_token = raw_therapist_token[7:]
+        try:
+            therapist_data = jwt.decode(raw_therapist_token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            therapist_user = users_collection.find_one({'_id': ObjectId(therapist_data['user_id'])})
+            if not therapist_user or therapist_user.get('role') != 'therapist':
+                return jsonify({'message': 'Invalid therapist session for facility mode'}), 403
+        except Exception:
+            return jsonify({'message': 'Invalid or expired therapist session. Please re-activate facility mode.'}), 403
+
+        # Verify Firebase token
+        firebase_token = data['firebaseToken']
+        try:
+            decoded_token = auth.verify_id_token(firebase_token, check_revoked=True)
+            firebase_uid = decoded_token['uid']
+        except auth.ExpiredIdTokenError:
+            return jsonify({'message': 'Firebase token has expired. Please sign in again.', 'error': 'TOKEN_EXPIRED', 'code': 'auth/id-token-expired'}), 401
+        except auth.RevokedIdTokenError:
+            return jsonify({'message': 'Firebase token has been revoked.', 'error': 'TOKEN_REVOKED', 'code': 'auth/id-token-revoked'}), 401
+        except auth.InvalidIdTokenError:
+            return jsonify({'message': 'Invalid Firebase token.', 'error': 'TOKEN_INVALID', 'code': 'auth/invalid-id-token'}), 401
+        except Exception as e:
+            logger.error(f"Firebase token verification failed: {e}", exc_info=True)
+            return jsonify({'message': 'Firebase token verification failed.', 'code': 'auth/token-verification-failed'}), 401
+
+        # Look up user — first by exact Firebase UID, then by email (handles re-linked accounts)
+        user = users_collection.find_one({'providerId': firebase_uid})
+        if not user:
+            firebase_email = decoded_token.get('email', '').lower()
+            user = users_collection.find_one({'email': firebase_email})
+            if not user:
+                return jsonify({'message': 'No patient account found. Please register first.'}), 404
+            if user.get('role') != 'patient':
+                return jsonify({'message': 'Only patient accounts can log in during facility mode'}), 403
+            # Re-link only after confirming this is a patient account
+            users_collection.update_one(
+                {'_id': user['_id']},
+                {'$set': {
+                    'providerId': firebase_uid,
+                    'provider': decoded_token.get('firebase', {}).get('sign_in_provider', 'google.com'),
+                    'updatedAt': datetime.datetime.utcnow()
+                }}
+            )
+        if not user:
+            return jsonify({'message': 'No patient account found. Please register first.'}), 404
+        if user.get('role') != 'patient':
+            return jsonify({'message': 'Only patient accounts can log in during facility mode'}), 403
+
+        # Issue a facility JWT
+        token = jwt.encode({
+            'user_id': str(user['_id']),
+            'role': user.get('role', 'patient'),
+            'facility_mode': True,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=FACILITY_SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+
+        return jsonify({
+            'message': 'Facility login successful',
+            'token': token,
+            'user': {
+                'id': str(user['_id']),
+                'email': user['email'],
+                'firstName': user['firstName'],
+                'lastName': user['lastName'],
+                'role': user.get('role', 'patient'),
+                'isProfileComplete': user.get('isProfileComplete', True),
+                'therapyType': user.get('therapyType'),
+                'patientType': user.get('patientType'),
+                'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                'diagnosticData': user.get('diagnosticData')
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Facility Firebase auth error: {e}", exc_info=True)
+        return jsonify({'message': 'Facility login failed'}), 500
 
 @app.route('/api/auth/firebase', methods=['POST'])
+@limiter.limit("10 per minute")
 def firebase_auth():
     try:
         data = request.get_json()
@@ -342,16 +1193,18 @@ def firebase_auth():
                 'error': 'TOKEN_REVOKED',
                 'code': 'auth/id-token-revoked'
             }), 401
-        except auth.InvalidIdTokenError:
+        except auth.InvalidIdTokenError as e:
+            logger.error(f"Firebase InvalidIdTokenError: {e}", exc_info=True)
             return jsonify({
                 'message': 'Invalid Firebase token. Please sign in again.',
                 'error': 'TOKEN_INVALID',
-                'code': 'auth/invalid-id-token'
+                'code': 'auth/invalid-id-token',
+                'details': str(e)
             }), 401
         except Exception as e:
+            logger.error(f"Firebase token verification failed: {e}", exc_info=True)
             return jsonify({
                 'message': 'Firebase token verification failed. Please sign in again.',
-                'error': str(e),
                 'code': 'auth/token-verification-failed'
             }), 401
         
@@ -363,7 +1216,8 @@ def firebase_auth():
             token = jwt.encode({
                 'user_id': str(user['_id']),
                 'role': user.get('role', 'patient'),
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+                'iat': datetime.datetime.utcnow()
             }, app.config['SECRET_KEY'], algorithm="HS256")
             
             return jsonify({
@@ -378,7 +1232,8 @@ def firebase_auth():
                     'isProfileComplete': user.get('isProfileComplete', True),
                     'therapyType': user.get('therapyType'),
                     'patientType': user.get('patientType'),
-                    'hasInitialDiagnostic': user.get('hasInitialDiagnostic')
+                    'hasInitialDiagnostic': user.get('hasInitialDiagnostic'),
+                    'diagnosticData': user.get('diagnosticData')
                 }
             }), 200
         
@@ -409,7 +1264,8 @@ def firebase_auth():
                 token = jwt.encode({
                     'user_id': str(existing_user['_id']),
                     'role': existing_user.get('role', 'patient'),
-                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+                    'iat': datetime.datetime.utcnow()
                 }, app.config['SECRET_KEY'], algorithm="HS256")
                 
                 return jsonify({
@@ -424,12 +1280,47 @@ def firebase_auth():
                         'isProfileComplete': existing_user.get('isProfileComplete', True),
                         'therapyType': existing_user.get('therapyType'),
                         'patientType': existing_user.get('patientType'),
-                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic')
+                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic'),
+                        'diagnosticData': existing_user.get('diagnosticData')
                     }
                 }), 200
             else:
-                # User exists with a different provider
-                return jsonify({'message': 'Email already registered with a different method. Please login with password.'}), 409
+                # User exists with a different/outdated providerId — Firebase has verified email
+                # ownership, so re-link the account to the current Firebase UID.
+                users_collection.update_one(
+                    {'_id': existing_user['_id']},
+                    {
+                        '$set': {
+                            'providerId': firebase_uid,
+                            'provider': provider,
+                            'profilePicture': profile_picture or existing_user.get('profilePicture', ''),
+                            'updatedAt': datetime.datetime.utcnow()
+                        }
+                    }
+                )
+                token = jwt.encode({
+                    'user_id': str(existing_user['_id']),
+                    'role': existing_user.get('role', 'patient'),
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+                    'iat': datetime.datetime.utcnow()
+                }, app.config['SECRET_KEY'], algorithm="HS256")
+
+                return jsonify({
+                    'message': 'Account re-linked successfully',
+                    'token': token,
+                    'user': {
+                        'id': str(existing_user['_id']),
+                        'email': existing_user['email'],
+                        'firstName': existing_user['firstName'],
+                        'lastName': existing_user['lastName'],
+                        'role': existing_user.get('role', 'patient'),
+                        'isProfileComplete': existing_user.get('isProfileComplete', True),
+                        'therapyType': existing_user.get('therapyType'),
+                        'patientType': existing_user.get('patientType'),
+                        'hasInitialDiagnostic': existing_user.get('hasInitialDiagnostic'),
+                        'diagnosticData': existing_user.get('diagnosticData')
+                    }
+                }), 200
         
         # Create new user with incomplete profile
         new_user = {
@@ -451,7 +1342,8 @@ def firebase_auth():
         token = jwt.encode({
             'user_id': str(result.inserted_id),
             'role': 'patient',
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=SESSION_EXPIRY_HOURS),
+            'iat': datetime.datetime.utcnow()
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
         return jsonify({
@@ -468,7 +1360,8 @@ def firebase_auth():
         }), 201
         
     except Exception as e:
-        return jsonify({'message': 'Firebase authentication failed', 'error': str(e)}), 500
+        logger.error(f"Firebase auth error: {e}", exc_info=True)
+        return jsonify({'message': 'Firebase authentication failed'}), 500
 
 @app.route('/api/auth/complete-profile', methods=['POST'])
 @token_required
@@ -508,6 +1401,7 @@ def complete_profile(current_user):
         update_data = {
             'age': age_int,
             'gender': gender,
+            'workStatus': normalize_work_status(data.get('workStatus')),
             'therapyType': therapy_type,
             'patientType': patient_type,
             'isProfileComplete': True,
@@ -575,6 +1469,7 @@ def complete_profile(current_user):
                 'lastName': updated_user['lastName'],
                 'age': updated_user.get('age'),
                 'gender': updated_user.get('gender'),
+                'workStatus': updated_user.get('workStatus'),
                 'role': updated_user.get('role', 'patient'),
                 'isProfileComplete': True,
                 'therapyType': updated_user['therapyType'],
@@ -584,7 +1479,7 @@ def complete_profile(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Profile completion failed', 'error': str(e)}), 500
+        return jsonify({'message': 'Profile completion failed'}), 500
 
 @app.route('/api/user', methods=['GET'])
 @token_required
@@ -596,11 +1491,17 @@ def get_user(current_user):
                 'email': current_user['email'],
                 'firstName': current_user['firstName'],
                 'lastName': current_user['lastName'],
-                'role': current_user.get('role', 'user')
+                'role': current_user.get('role', 'user'),
+                'therapyType': current_user.get('therapyType'),
+                'patientType': current_user.get('patientType'),
+                'workStatus': current_user.get('workStatus'),
+                'hasInitialDiagnostic': current_user.get('hasInitialDiagnostic'),
+                'diagnosticData': current_user.get('diagnosticData'),
+                'diagnosticDataUpdatedAt': str(current_user.get('diagnosticDataUpdatedAt', ''))
             }
         }), 200
     except Exception as e:
-        return jsonify({'message': 'Failed to get user', 'error': str(e)}), 500
+        return jsonify({'message': 'Failed to get user'}), 500
 
 @app.route('/api/user/update', methods=['PUT'])
 @token_required
@@ -647,12 +1548,13 @@ def update_user(current_user):
                 'lastName': updated_user['lastName'],
                 'role': updated_user.get('role', 'patient'),
                 'therapyType': updated_user.get('therapyType'),
-                'patientType': updated_user.get('patientType')
+                'patientType': updated_user.get('patientType'),
+                'workStatus': updated_user.get('workStatus')
             }
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Failed to update profile', 'error': str(e)}), 500
+        return jsonify({'message': 'Failed to update profile'}), 500
 
 @app.route('/api/user/diagnostic-status', methods=['PUT'])
 @token_required
@@ -694,14 +1596,152 @@ def update_diagnostic_status(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'message': 'Failed to update diagnostic status', 'error': str(e)}), 500
+        return jsonify({'message': 'Failed to update diagnostic status'}), 500
+
+@app.route('/api/user/diagnostic-data', methods=['PUT'])
+@token_required
+def save_diagnostic_data(current_user):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No data provided'}), 400
+
+        update_fields = {
+            'diagnosticData': data,
+            'hasInitialDiagnostic': bool(data.get('hasInitialDiagnostic', False)),
+            'diagnosticDataUpdatedAt': datetime.datetime.utcnow(),
+            'updatedAt': datetime.datetime.utcnow()
+        }
+        if data.get('therapyFocus') and data['therapyFocus'] != 'both':
+            update_fields['therapyType'] = data['therapyFocus']
+
+        users_collection.update_one(
+            {'_id': current_user['_id']},
+            {'$set': update_fields}
+        )
+
+        updated_user = users_collection.find_one({'_id': current_user['_id']})
+        return jsonify({
+            'message': 'Diagnostic data saved successfully',
+            'user': {
+                'id': str(updated_user['_id']),
+                'email': updated_user['email'],
+                'firstName': updated_user['firstName'],
+                'lastName': updated_user['lastName'],
+                'role': updated_user.get('role', 'patient'),
+                'therapyType': updated_user.get('therapyType'),
+                'patientType': updated_user.get('patientType'),
+                'hasInitialDiagnostic': updated_user.get('hasInitialDiagnostic', False),
+                'diagnosticData': updated_user.get('diagnosticData'),
+                'diagnosticDataUpdatedAt': str(updated_user.get('diagnosticDataUpdatedAt', ''))
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'message': 'Failed to save diagnostic data'}), 500
+
+
+@app.route('/api/therapist/patients/<user_id>/self-report', methods=['GET'])
+@token_required
+def get_patient_self_report(current_user, user_id):
+    try:
+        if current_user.get('role') not in ('therapist', 'admin'):
+            return jsonify({'message': 'Unauthorized'}), 403
+
+        from bson import ObjectId
+        patient = users_collection.find_one({'_id': ObjectId(user_id)})
+        if not patient:
+            return jsonify({'message': 'Patient not found'}), 404
+
+        diagnostic_data = patient.get('diagnosticData')
+        return jsonify({
+            'patientId': user_id,
+            'patientName': f"{patient.get('firstName', '')} {patient.get('lastName', '')}".strip(),
+            'selfReport': diagnostic_data,
+            'completedWizard': bool(diagnostic_data and diagnostic_data.get('completedWizard')),
+            'updatedAt': str(patient.get('diagnosticDataUpdatedAt', ''))
+        }), 200
+
+    except Exception as e:
+        return jsonify({'message': 'Failed to retrieve self-report data'}), 500
+
+
+@app.route('/api/therapist/patients/completed-evaluation', methods=['GET'])
+@token_required
+@therapist_required
+def get_all_completed_evaluations(current_user):
+    try:
+        patients = users_collection.find(
+            {'diagnosticData.completedWizard': True, 'role': 'patient'},
+            {'password': 0}
+        )
+
+        result = []
+        for patient in patients:
+            patient['_id'] = str(patient['_id'])
+            result.append(patient)
+
+        return jsonify({'success': True, 'patients': result}), 200
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve completed evaluations: {e}")
+        return jsonify({'success': False, 'message': 'Failed to retrieve completed evaluations'}), 500
+
 
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'healthy', 'message': 'CVACare API is running'}), 200
 
+
+@app.route('/api/debug/firebase', methods=['GET'])
+def debug_firebase():
+    result = {
+        'firebase_initialized': bool(firebase_admin._apps),
+        'firebase_apps': list(firebase_admin._apps.keys()) if firebase_admin._apps else [],
+        'env_firebase_json_exists': bool(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')),
+        'env_firebase_json_length': len(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON', '')),
+    }
+    
+    if os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON'):
+        try:
+            import json
+            fb_data = json.loads(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON'))
+            result['firebase_project_id'] = fb_data.get('project_id', 'NOT_FOUND')
+            result['firebase_client_email'] = fb_data.get('client_email', 'NOT_FOUND')
+        except Exception as e:
+            result['firebase_json_parse_error'] = str(e)
+    
+    return jsonify(result), 200
+
+
+@app.route('/api/health/ready', methods=['GET'])
+def readiness():
+    checks = {
+        'firebase': 'ok' if firebase_admin._apps else 'error',
+        'mongodb': 'unknown',
+    }
+    status_code = 200
+
+    try:
+        client.admin.command('ping')
+        checks['mongodb'] = 'ok'
+    except Exception as e:
+        logger.error(f'MongoDB readiness check failed: {e}', exc_info=True)
+        checks['mongodb'] = 'error'
+        status_code = 503
+
+    if not firebase_admin._apps:
+        status_code = 503
+
+    return jsonify({
+        'status': 'ready' if status_code == 200 else 'not_ready',
+        'checks': checks,
+        'service': 'CVACare API',
+    }), status_code
+
 # Health Logs Endpoints
 @app.route('/api/health/logs', methods=['GET'])
+@limiter.exempt
 @token_required
 def get_health_logs(current_user):
     """Get all therapy progress logs for authenticated user"""
@@ -710,6 +1750,21 @@ def get_health_logs(current_user):
         logs = []
         fetch_all = request.args.get('all') == 'true'
         limit = int(request.args.get('limit', 50))
+        cache_key = build_response_cache_key('health-logs', scope=f'user:{user_id}', fetch_all=fetch_all, limit=limit)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
+        def make_json_safe(value):
+            if isinstance(value, ObjectId):
+                return str(value)
+            if isinstance(value, datetime.datetime):
+                return value.isoformat()
+            if isinstance(value, list):
+                return [make_json_safe(item) for item in value]
+            if isinstance(value, dict):
+                return {key: make_json_safe(item) for key, item in value.items()}
+            return value
 
         # Fetch Articulation Trials
         articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
@@ -777,9 +1832,42 @@ def get_health_logs(current_user):
                 'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
             })
 
+        # Fetch Fluency Trials
+        fluency_trials = list(fluency_trials_collection.find({'user_id': user_id}).sort('timestamp', -1))
+        for trial in fluency_trials:
+            # fluency_score is already on 0-100 scale
+            score_percentage = int(trial.get('fluency_score', 0))
+
+            logs.append({
+                '_id': str(trial['_id']),
+                'therapyType': 'fluency',
+                'level': trial.get('level', 1),
+                'overallScore': score_percentage,
+                'trials': 1,
+                'correctCount': 1 if trial.get('passed') else 0,
+                'createdAt': trial.get('timestamp', datetime.datetime.utcnow()).isoformat()
+            })
+
         # Fetch Gait Analysis Records
         gait_progress_collection = db['gaitprogresses']
         gait_records = list(gait_progress_collection.find({'user_id': user_id}).sort('created_at', -1))
+        
+        # Fetch Exercise Plans
+        exercise_plans_collection = db['exerciseplans']
+        exercise_plans = list(exercise_plans_collection.find({'user_id': user_id}))
+        
+        # Create a map of gait_analysis_id -> exercise plan for quick lookup
+        exercise_plan_map = {}
+        for plan in exercise_plans:
+            gait_id = plan.get('gait_analysis_id')
+            print(f"DEBUG - Plan {plan['_id']}: gait_analysis_id = {gait_id}, type = {type(gait_id)}")
+            if gait_id:
+                exercise_plan_map[str(gait_id)] = plan
+        
+        print(f"DEBUG Health Logs - User: {user_id}")
+        print(f"DEBUG - Found {len(exercise_plans)} exercise plans")
+        print(f"DEBUG - Exercise plan map keys: {list(exercise_plan_map.keys())}")
+        
         for gait in gait_records:
             # Calculate overall gait score based on metrics (0-100 scale)
             metrics = gait.get('metrics', {})
@@ -788,11 +1876,29 @@ def get_health_logs(current_user):
             regularity = metrics.get('step_regularity', 0) * 100
             overall_gait_score = int((stability + symmetry + regularity) / 3) if any([stability, symmetry, regularity]) else 0
             
+            # Find associated exercise plan
+            gait_id_str = str(gait['_id'])
+            associated_plan = exercise_plan_map.get(gait_id_str)
+            
+            print(f"DEBUG - Gait ID: {gait_id_str}, Has plan: {associated_plan is not None}")
+            
+            exercise_plan_data = None
+            if associated_plan:
+                exercise_plan_data = {
+                    'planId': str(associated_plan['_id']),
+                    'totalExercises': associated_plan.get('total_exercises', 0),
+                    'exercises': make_json_safe(associated_plan.get('exercises', [])),
+                    'status': associated_plan.get('status', 'ongoing'),
+                    'visibility': associated_plan.get('visibility', 'active'),
+                    'createdAt': associated_plan.get('created_at', datetime.datetime.utcnow()).isoformat() if isinstance(associated_plan.get('created_at'), datetime.datetime) else str(associated_plan.get('created_at', ''))
+                }
+            
             logs.append({
                 '_id': str(gait['_id']),
                 'therapyType': 'gait',
                 'level': 1,
                 'overallScore': overall_gait_score,
+                'gait_score': gait.get('gait_score'),  # Include saved gait mobility score
                 'gaitMetrics': {
                     'step_count': metrics.get('step_count', 0),
                     'cadence': metrics.get('cadence', 0),
@@ -803,7 +1909,8 @@ def get_health_logs(current_user):
                     'stride_length': metrics.get('stride_length', 0),
                     'vertical_oscillation': metrics.get('vertical_oscillation', 0),
                 },
-                'detectedProblems': gait.get('detected_problems', []),
+                'detectedProblems': make_json_safe(gait.get('detected_problems', [])),
+                'exercisePlan': exercise_plan_data,
                 'dataQuality': gait.get('data_quality', 'N/A'),
                 'duration': gait.get('analysis_duration', 0),
                 'createdAt': gait.get('created_at', datetime.datetime.utcnow()).isoformat()
@@ -815,111 +1922,39 @@ def get_health_logs(current_user):
         # Return limited or all logs
         recent_logs = logs if fetch_all else logs[:limit]
         
-        return jsonify({
+        payload = {
             'success': True,
             'logs': recent_logs,
             'total': len(logs),
             'hasMore': len(logs) > limit
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 45)
+        return jsonify(payload), 200
 
     except Exception as e:
         import traceback
         print(f"Error fetching health logs: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch health logs', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch health logs'}), 500
 
 @app.route('/api/health/summary', methods=['GET'])
+@limiter.exempt
 @token_required
 def get_health_summary(current_user):
     """Get health summary statistics for authenticated user"""
     try:
         user_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('health-summary', scope=f'user:{user_id}')
 
-        # Count trials per therapy type
-        articulation_count = articulation_trials_collection.count_documents({'user_id': user_id})
-        
-        # Get language trials by mode
-        receptive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'receptive'})
-        expressive_count = language_trials_collection.count_documents({'user_id': user_id, 'mode': 'expressive'})
-        
-        # Calculate average scores
-        articulation_trials = list(articulation_trials_collection.find({'user_id': user_id}))
-        # computed_score is 0.0-1.0, convert to percentage
-        articulation_scores = [t.get('scores', {}).get('computed_score', 0) * 100 for t in articulation_trials]
-        articulation_avg = sum(articulation_scores) / len(articulation_scores) if articulation_scores else 0
+        payload = get_or_set_cached_response(cache_key, 45, lambda: _build_health_summary_payload(user_id))
 
-        receptive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'receptive'}))
-        # Language stores score as 0.0/1.0, convert to percentage
-        receptive_scores = []
-        for t in receptive_trials:
-            score = t.get('score', None)
-            if score is not None:
-                receptive_scores.append(score * 100 if score <= 1 else score)
-            else:
-                receptive_scores.append(100 if t.get('is_correct') else 0)
-        receptive_avg = sum(receptive_scores) / len(receptive_scores) if receptive_scores else 0
-
-        expressive_trials = list(language_trials_collection.find({'user_id': user_id, 'mode': 'expressive'}))
-        # Language stores score as 0.0/1.0, convert to percentage
-        expressive_scores = []
-        for t in expressive_trials:
-            score = t.get('score', None)
-            if score is not None:
-                expressive_scores.append(score * 100 if score <= 1 else score)
-            else:
-                expressive_scores.append(100 if t.get('is_correct') else 0)
-        expressive_avg = sum(expressive_scores) / len(expressive_scores) if expressive_scores else 0
-
-        # Get gait analysis records
-        gait_progress_collection = db['gaitprogresses']
-        gait_records = list(gait_progress_collection.find({'user_id': user_id}))
-        gait_count = len(gait_records)
-        
-        # Calculate average gait score (based on stability, symmetry, regularity)
-        gait_scores = []
-        for gait in gait_records:
-            metrics = gait.get('metrics', {})
-            stability = metrics.get('stability_score', 0) * 100
-            symmetry = metrics.get('gait_symmetry', 0) * 100
-            regularity = metrics.get('step_regularity', 0) * 100
-            if any([stability, symmetry, regularity]):
-                avg_score = (stability + symmetry + regularity) / 3
-                gait_scores.append(avg_score)
-        gait_avg = sum(gait_scores) / len(gait_scores) if gait_scores else 0
-
-        summary = {
-            'articulation': {
-                'sessions': articulation_count,
-                'avgScore': round(articulation_avg, 1)
-            },
-            'receptive': {
-                'sessions': receptive_count,
-                'avgScore': round(receptive_avg, 1)
-            },
-            'expressive': {
-                'sessions': expressive_count,
-                'avgScore': round(expressive_avg, 1)
-            },
-            'language': {
-                'sessions': receptive_count + expressive_count,
-                'avgScore': round((receptive_avg + expressive_avg) / 2, 1) if (receptive_count + expressive_count) > 0 else 0
-            },
-            'gait': {
-                'sessions': gait_count,
-                'avgScore': round(gait_avg, 1)
-            }
-        }
-
-        return jsonify({
-            'success': True,
-            'summary': summary
-        }), 200
+        return jsonify(payload), 200
 
     except Exception as e:
         import traceback
         print(f"Error fetching health summary: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch health summary', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch health summary'}), 500
 
 
 # ======================
@@ -929,29 +1964,79 @@ def get_health_summary(current_user):
 @app.route('/api/prescriptive', methods=['GET'])
 @token_required
 def get_prescriptive_analysis(current_user):
-    """Get intelligent therapy prioritization using Decision Rules + Graph-Based Recommendations"""
+    """Get intelligent therapy prioritization using Decision Rules + Graph-Based Recommendations (Speech Therapy)"""
     try:
-        from therapy_prioritization import generate_therapy_prioritization
-        
-        # Get user_id from authenticated user
         user_id = str(current_user['_id'])
-        
-        # Generate prescriptive analysis
-        analysis = generate_therapy_prioritization(user_id)
-        
-        return jsonify({
-            'success': True,
-            'analysis': analysis
-        }), 200
+        cache_key = build_response_cache_key('prescriptive-analysis', scope=f'user:{user_id}')
+
+        def build_payload():
+            from therapy_prioritization import generate_therapy_prioritization
+            analysis = generate_therapy_prioritization(user_id)
+            return {
+                'success': True,
+                'analysis': analysis
+            }
+
+        payload = get_or_set_cached_response(cache_key, 180, build_payload)
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
+        logger.error(f"Error generating prescriptive analysis: {e}", exc_info=True)
         print(f"Error generating prescriptive analysis: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to generate prescriptive analysis',
-            'error': str(e)
+            'message': 'Failed to generate prescriptive analysis'
+        }), 500
+
+
+@app.route('/api/prescriptive/gait', methods=['GET'])
+@token_required
+def get_gait_prescriptive_analysis(current_user):
+    """Get intelligent gait therapy prioritization using Decision Rules + Graph-Based Recommendations (Physical Therapy)"""
+    try:
+        user_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('gait-prescriptive-analysis', scope=f'user:{user_id}')
+
+        def build_payload():
+            from gait_therapy_prioritization import generate_gait_prioritization
+
+            predicted_days = None
+            try:
+                from gait_mastery_predictor import GaitMasteryPredictor
+                gait_predictor = GaitMasteryPredictor(db)
+                gait_predictor.load_model()
+                prediction = gait_predictor.predict_days_to_mastery(user_id)
+                if prediction:
+                    predicted_days = prediction.get('predicted_days') or prediction.get('predicted_days_to_mastery')
+            except Exception as e:
+                print(f"Could not get gait prediction for prescriptive analysis: {e}")
+
+            analysis = generate_gait_prioritization(user_id, predicted_days)
+
+            return {
+                'success': 'error' not in analysis,
+                'message': analysis.get('message') if 'error' in analysis else None,
+                'analysis': analysis if 'error' not in analysis else None
+            }
+
+        payload = get_or_set_cached_response(cache_key, 180, build_payload)
+
+        if not payload.get('success'):
+            return jsonify(payload), 400
+
+        return jsonify(payload), 200
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error generating gait prescriptive analysis: {e}", exc_info=True)
+        print(f"Error generating gait prescriptive analysis: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to generate gait prescriptive analysis'
         }), 500
 
 # ======================
@@ -968,93 +2053,88 @@ def get_all_predictions(current_user):
     """
     try:
         user_id = str(current_user['_id'])
-        
-        print(f"\n{'='*60}")
-        print(f"🔮 Fetching All Predictions for User: {user_id}")
-        print(f"{'='*60}\n")
-        
-        predictions = {}
-        
-        # 1. Articulation predictions for all 5 sounds
-        try:
-            from articulation_mastery_predictor import ArticulationMasteryPredictor
-            articulation_predictor = ArticulationMasteryPredictor(db)
-            articulation_predictor.load_model()
-            
-            articulation_predictions = {}
-            sounds = ['r', 's', 'l', 'th', 'k']
-            for sound in sounds:
+        cache_key = build_response_cache_key('all-predictions', scope=f'user:{user_id}')
+
+        def build_payload():
+            print(f"\n{'='*60}")
+            print(f"🔮 Fetching All Predictions for User: {user_id}")
+            print(f"{'='*60}\n")
+            predictions = {}
+            try:
+                from articulation_mastery_predictor import ArticulationMasteryPredictor
+                articulation_predictor = ArticulationMasteryPredictor(db)
+                articulation_predictor.load_model()
+
+                articulation_predictions = {}
+                sounds = ['r', 's', 'l', 'th', 'k']
+                for sound in sounds:
+                    try:
+                        pred = articulation_predictor.predict_days_to_mastery(user_id, sound)
+                        articulation_predictions[sound] = pred
+                    except Exception as e:
+                        print(f"Could not predict {sound}: {e}")
+
+                if articulation_predictions:
+                    predictions['articulation'] = articulation_predictions
+            except Exception as e:
+                print(f"Articulation predictor error: {e}")
+
+            try:
+                from fluency_mastery_predictor import FluencyMasteryPredictor
+                fluency_predictor = FluencyMasteryPredictor(db)
+                fluency_predictor.load_model()
+                predictions['fluency'] = fluency_predictor.predict_days_to_mastery(user_id)
+            except Exception as e:
+                print(f"Fluency predictor error: {e}")
+
+            try:
+                from language_mastery_predictor import LanguageMasteryPredictor
+                receptive_predictor = LanguageMasteryPredictor(db, mode='receptive')
+                receptive_predictor.load_model()
+                predictions['receptive'] = receptive_predictor.predict_days_to_mastery(user_id)
+            except Exception as e:
+                print(f"Receptive predictor error: {e}")
+
+            try:
+                from language_mastery_predictor import LanguageMasteryPredictor
+                expressive_predictor = LanguageMasteryPredictor(db, mode='expressive')
+                expressive_predictor.load_model()
+                predictions['expressive'] = expressive_predictor.predict_days_to_mastery(user_id)
+            except Exception as e:
+                print(f"Expressive predictor error: {e}")
+
+            try:
+                from overall_speech_predictor import OverallSpeechPredictor
+                overall_predictor = OverallSpeechPredictor(db)
+                overall_predictor.load_model()
+                predictions['overall'] = overall_predictor.predict_improvement(user_id)
+            except Exception as e:
+                print(f"Overall predictor error: {e}")
+
+            if gait_predictor:
                 try:
-                    pred = articulation_predictor.predict_days_to_mastery(user_id, sound)
-                    articulation_predictions[sound] = pred
+                    gait_pred = gait_predictor.predict_days_to_mastery(user_id)
+                    if gait_pred:
+                        predictions['gait'] = gait_pred
                 except Exception as e:
-                    print(f"Could not predict {sound}: {e}")
-            
-            if articulation_predictions:
-                predictions['articulation'] = articulation_predictions
-        except Exception as e:
-            print(f"Articulation predictor error: {e}")
-        
-        # 2. Fluency prediction
-        try:
-            from fluency_mastery_predictor import FluencyMasteryPredictor
-            fluency_predictor = FluencyMasteryPredictor(db)
-            fluency_predictor.load_model()
-            fluency_pred = fluency_predictor.predict_days_to_mastery(user_id)
-            predictions['fluency'] = fluency_pred
-        except Exception as e:
-            print(f"Fluency predictor error: {e}")
-        
-        # 3. Receptive language prediction
-        try:
-            from language_mastery_predictor import LanguageMasteryPredictor
-            receptive_predictor = LanguageMasteryPredictor(db, mode='receptive')
-            receptive_predictor.load_model()
-            receptive_pred = receptive_predictor.predict_days_to_mastery(user_id)
-            predictions['receptive'] = receptive_pred
-        except Exception as e:
-            print(f"Receptive predictor error: {e}")
-        
-        # 4. Expressive language prediction
-        try:
-            from language_mastery_predictor import LanguageMasteryPredictor
-            expressive_predictor = LanguageMasteryPredictor(db, mode='expressive')
-            expressive_predictor.load_model()
-            expressive_pred = expressive_predictor.predict_days_to_mastery(user_id)
-            predictions['expressive'] = expressive_pred
-        except Exception as e:
-            print(f"Expressive predictor error: {e}")
-        
-        # 5. Overall speech improvement prediction
-        try:
-            from overall_speech_predictor import OverallSpeechPredictor
-            overall_predictor = OverallSpeechPredictor(db)
-            overall_predictor.load_model()
-            overall_pred = overall_predictor.predict_improvement(user_id)
-            predictions['overall'] = overall_pred
-        except Exception as e:
-            print(f"Overall predictor error: {e}")
-        
-        print(f"✅ Predictions retrieved successfully")
-        print(f"   Articulation sounds: {len(predictions.get('articulation', {}))}")
-        print(f"   Fluency: {'✅' if 'fluency' in predictions else '❌'}")
-        print(f"   Receptive: {'✅' if 'receptive' in predictions else '❌'}")
-        print(f"   Expressive: {'✅' if 'expressive' in predictions else '❌'}")
-        print(f"   Overall: {'✅' if 'overall' in predictions else '❌'}\n")
-        
-        return jsonify({
-            'success': True,
-            'predictions': predictions
-        }), 200
+                    print(f"   Gait: ❌ {e}")
+
+            return {
+                'success': True,
+                'predictions': predictions
+            }
+
+        payload = get_or_set_cached_response(cache_key, 180, build_payload)
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching predictions: {e}", exc_info=True)
         print(f"❌ Error fetching predictions: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch predictions',
-            'error': str(e)
+            'message': 'Failed to fetch predictions'
         }), 500
 
 @app.route('/api/predictions/articulation/<sound_id>', methods=['GET'])
@@ -1082,10 +2162,10 @@ def get_articulation_prediction(current_user, sound_id):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting articulation prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get articulation prediction',
-            'error': str(e)
+            'message': 'Failed to get articulation prediction'
         }), 500
 
 @app.route('/api/predictions/fluency', methods=['GET'])
@@ -1107,10 +2187,10 @@ def get_fluency_prediction(current_user):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting fluency prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get fluency prediction',
-            'error': str(e)
+            'message': 'Failed to get fluency prediction'
         }), 500
 
 @app.route('/api/predictions/language/<mode>', methods=['GET'])
@@ -1138,10 +2218,10 @@ def get_language_prediction(current_user, mode):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting language prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get language prediction',
-            'error': str(e)
+            'message': 'Failed to get language prediction'
         }), 500
 
 @app.route('/api/predictions/overall', methods=['GET'])
@@ -1163,10 +2243,44 @@ def get_overall_prediction(current_user):
         }), 200
     
     except Exception as e:
+        logger.error(f"Error getting overall prediction: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to get overall prediction',
-            'error': str(e)
+            'message': 'Failed to get overall prediction'
+        }), 500
+
+@app.route('/api/predictions/gait', methods=['GET'])
+@token_required
+def get_gait_prediction(current_user):
+    """
+    Get gait mastery prediction for physical therapy users
+    Predicts days until healthy gait parameters are achieved
+    """
+    try:
+        user_id = str(current_user['_id'])
+        
+        if not gait_predictor:
+            return jsonify({
+                'success': False,
+                'message': 'Gait predictor not available. Model may not be trained yet.'
+            }), 503
+        
+        # Get prediction
+        prediction = gait_predictor.predict_days_to_mastery(user_id)
+        
+        return jsonify({
+            'success': True,
+            'prediction': prediction
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error fetching gait prediction: {e}", exc_info=True)
+        print(f"Gait prediction error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get gait prediction'
         }), 500
 
 
@@ -1201,6 +2315,12 @@ def get_therapist_stats(current_user):
             except ValueError:
                 # Default to 30 days if invalid
                 time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-stats', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
         
         stats = {}
         
@@ -1479,26 +2599,134 @@ def get_therapist_stats(current_user):
             'cancelled': cancelled_appointments,
             'completion_rate': round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0
         }
+
+        stats['climate'] = get_heat_index_snapshot()
         
+        # ---- Enhanced chart data for dashboard ----
+
+        # 1. Session trend (daily trial counts by therapy type)
+        trend_days_count = 30
+        if days_param != 'all':
+            try:
+                trend_days_count = min(int(days_param), 90)
+            except ValueError:
+                trend_days_count = 30
+        trend_start = utc_now() - datetime.timedelta(days=trend_days_count)
+
+        def get_daily_trial_counts(collection, start_date):
+            pipeline = [
+                {'$match': {'timestamp': {'$gte': start_date}}},
+                {'$group': {
+                    '_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$timestamp'}},
+                    'count': {'$sum': 1}
+                }},
+                {'$sort': {'_id': 1}}
+            ]
+            return {doc['_id']: doc['count'] for doc in collection.aggregate(pipeline)}
+
+        art_daily = get_daily_trial_counts(articulation_trials_collection, trend_start)
+        lang_daily = get_daily_trial_counts(language_trials_collection, trend_start)
+        flu_daily = get_daily_trial_counts(db['fluency_trials'], trend_start)
+
+        session_trend = []
+        for offset in range(trend_days_count):
+            d = trend_start + datetime.timedelta(days=offset)
+            date_str = d.strftime('%Y-%m-%d')
+            a_count = art_daily.get(date_str, 0)
+            l_count = lang_daily.get(date_str, 0)
+            f_count = flu_daily.get(date_str, 0)
+            session_trend.append({
+                'date': date_str,
+                'articulation': a_count,
+                'language': l_count,
+                'fluency': f_count,
+                'total': a_count + l_count + f_count
+            })
+        stats['session_trend'] = session_trend
+
+        # 2. Score distribution across all therapy trials
+        def get_score_buckets(collection):
+            pipeline = [
+                {'$match': {'accuracy': {'$exists': True, '$ne': None}}},
+                {'$bucket': {
+                    'groupBy': '$accuracy',
+                    'boundaries': [0, 0.2001, 0.4001, 0.6001, 0.8001, 1.01],
+                    'default': 'other',
+                    'output': {'count': {'$sum': 1}}
+                }}
+            ]
+            try:
+                return list(collection.aggregate(pipeline))
+            except Exception:
+                return []
+
+        bucket_labels = ['0-20', '21-40', '41-60', '61-80', '81-100']
+        bucket_boundaries = [0, 0.2001, 0.4001, 0.6001, 0.8001]
+        score_dist = {label: 0 for label in bucket_labels}
+
+        for coll in [articulation_trials_collection, language_trials_collection, db['fluency_trials']]:
+            for doc in get_score_buckets(coll):
+                bid = doc.get('_id')
+                if bid in bucket_boundaries:
+                    idx = bucket_boundaries.index(bid)
+                    score_dist[bucket_labels[idx]] += doc['count']
+
+        stats['score_distribution'] = [
+            {'range': label, 'count': score_dist[label]}
+            for label in bucket_labels
+        ]
+
+        # 3. Weekly activity pattern (trials by day of week)
+        def get_weekly_counts(collection):
+            pipeline = [
+                {'$group': {
+                    '_id': {'$dayOfWeek': '$timestamp'},
+                    'count': {'$sum': 1}
+                }}
+            ]
+            return {doc['_id']: doc['count'] for doc in collection.aggregate(pipeline)}
+
+        day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        art_weekly = get_weekly_counts(articulation_trials_collection)
+        lang_weekly = get_weekly_counts(language_trials_collection)
+        flu_weekly = get_weekly_counts(db['fluency_trials'])
+
+        weekly_pattern = []
+        for day_num in range(1, 8):
+            aw = art_weekly.get(day_num, 0)
+            lw = lang_weekly.get(day_num, 0)
+            fw = flu_weekly.get(day_num, 0)
+            weekly_pattern.append({
+                'day': day_names[day_num - 1],
+                'articulation': aw,
+                'language': lw,
+                'fluency': fw,
+                'total': aw + lw + fw
+            })
+        stats['weekly_pattern'] = weekly_pattern
+
         print(f"✅ Therapist stats retrieved successfully")
         print(f"   Total Patients: {total_patients}")
         print(f"   Active Patients: {stats['active_patients']}")
         print(f"   Total Sessions: {stats['total_sessions']}")
         print(f"   Total Appointments: {total_appointments}")
         
-        return jsonify({
+        payload = {
             'success': True,
             'stats': stats
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 60)
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching therapist stats: {e}", exc_info=True)
         print(f"❌ Error fetching therapist stats: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch therapist statistics',
-            'error': str(e)
+            'message': 'Failed to fetch therapist statistics'
         }), 500
 
 
@@ -1516,134 +2744,710 @@ def get_therapist_reports(current_user):
                 'message': 'Unauthorized. Only therapists can access this endpoint.'
             }), 403
         
-        # Get all patients
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-reports', scope=f'user:{therapist_id}')
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
         patients = list(users_collection.find({'role': 'patient'}))
-        
-        if not patients:
-            return jsonify({
-                'success': True,
-                'data': {
-                    'totalPatients': 0,
-                    'ageBrackets': [],
-                    'genderDistribution': [],
-                    'highestAgeBracket': None
-                }
-            }), 200
-        
-        total_patients = len(patients)
-        
-        # Calculate age brackets
-        age_brackets = {
-            '0-12': 0,
-            '13-17': 0,
-            '18-25': 0,
-            '26-35': 0,
-            '36-45': 0,
-            '46-55': 0,
-            '56-65': 0,
-            '66+': 0
-        }
-        
-        # Calculate gender distribution
-        gender_counts = {
-            'male': 0,
-            'female': 0,
-            'other': 0,
-            'prefer-not-to-say': 0
-        }
-        
-        for patient in patients:
-            # Age bracket calculation
-            age = patient.get('age')
-            if age is not None:
-                if age <= 12:
-                    age_brackets['0-12'] += 1
-                elif age <= 17:
-                    age_brackets['13-17'] += 1
-                elif age <= 25:
-                    age_brackets['18-25'] += 1
-                elif age <= 35:
-                    age_brackets['26-35'] += 1
-                elif age <= 45:
-                    age_brackets['36-45'] += 1
-                elif age <= 55:
-                    age_brackets['46-55'] += 1
-                elif age <= 65:
-                    age_brackets['56-65'] += 1
-                else:
-                    age_brackets['66+'] += 1
-            
-            # Gender distribution
-            gender = patient.get('gender', 'prefer-not-to-say')
-            if gender in gender_counts:
-                gender_counts[gender] += 1
-            else:
-                gender_counts['other'] += 1
-        
-        # Format age brackets data
-        age_brackets_list = []
-        highest_bracket = None
-        highest_count = 0
-        
-        for bracket_range, count in age_brackets.items():
-            percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
-            bracket_data = {
-                'range': bracket_range,
-                'count': count,
-                'percentage': percentage,
-                'isHighest': False
-            }
-            age_brackets_list.append(bracket_data)
-            
-            if count > highest_count:
-                highest_count = count
-                highest_bracket = bracket_data
-        
-        # Mark the highest bracket
-        if highest_bracket:
-            highest_bracket['isHighest'] = True
-            for bracket in age_brackets_list:
-                if bracket['range'] == highest_bracket['range']:
-                    bracket['isHighest'] = True
-        
-        # Format gender distribution data
-        gender_distribution_list = []
-        for gender, count in gender_counts.items():
-            if count > 0:  # Only include genders with patients
-                percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
-                gender_distribution_list.append({
-                    'gender': gender,
-                    'count': count,
-                    'percentage': percentage
-                })
-        
-        # Sort by count descending
-        gender_distribution_list.sort(key=lambda x: x['count'], reverse=True)
-        
-        return jsonify({
+        report_payload = build_patient_report_payload(patients)
+
+        payload = {
             'success': True,
-            'data': {
-                'totalPatients': total_patients,
-                'ageBrackets': age_brackets_list,
-                'genderDistribution': gender_distribution_list,
-                'highestAgeBracket': highest_bracket
-            }
-        }), 200
+            'data': report_payload
+        }
+        set_cached_response(cache_key, payload, 300)
+
+        return jsonify(payload), 200
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching therapist reports: {e}", exc_info=True)
         print(f"❌ Error fetching therapist reports: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch therapist reports',
-            'error': str(e)
+            'message': 'Failed to fetch therapist reports'
         }), 500
+
+
+# ========================================
+# THERAPIST ANALYTICS ENDPOINTS (PDF EXPORT)
+# ========================================
+
+@app.route('/api/therapist/analytics/articulation', methods=['GET'])
+@token_required
+def get_therapist_articulation_analytics(current_user):
+    """
+    Get articulation therapy analytics for the therapist PDF report.
+    Returns per-sound and per-level breakdowns across all patients.
+    Query params: ?days=30|90|180|365|all (default: 30)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-articulation-analytics', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
+        match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
+
+        sound_labels = {'r': '/r/ Sound', 's': '/s/ Sound', 'l': '/l/ Sound', 'th': '/th/ Sound', 'k': '/k/ Sound'}
+        level_labels = {1: 'Sound Isolation', 2: 'Syllable', 3: 'Word', 4: 'Phrase', 5: 'Sentence'}
+
+        per_sound_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': '$sound_id',
+                'trial_count': {'$sum': 1},
+                'avg_score': {'$avg': {
+                    '$cond': [
+                        {'$lte': ['$scores.computed_score', 1]},
+                        {'$multiply': ['$scores.computed_score', 100]},
+                        '$scores.computed_score'
+                    ]
+                }},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'sound_id': '$_id',
+                'trial_count': 1,
+                'avg_score': {'$round': ['$avg_score', 1]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'avg_score': -1}}
+        ]
+        sound_results = list(articulation_trials_collection.aggregate(per_sound_pipeline))
+
+        per_level_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': '$level',
+                'trial_count': {'$sum': 1},
+                'avg_score': {'$avg': {
+                    '$cond': [
+                        {'$lte': ['$scores.computed_score', 1]},
+                        {'$multiply': ['$scores.computed_score', 100]},
+                        '$scores.computed_score'
+                    ]
+                }},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'level': '$_id',
+                'trial_count': 1,
+                'avg_score': {'$round': ['$avg_score', 1]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'level': 1}}
+        ]
+        level_results = list(articulation_trials_collection.aggregate(per_level_pipeline))
+
+        total_trials = articulation_trials_collection.count_documents(
+            {'timestamp': {'$gte': time_filter}} if time_filter else {}
+        )
+        total_patients = len(articulation_trials_collection.distinct(
+            'user_id', {'timestamp': {'$gte': time_filter}} if time_filter else {}
+        ))
+
+        overall_avg_result = list(articulation_trials_collection.aggregate([
+            match_stage,
+            {'$group': {'_id': None, 'avg': {'$avg': {
+                '$cond': [
+                    {'$lte': ['$scores.computed_score', 1]},
+                    {'$multiply': ['$scores.computed_score', 100]},
+                    '$scores.computed_score'
+                ]
+            }}}}
+        ]))
+        overall_avg = round(overall_avg_result[0]['avg'], 1) if overall_avg_result and overall_avg_result[0].get('avg') else 0
+
+        sounds_formatted = []
+        for s in sound_results:
+            sid = s.get('sound_id') or s.get('_id', '')
+            sounds_formatted.append({
+                'sound_id': sid,
+                'label': sound_labels.get(sid, f'/{sid}/ Sound'),
+                'trial_count': s.get('trial_count', 0),
+                'avg_score': s.get('avg_score') or 0,
+                'patient_count': s.get('patient_count', 0)
+            })
+
+        levels_formatted = []
+        for lv in level_results:
+            lvl = lv.get('level') or lv.get('_id', 0)
+            levels_formatted.append({
+                'level': lvl,
+                'label': level_labels.get(lvl, f'Level {lvl}'),
+                'trial_count': lv.get('trial_count', 0),
+                'avg_score': lv.get('avg_score') or 0,
+                'patient_count': lv.get('patient_count', 0)
+            })
+
+        top_sound = sounds_formatted[0] if sounds_formatted else None
+        bottom_sound = sounds_formatted[-1] if len(sounds_formatted) > 1 else None
+
+        payload = {
+            'success': True,
+            'data': {
+                'days': days_param,
+                'total_trials': total_trials,
+                'total_patients': total_patients,
+                'overall_avg_score': overall_avg,
+                'per_sound': sounds_formatted,
+                'per_level': levels_formatted,
+                'top_sound': top_sound,
+                'bottom_sound': bottom_sound
+            }
+        }
+        set_cached_response(cache_key, payload, 300)
+        return jsonify(payload), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_articulation_analytics failed: {e}')
+        return jsonify({'success': False, 'message': 'Failed to fetch articulation analytics'}), 500
+
+
+@app.route('/api/therapist/analytics/fluency', methods=['GET'])
+@token_required
+def get_therapist_fluency_analytics(current_user):
+    """
+    Get fluency therapy analytics for the therapist PDF report.
+    Returns per-level breakdowns and overall mastery distribution across all patients.
+    Query params: ?days=30|90|180|365|all (default: 30)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-fluency-analytics', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
+        fluency_trials = db['fluency_trials']
+        fluency_progress = db['fluency_progress']
+
+        match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
+        match_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
+
+        level_labels = {1: 'Single Words', 2: 'Short Phrases', 3: 'Sentences', 4: 'Paragraphs', 5: 'Conversation'}
+
+        per_level_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': '$level',
+                'trial_count': {'$sum': 1},
+                'avg_score': {'$avg': {
+                    '$cond': [
+                        {'$lte': ['$scores.computed_score', 1]},
+                        {'$multiply': ['$scores.computed_score', 100]},
+                        '$scores.computed_score'
+                    ]
+                }},
+                'avg_fluency_rate': {'$avg': '$scores.fluency_score'},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'level': '$_id',
+                'trial_count': 1,
+                'avg_score': {'$round': ['$avg_score', 1]},
+                'avg_fluency_rate': {'$round': ['$avg_fluency_rate', 1]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'level': 1}}
+        ]
+        level_results = list(fluency_trials.aggregate(per_level_pipeline))
+
+        total_trials = fluency_trials.count_documents(match_filter)
+        total_patients = len(fluency_trials.distinct('user_id', match_filter))
+
+        overall_avg_result = list(fluency_trials.aggregate([
+            match_stage,
+            {'$group': {'_id': None, 'avg': {'$avg': {
+                '$cond': [
+                    {'$lte': ['$scores.computed_score', 1]},
+                    {'$multiply': ['$scores.computed_score', 100]},
+                    '$scores.computed_score'
+                ]
+            }}}}
+        ]))
+        overall_avg = round(overall_avg_result[0]['avg'], 1) if overall_avg_result and overall_avg_result[0].get('avg') else 0
+
+        mastery_buckets = {'mastered': 0, 'functional': 0, 'mild': 0, 'moderate': 0, 'severe': 0}
+        progress_docs = list(fluency_progress.find({}, {'overall_mastery': 1}))
+        for doc in progress_docs:
+            mastery = doc.get('overall_mastery', 0)
+            if mastery >= 86:
+                mastery_buckets['mastered'] += 1
+            elif mastery >= 71:
+                mastery_buckets['functional'] += 1
+            elif mastery >= 51:
+                mastery_buckets['mild'] += 1
+            elif mastery >= 31:
+                mastery_buckets['moderate'] += 1
+            else:
+                mastery_buckets['severe'] += 1
+
+        levels_formatted = []
+        for lv in level_results:
+            lvl = lv.get('level') or lv.get('_id', 0)
+            levels_formatted.append({
+                'level': lvl,
+                'label': level_labels.get(lvl, f'Level {lvl}'),
+                'trial_count': lv.get('trial_count', 0),
+                'avg_score': lv.get('avg_score') or 0,
+                'avg_fluency_rate': lv.get('avg_fluency_rate') or 0,
+                'patient_count': lv.get('patient_count', 0)
+            })
+
+        payload = {
+            'success': True,
+            'data': {
+                'days': days_param,
+                'total_trials': total_trials,
+                'total_patients': total_patients,
+                'overall_avg_score': overall_avg,
+                'per_level': levels_formatted,
+                'mastery_distribution': mastery_buckets
+            }
+        }
+        set_cached_response(cache_key, payload, 300)
+        return jsonify(payload), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_fluency_analytics failed: {e}')
+        return jsonify({'success': False, 'message': 'Failed to fetch fluency analytics'}), 500
+
+
+@app.route('/api/therapist/analytics/language', methods=['GET'])
+@token_required
+def get_therapist_language_analytics(current_user):
+    """
+    Get language therapy analytics for the therapist PDF report.
+    Returns receptive and expressive breakdowns per level across all patients.
+    Query params: ?days=30|90|180|365|all (default: 30)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-language-analytics', scope=f'user:{therapist_id}', days=days_param)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
+        match_stage = {'$match': {'timestamp': {'$gte': time_filter}}} if time_filter else {'$match': {}}
+        match_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
+
+        level_labels = {1: 'Basic', 2: 'Elementary', 3: 'Intermediate', 4: 'Advanced', 5: 'Expert'}
+
+        per_mode_level_pipeline = [
+            match_stage,
+            {'$group': {
+                '_id': {'mode': '$mode', 'level': '$level'},
+                'trial_count': {'$sum': 1},
+                'correct_count': {'$sum': {'$cond': ['$is_correct', 1, 0]}},
+                'patient_ids': {'$addToSet': '$user_id'}
+            }},
+            {'$project': {
+                'mode': '$_id.mode',
+                'level': '$_id.level',
+                'trial_count': 1,
+                'accuracy': {'$round': [
+                    {'$multiply': [
+                        {'$cond': [
+                            {'$gt': ['$trial_count', 0]},
+                            {'$divide': ['$correct_count', '$trial_count']},
+                            0
+                        ]},
+                        100
+                    ]},
+                    1
+                ]},
+                'patient_count': {'$size': '$patient_ids'}
+            }},
+            {'$sort': {'mode': 1, 'level': 1}}
+        ]
+        mode_level_results = list(language_trials_collection.aggregate(per_mode_level_pipeline))
+
+        total_trials = language_trials_collection.count_documents(match_filter)
+        total_patients = len(language_trials_collection.distinct('user_id', match_filter))
+
+        receptive_filter = {**match_filter, 'mode': 'receptive'}
+        expressive_filter = {**match_filter, 'mode': 'expressive'}
+        receptive_trials = language_trials_collection.count_documents(receptive_filter)
+        expressive_trials = language_trials_collection.count_documents(expressive_filter)
+
+        rec_avg_result = list(language_trials_collection.aggregate([
+            {'$match': receptive_filter},
+            {'$group': {'_id': None, 'avg': {'$avg': {'$cond': ['$is_correct', 100, 0]}}}}
+        ]))
+        exp_avg_result = list(language_trials_collection.aggregate([
+            {'$match': expressive_filter},
+            {'$group': {'_id': None, 'avg': {'$avg': {'$cond': ['$is_correct', 100, 0]}}}}
+        ]))
+        receptive_avg = round(rec_avg_result[0]['avg'], 1) if rec_avg_result and rec_avg_result[0].get('avg') is not None else 0
+        expressive_avg = round(exp_avg_result[0]['avg'], 1) if exp_avg_result and exp_avg_result[0].get('avg') is not None else 0
+
+        receptive_levels = []
+        expressive_levels = []
+        for row in mode_level_results:
+            mode = row.get('mode') or row.get('_id', {}).get('mode', '')
+            lvl = row.get('level') or row.get('_id', {}).get('level', 0)
+            entry = {
+                'level': lvl,
+                'label': level_labels.get(lvl, f'Level {lvl}'),
+                'trial_count': row.get('trial_count', 0),
+                'accuracy': row.get('accuracy') or 0,
+                'patient_count': row.get('patient_count', 0)
+            }
+            if mode == 'receptive':
+                receptive_levels.append(entry)
+            elif mode == 'expressive':
+                expressive_levels.append(entry)
+
+        payload = {
+            'success': True,
+            'data': {
+                'days': days_param,
+                'total_trials': total_trials,
+                'total_patients': total_patients,
+                'receptive': {
+                    'trial_count': receptive_trials,
+                    'avg_accuracy': receptive_avg,
+                    'per_level': receptive_levels
+                },
+                'expressive': {
+                    'trial_count': expressive_trials,
+                    'avg_accuracy': expressive_avg,
+                    'per_level': expressive_levels
+                }
+            }
+        }
+        set_cached_response(cache_key, payload, 300)
+        return jsonify(payload), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_language_analytics failed: {e}')
+        return jsonify({'success': False, 'message': 'Failed to fetch language analytics'}), 500
 
 
 # ========================================
 # APPOINTMENT MANAGEMENT ENDPOINTS
 # ========================================
+
+@app.route('/api/therapist/speech/entries', methods=['GET'])
+@token_required
+def get_therapist_speech_entries(current_user):
+    """
+    Get unified speech therapy trial entries across articulation, language, and fluency.
+    Query params: ?days=30|90|180|365|all (default: 30), ?limit=500 (max 2000)
+    """
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+        days_param = request.args.get('days', '30')
+        if days_param == 'all':
+            time_filter = None
+        else:
+            try:
+                days = int(days_param)
+                time_filter = utc_now() - datetime.timedelta(days=days)
+            except ValueError:
+                time_filter = utc_now() - datetime.timedelta(days=30)
+
+        try:
+            limit = int(request.args.get('limit', 500))
+        except ValueError:
+            limit = 500
+        limit = max(1, min(limit, 2000))
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-speech-entries', scope=f'user:{therapist_id}', days=days_param, limit=limit)
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
+        trial_filter = {'timestamp': {'$gte': time_filter}} if time_filter else {}
+        user_cache = {}
+
+        def get_user_info(raw_user_id):
+            if raw_user_id is None:
+                return None
+
+            # Normalize possible user_id formats: ObjectId, string, or {'$oid': '...'}
+            normalized_user_id = raw_user_id
+            if isinstance(raw_user_id, dict) and raw_user_id.get('$oid'):
+                normalized_user_id = raw_user_id.get('$oid')
+
+            user_id_str = str(normalized_user_id)
+            if user_id_str in user_cache:
+                return user_cache[user_id_str]
+
+            user = None
+
+            if isinstance(normalized_user_id, ObjectId):
+                user = users_collection.find_one({'_id': normalized_user_id})
+
+            try:
+                if not user:
+                    user = users_collection.find_one({'_id': ObjectId(user_id_str)})
+            except Exception:
+                pass
+
+            if not user:
+                user = users_collection.find_one({'_id': user_id_str})
+
+            if not user:
+                info = None
+            else:
+                full_name = user.get('name') or f"{user.get('firstName', '')} {user.get('lastName', '')}".strip()
+                info = {
+                    'user_name': full_name if full_name else 'Unknown Patient',
+                    'user_email': user.get('email', '')
+                }
+
+            user_cache[user_id_str] = info
+            return info
+
+        def normalize_score(raw_score, fallback=None):
+            if raw_score is None:
+                return fallback
+            try:
+                score = float(raw_score)
+                return round(score * 100, 1) if score <= 1 else round(score, 1)
+            except Exception:
+                return fallback
+
+        def normalize_timestamp(raw_timestamp):
+            if raw_timestamp is None:
+                return None
+
+            # Datetime from MongoDB
+            if isinstance(raw_timestamp, datetime.datetime):
+                return raw_timestamp
+
+            # Numeric epoch values (seconds or milliseconds)
+            if isinstance(raw_timestamp, (int, float)):
+                ts = float(raw_timestamp)
+                if ts > 1e12:
+                    ts = ts / 1000.0
+                try:
+                    return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                except Exception:
+                    return None
+
+            # String timestamp: ISO, numeric seconds, or numeric milliseconds
+            if isinstance(raw_timestamp, str):
+                value = raw_timestamp.strip()
+                if not value:
+                    return None
+
+                if value.isdigit():
+                    ts = float(value)
+                    if ts > 1e12:
+                        ts = ts / 1000.0
+                    try:
+                        return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+                    except Exception:
+                        return None
+
+                try:
+                    return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except Exception:
+                    return None
+
+            return None
+
+        entries = []
+
+        articulation_trials = list(
+            articulation_trials_collection.find(
+                trial_filter,
+                {
+                    '_id': 1,
+                    'user_id': 1,
+                    'timestamp': 1,
+                    'sound_id': 1,
+                    'level': 1,
+                    'scores.computed_score': 1,
+                    'accuracy': 1,
+                    'word': 1,
+                    'target_word': 1,
+                }
+            )
+        )
+        for trial in articulation_trials:
+            user_info = get_user_info(trial.get('user_id'))
+            if not user_info:
+                continue
+
+            entry_time = normalize_timestamp(trial.get('timestamp'))
+            if not entry_time:
+                continue
+
+            score_value = normalize_score(
+                trial.get('scores', {}).get('computed_score'),
+                normalize_score(trial.get('accuracy'))
+            )
+            entries.append({
+                'id': str(trial.get('_id')),
+                'user_id': str(trial.get('user_id', '')),
+                'user_name': user_info['user_name'],
+                'user_email': user_info['user_email'],
+                'therapy_type': 'articulation',
+                'level': trial.get('level'),
+                'score': score_value,
+                'entry_at': entry_time.isoformat(),
+                'details': {
+                    'sound_id': trial.get('sound_id'),
+                    'target_word': trial.get('target_word') or trial.get('word'),
+                }
+            })
+
+        language_trials = list(
+            language_trials_collection.find(
+                trial_filter,
+                {
+                    '_id': 1,
+                    'user_id': 1,
+                    'timestamp': 1,
+                    'mode': 1,
+                    'level': 1,
+                    'score': 1,
+                    'is_correct': 1,
+                    'exercise_id': 1,
+                    'prompt': 1,
+                }
+            )
+        )
+        for trial in language_trials:
+            user_info = get_user_info(trial.get('user_id'))
+            if not user_info:
+                continue
+
+            entry_time = normalize_timestamp(trial.get('timestamp'))
+            if not entry_time:
+                continue
+
+            language_mode = trial.get('mode', 'language')
+            score_value = normalize_score(
+                trial.get('score'),
+                100.0 if trial.get('is_correct') else 0.0
+            )
+            entries.append({
+                'id': str(trial.get('_id')),
+                'user_id': str(trial.get('user_id', '')),
+                'user_name': user_info['user_name'],
+                'user_email': user_info['user_email'],
+                'therapy_type': language_mode if language_mode in ['receptive', 'expressive'] else 'language',
+                'level': trial.get('level'),
+                'score': score_value,
+                'entry_at': entry_time.isoformat(),
+                'details': {
+                    'exercise_id': trial.get('exercise_id'),
+                    'prompt': trial.get('prompt'),
+                }
+            })
+
+        fluency_trials_collection = db['fluency_trials']
+        fluency_trials = list(
+            fluency_trials_collection.find(
+                trial_filter,
+                {
+                    '_id': 1,
+                    'user_id': 1,
+                    'timestamp': 1,
+                    'level': 1,
+                    'scores.computed_score': 1,
+                    'accuracy': 1,
+                    'type': 1,
+                    'instruction': 1,
+                }
+            )
+        )
+        for trial in fluency_trials:
+            user_info = get_user_info(trial.get('user_id'))
+            if not user_info:
+                continue
+
+            entry_time = normalize_timestamp(trial.get('timestamp'))
+            if not entry_time:
+                continue
+
+            score_value = normalize_score(
+                trial.get('scores', {}).get('computed_score'),
+                normalize_score(trial.get('accuracy'))
+            )
+            entries.append({
+                'id': str(trial.get('_id')),
+                'user_id': str(trial.get('user_id', '')),
+                'user_name': user_info['user_name'],
+                'user_email': user_info['user_email'],
+                'therapy_type': 'fluency',
+                'level': trial.get('level'),
+                'score': score_value,
+                'entry_at': entry_time.isoformat(),
+                'details': {
+                    'exercise_type': trial.get('type'),
+                    'instruction': trial.get('instruction'),
+                }
+            })
+
+        entries.sort(key=lambda row: row.get('entry_at') or '', reverse=True)
+        trimmed_entries = entries[:limit]
+
+        payload = {
+            'success': True,
+            'data': trimmed_entries,
+            'total': len(entries),
+            'returned': len(trimmed_entries),
+            'days': days_param
+        }
+        set_cached_response(cache_key, payload, 60)
+        return jsonify(payload), 200
+
+    except Exception as e:
+        logger.error(f'get_therapist_speech_entries failed: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to fetch speech entries'}), 500
 
 @app.route('/api/therapist/appointments', methods=['GET'])
 @token_required
@@ -1678,6 +3482,16 @@ def get_therapist_appointments(current_user):
         # Fetch appointments
         appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
         
+        # Auto-update past appointments to 'no-show' if they are still 'scheduled' or 'confirmed'
+        now = datetime.now()
+        for appt in appointments:
+            if appt.get('status') in ['scheduled', 'confirmed'] and appt.get('appointment_date') and appt['appointment_date'] < now:
+                appt['status'] = 'no-show'
+                appointments_collection.update_one(
+                    {'_id': appt['_id']},
+                    {'$set': {'status': 'no-show', 'updated_at': now}}
+                )
+        
         # Convert ObjectId to string and format dates
         for appt in appointments:
             appt['_id'] = str(appt['_id'])
@@ -1697,12 +3511,12 @@ def get_therapist_appointments(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching therapist appointments: {e}", exc_info=True)
         print(f"❌ Error fetching therapist appointments: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch appointments',
-            'error': str(e)
+            'message': 'Failed to fetch appointments'
         }), 500
 
 
@@ -1718,11 +3532,23 @@ def get_unassigned_appointments(current_user):
         therapy_type = request.args.get('therapy_type')  # articulation, language, fluency, physical
         
         # Build query for pending appointments without therapist
+        # Logic: No therapist assigned AND (status is pending/waiting OR status doesn't exist)
+        # Use case-insensitive regex for status matching
         query = {
-            '$or': [
-                {'therapist_id': None},
-                {'therapist_id': {'$exists': False}},
-                {'status': 'pending'}
+            '$and': [
+                {
+                    '$or': [
+                        {'therapist_id': None},
+                        {'therapist_id': {'$exists': False}}
+                    ]
+                },
+                {
+                    '$or': [
+                        {'status': {'$regex': '^pending$', '$options': 'i'}},
+                        {'status': {'$regex': '^waiting$', '$options': 'i'}},
+                        {'status': {'$exists': False}}
+                    ]
+                }
             ]
         }
         
@@ -1753,12 +3579,12 @@ def get_unassigned_appointments(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching unassigned appointments: {e}", exc_info=True)
         print(f"❌ Error fetching unassigned appointments: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch unassigned appointments',
-            'error': str(e)
+            'message': 'Failed to fetch unassigned appointments'
         }), 500
 
 
@@ -1796,6 +3622,17 @@ def create_therapist_appointment(current_user):
             appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
         except ValueError:
             return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+            
+        # Validate allowed scheduling days (Monday, Wednesday, Friday)
+        day_of_week = appointment_date.weekday() # 0 = Monday, 2 = Wednesday, 4 = Friday
+        if day_of_week not in [0, 2, 4]:
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled on Monday, Wednesday, or Friday.'}), 400
+            
+        # Validate allowed scheduling time (8:00 AM to 5:00 PM)
+        hour = appointment_date.hour
+        minute = appointment_date.minute
+        if hour < 8 or hour > 17 or (hour == 17 and minute > 0):
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled between 8:00 AM and 5:00 PM.'}), 400
         
         # Create appointment document
         appointment = {
@@ -1833,12 +3670,12 @@ def create_therapist_appointment(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error creating appointment: {e}", exc_info=True)
         print(f"❌ Error creating appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to create appointment',
-            'error': str(e)
+            'message': 'Failed to create appointment'
         }), 500
 
 
@@ -1868,7 +3705,20 @@ def update_therapist_appointment(current_user, appointment_id):
         # Update allowed fields
         if 'appointment_date' in data:
             try:
-                update_doc['appointment_date'] = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+                appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+                
+                # Validate allowed scheduling days (Monday, Wednesday, Friday)
+                day_of_week = appointment_date.weekday() # 0 = Monday, 2 = Wednesday, 4 = Friday
+                if day_of_week not in [0, 2, 4]:
+                    return jsonify({'success': False, 'message': 'Appointments can only be scheduled on Monday, Wednesday, or Friday.'}), 400
+                    
+                # Validate allowed scheduling time (8:00 AM to 5:00 PM)
+                hour = appointment_date.hour
+                minute = appointment_date.minute
+                if hour < 8 or hour > 17 or (hour == 17 and minute > 0):
+                    return jsonify({'success': False, 'message': 'Appointments can only be scheduled between 8:00 AM and 5:00 PM.'}), 400
+                    
+                update_doc['appointment_date'] = appointment_date
             except ValueError:
                 return jsonify({'success': False, 'message': 'Invalid date format'}), 400
         
@@ -1916,12 +3766,12 @@ def update_therapist_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error updating appointment: {e}", exc_info=True)
         print(f"❌ Error updating appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to update appointment',
-            'error': str(e)
+            'message': 'Failed to update appointment'
         }), 500
 
 
@@ -1959,12 +3809,12 @@ def delete_therapist_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error deleting appointment: {e}", exc_info=True)
         print(f"❌ Error deleting appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to cancel appointment',
-            'error': str(e)
+            'message': 'Failed to cancel appointment'
         }), 500
 
 
@@ -1973,6 +3823,7 @@ def delete_therapist_appointment(current_user, appointment_id):
 def get_patient_appointments(current_user):
     """Get all appointments for the logged-in patient"""
     try:
+        from datetime import datetime
         patient_id = str(current_user['_id'])
         
         # Get query parameters
@@ -1986,8 +3837,17 @@ def get_patient_appointments(current_user):
         # Fetch appointments
         appointments = list(appointments_collection.find(query).sort('appointment_date', 1))
         
+        # Auto-update past appointments to 'no-show' if they are still 'scheduled' or 'confirmed'
+        now = datetime.now()
+        for appt in appointments:
+            if appt.get('status') in ['scheduled', 'confirmed'] and appt.get('appointment_date') and appt['appointment_date'] < now:
+                appt['status'] = 'no-show'
+                appointments_collection.update_one(
+                    {'_id': appt['_id']},
+                    {'$set': {'status': 'no-show', 'updated_at': now}}
+                )
+        
         # Convert ObjectId to string and format dates
-        from datetime import datetime
         for appt in appointments:
             appt['_id'] = str(appt['_id'])
             appt['patient_id'] = str(appt['patient_id'])
@@ -2006,12 +3866,12 @@ def get_patient_appointments(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching patient appointments: {e}", exc_info=True)
         print(f"❌ Error fetching patient appointments: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch appointments',
-            'error': str(e)
+            'message': 'Failed to fetch appointments'
         }), 500
 
 
@@ -2041,6 +3901,17 @@ def book_patient_appointment(current_user):
             appointment_date = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
         except ValueError:
             return jsonify({'success': False, 'message': 'Invalid date format. Use ISO 8601 format'}), 400
+            
+        # Validate allowed scheduling days (Monday, Wednesday, Friday)
+        day_of_week = appointment_date.weekday() # 0 = Monday, 2 = Wednesday, 4 = Friday
+        if day_of_week not in [0, 2, 4]:
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled on Monday, Wednesday, or Friday.'}), 400
+            
+        # Validate allowed scheduling time (8:00 AM to 5:00 PM)
+        hour = appointment_date.hour
+        minute = appointment_date.minute
+        if hour < 8 or hour > 17 or (hour == 17 and minute > 0):
+            return jsonify({'success': False, 'message': 'Appointments can only be scheduled between 8:00 AM and 5:00 PM.'}), 400
         
         # Create appointment document (therapist assignment is optional)
         appointment = {
@@ -2085,12 +3956,12 @@ def book_patient_appointment(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error booking appointment: {e}", exc_info=True)
         print(f"❌ Error booking appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to book appointment',
-            'error': str(e)
+            'message': 'Failed to book appointment'
         }), 500
 
 
@@ -2129,12 +4000,12 @@ def cancel_patient_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error cancelling appointment: {e}", exc_info=True)
         print(f"❌ Error cancelling appointment: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to cancel appointment',
-            'error': str(e)
+            'message': 'Failed to cancel appointment'
         }), 500
 
 
@@ -2203,12 +4074,12 @@ def assign_therapist_to_appointment(current_user, appointment_id):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error assigning therapist: {e}", exc_info=True)
         print(f"❌ Error assigning therapist: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to assign therapist',
-            'error': str(e)
+            'message': 'Failed to assign therapist'
         }), 500
 
 
@@ -2241,12 +4112,12 @@ def get_available_therapists(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching available therapists: {e}", exc_info=True)
         print(f"❌ Error fetching available therapists: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch therapists',
-            'error': str(e)
+            'message': 'Failed to fetch therapists'
         }), 500
 
 
@@ -2304,12 +4175,12 @@ def search_patients(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error searching patients: {e}", exc_info=True)
         print(f"❌ Error searching patients: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to search patients',
-            'error': str(e)
+            'message': 'Failed to search patients'
         }), 500
 
 
@@ -2371,12 +4242,12 @@ def check_appointment_availability(current_user):
     
     except Exception as e:
         import traceback
+        logger.error(f"Error checking availability: {e}", exc_info=True)
         print(f"❌ Error checking availability: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to check availability',
-            'error': str(e)
+            'message': 'Failed to check availability'
         }), 500
 
 
@@ -2448,10 +4319,11 @@ def assess_pronunciation_azure(audio_path, reference_text):
             }
             
     except Exception as e:
+        logger.error(f"Azure assessment error: {e}", exc_info=True)
         print(f"Azure assessment error: {str(e)}")
         return {
             'success': False,
-            'error': str(e)
+            'error': 'Assessment failed'
         }
 
 # Articulation Therapy Endpoints
@@ -2575,6 +4447,8 @@ def record_articulation(current_user):
                 'feedback': feedback,
                 'timestamp': datetime.datetime.utcnow()
             }
+            if getattr(g, 'token_data', {}).get('facility_mode'):
+                trial_data['location'] = 'facility'
             articulation_trials_collection.insert_one(trial_data)
             
             return jsonify({
@@ -2609,7 +4483,7 @@ def record_articulation(current_user):
         import traceback
         print(f"Error processing recording: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to process recording', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to process recording'}), 500
 
 @app.route('/api/articulation/exercises/<sound_id>/<int:level>', methods=['GET'])
 @token_required
@@ -2669,7 +4543,7 @@ def get_exercises(current_user, sound_id, level):
         }), 200
         
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to get exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get exercises'}), 500
 
 @app.route('/api/articulation/progress', methods=['POST'])
 @token_required
@@ -2732,7 +4606,16 @@ def save_progress(current_user):
         level_data['total_items'] = total_items
         
         progress_doc['updated_at'] = datetime.datetime.utcnow()
-        
+
+        # Compute overall_mastery as the average of all item average_scores across all levels
+        all_item_scores = [
+            item.get('average_score', 0)
+            for lvl in progress_doc.get('levels', {}).values()
+            for item in lvl.get('items', {}).values()
+        ]
+        if all_item_scores:
+            progress_doc['overall_mastery'] = sum(all_item_scores) / len(all_item_scores)
+
         # Upsert progress document
         articulation_progress_collection.update_one(
             {'user_id': user_id, 'sound_id': sound_id},
@@ -2754,7 +4637,7 @@ def save_progress(current_user):
         import traceback
         print(f"Error saving progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to save progress'}), 500
 
 @app.route('/api/articulation/progress/<sound_id>', methods=['GET'])
 @token_required
@@ -2817,7 +4700,7 @@ def get_progress(current_user, sound_id):
         import traceback
         print(f"Error getting progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get progress'}), 500
 
 @app.route('/api/articulation/progress/all', methods=['GET'])
 @token_required
@@ -2839,7 +4722,7 @@ def get_all_progress(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to get all progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get all progress'}), 500
 
 @app.route('/api/language/assess-expressive', methods=['POST'])
 @token_required
@@ -2995,7 +4878,7 @@ def assess_expressive_language(current_user):
         import traceback
         print(f"Error assessing expressive language: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Assessment failed', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Assessment failed'}), 500
 
 # Language Therapy Progress Endpoints
 @app.route('/api/language/progress', methods=['POST'])
@@ -3066,6 +4949,8 @@ def save_language_progress(current_user):
             'transcription': transcription,
             'timestamp': datetime.datetime.utcnow()
         }
+        if getattr(g, 'token_data', {}).get('facility_mode'):
+            trial_data['location'] = 'facility'
         language_trials_collection.insert_one(trial_data)
         
         # Upsert progress document
@@ -3089,7 +4974,7 @@ def save_language_progress(current_user):
         import traceback
         print(f"Error saving language progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to save progress'}), 500
 
 @app.route('/api/language/progress/<mode>', methods=['GET'])
 @token_required
@@ -3151,7 +5036,7 @@ def get_language_progress(current_user, mode):
         import traceback
         print(f"Error getting language progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get progress'}), 500
 
 @app.route('/api/language/progress/all', methods=['GET'])
 @token_required
@@ -3173,7 +5058,7 @@ def get_all_language_progress(current_user):
         }), 200
         
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to get all language progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get all language progress'}), 500
 
 # Fluency Therapy Collections
 fluency_progress_collection = db['fluency_progress']
@@ -3408,7 +5293,7 @@ def assess_fluency(current_user):
         import traceback
         print(f"Error assessing fluency: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Assessment failed', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Assessment failed'}), 500
 
 @app.route('/api/fluency/progress', methods=['POST'])
 @token_required
@@ -3457,7 +5342,16 @@ def save_fluency_progress(current_user):
         }
         
         progress_doc['updated_at'] = utc_now()
-        
+
+        # Compute overall_mastery as the average of all exercise fluency_scores across all levels
+        all_fluency_scores = [
+            ex.get('fluency_score', 0)
+            for lvl in progress_doc.get('levels', {}).values()
+            for ex in lvl.get('exercises', {}).values()
+        ]
+        if all_fluency_scores:
+            progress_doc['overall_mastery'] = sum(all_fluency_scores) / len(all_fluency_scores)
+
         # Save trial data
         trial_data = {
             'user_id': user_id,
@@ -3471,6 +5365,8 @@ def save_fluency_progress(current_user):
             'passed': passed,
             'timestamp': utc_now()
         }
+        if getattr(g, 'token_data', {}).get('facility_mode'):
+            trial_data['location'] = 'facility'
         fluency_trials_collection.insert_one(trial_data)
         
         # Upsert progress document
@@ -3489,7 +5385,7 @@ def save_fluency_progress(current_user):
         import traceback
         print(f"Error saving fluency progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to save progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to save progress'}), 500
 
 @app.route('/api/fluency/progress', methods=['GET'])
 @token_required
@@ -3552,7 +5448,7 @@ def get_fluency_progress(current_user):
         import traceback
         print(f"Error getting fluency progress: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get progress', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get progress'}), 500
 
 # ========== ADMIN ENDPOINTS ==========
 
@@ -3691,7 +5587,7 @@ def get_admin_stats(current_user):
         import traceback
         print(f"Error getting admin stats: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get admin stats', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get admin stats'}), 500
 
 @app.route('/api/admin/users', methods=['GET'])
 @token_required
@@ -3753,7 +5649,7 @@ def get_all_users(current_user):
         import traceback
         print(f"Error getting users: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to get users', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to get users'}), 500
 
 @app.route('/api/admin/users/<user_id>', methods=['PUT'])
 @token_required
@@ -3797,7 +5693,7 @@ def admin_update_user(current_user, user_id):
         import traceback
         print(f"Error updating user: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to update user', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to update user'}), 500
 
 @app.route('/api/admin/users/<user_id>', methods=['DELETE'])
 @token_required
@@ -3830,7 +5726,7 @@ def admin_delete_user(current_user, user_id):
         import traceback
         print(f"Error deleting user: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to delete user', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete user'}), 500
 
 @app.route('/api/admin/therapies/articulation', methods=['GET'])
 @token_required
@@ -3870,7 +5766,7 @@ def get_articulation_therapy_data(current_user):
         import traceback
         print(f"Error fetching articulation data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 @app.route('/api/admin/therapies/language/<mode>', methods=['GET'])
 @token_required
@@ -3917,7 +5813,7 @@ def get_language_therapy_data(current_user, mode):
         import traceback
         print(f"Error fetching language data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 @app.route('/api/admin/therapies/fluency', methods=['GET'])
 @token_required
@@ -3957,7 +5853,7 @@ def get_fluency_therapy_data(current_user):
         import traceback
         print(f"Error fetching fluency data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 @app.route('/api/admin/therapies/physical', methods=['GET'])
 @token_required
@@ -4004,44 +5900,548 @@ def get_physical_therapy_data(current_user):
         import traceback
         print(f"Error fetching physical therapy data: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch data', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch data'}), 500
 
 # ============================================================================
 # WEARABLE GAIT ANALYSIS ENDPOINTS
 # ============================================================================
 
-# Global variable to store latest wearable sensor data
-latest_wearable_data = {}
+WEARABLE_DEFAULT_DEVICE_ID = 'default-device'
+WEARABLE_LATEST_MAX_AGE_SECONDS = get_int_env('WEARABLE_LATEST_MAX_AGE_SECONDS', 300)
+WEARABLE_LIVE_LOG_EVERY_N_REQUESTS = max(1, get_int_env('WEARABLE_LIVE_LOG_EVERY_N_REQUESTS', 30))
+wearable_ingest_request_count = 0
+
+
+def log_wearable_ingest(ingest_metadata):
+    global wearable_ingest_request_count
+
+    wearable_ingest_request_count += 1
+    payload_kind = ingest_metadata.get('payload_kind', 'unknown')
+    sample_summary = ingest_metadata.get('sample_summary', {})
+
+    if payload_kind == 'analysis':
+        logger.info(
+            'Wearable analysis payload received: device=%s sensors=%s fsr=%s request=%s',
+            ingest_metadata.get('device_id'),
+            sample_summary.get('sensor_count', 0),
+            sample_summary.get('fsr_sensor_count', 0),
+            wearable_ingest_request_count,
+        )
+        return
+
+    if wearable_ingest_request_count % WEARABLE_LIVE_LOG_EVERY_N_REQUESTS == 0:
+        logger.info(
+            'Wearable live payload received: device=%s request=%s',
+            ingest_metadata.get('device_id'),
+            wearable_ingest_request_count,
+        )
+
+
+def get_request_bearer_token():
+    auth_header = request.headers.get('Authorization', '').strip()
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:].strip() or None
+    return auth_header or None
+
+
+def is_wearable_ingest_authorized():
+    expected_token = os.getenv('WEARABLE_INGEST_TOKEN')
+    if not expected_token:
+        return True
+
+    provided_token = request.headers.get('X-Wearable-Token') or get_request_bearer_token()
+    return provided_token == expected_token
+
+
+def summarize_wearable_payload(payload):
+    sensors = payload.get('sensors') if isinstance(payload.get('sensors'), dict) else {}
+    fsr_data = payload.get('fsr') if isinstance(payload.get('fsr'), dict) else {}
+
+    if not sensors:
+        direct_sensor_names = [
+            'LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE',
+            'LEFT_ANKLE', 'RIGHT_ANKLE', 'LEFT_TOE', 'RIGHT_TOE'
+        ]
+        sensors = {
+            sensor_name: payload.get(sensor_name)
+            for sensor_name in direct_sensor_names
+            if isinstance(payload.get(sensor_name), dict)
+        }
+
+    if not fsr_data:
+        fsr_keys = ['LEFT_FOOT_FSR', 'RIGHT_FOOT_FSR']
+        fsr_data = {
+            fsr_name: payload.get(fsr_name)
+            for fsr_name in fsr_keys
+            if isinstance(payload.get(fsr_name), list)
+        }
+
+    return {
+        'sensor_count': len(sensors),
+        'fsr_sensor_count': len(fsr_data),
+        'sensor_samples': {
+            sensor_name: len(sensor_readings) if isinstance(sensor_readings, list) else 1
+            for sensor_name, sensor_readings in sensors.items()
+        },
+        'fsr_samples': {
+            sensor_name: len(sensor_readings) if isinstance(sensor_readings, list) else 1
+            for sensor_name, sensor_readings in fsr_data.items()
+        }
+    }
+
+
+def get_latest_sensor_sample(sensor_entry):
+    if isinstance(sensor_entry, list):
+        for sample in reversed(sensor_entry):
+            if isinstance(sample, dict):
+                return sample
+        return None
+
+    if isinstance(sensor_entry, dict):
+        return sensor_entry
+
+    return None
+
+
+def get_latest_fsr_value(fsr_entry):
+    if isinstance(fsr_entry, list):
+        for value in reversed(fsr_entry):
+            if isinstance(value, (int, float)):
+                return value
+        return None
+
+    if isinstance(fsr_entry, (int, float)):
+        return fsr_entry
+
+    return None
+
+
+def build_live_snapshot(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    snapshot = {}
+    direct_sensor_names = [
+        'LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE',
+        'LEFT_ANKLE', 'RIGHT_ANKLE', 'LEFT_TOE', 'RIGHT_TOE'
+    ]
+
+    for sensor_name in direct_sensor_names:
+        sensor_sample = get_latest_sensor_sample(payload.get(sensor_name))
+        if sensor_sample:
+            snapshot[sensor_name] = sensor_sample
+
+    if 'LEFT_TOE' not in snapshot and 'LEFT_ANKLE' in snapshot:
+        snapshot['LEFT_TOE'] = snapshot['LEFT_ANKLE']
+    if 'RIGHT_TOE' not in snapshot and 'RIGHT_ANKLE' in snapshot:
+        snapshot['RIGHT_TOE'] = snapshot['RIGHT_ANKLE']
+
+    if isinstance(payload.get('LEFT_FOOT_FSR'), list):
+        snapshot['LEFT_FOOT_FSR'] = payload['LEFT_FOOT_FSR']
+    if isinstance(payload.get('RIGHT_FOOT_FSR'), list):
+        snapshot['RIGHT_FOOT_FSR'] = payload['RIGHT_FOOT_FSR']
+
+    sensors = payload.get('sensors') if isinstance(payload.get('sensors'), dict) else {}
+    fsr_data = payload.get('fsr') if isinstance(payload.get('fsr'), dict) else {}
+
+    sensor_aliases = {
+        'LEFT_WAIST': 'LEFT_WAIST',
+        'RIGHT_WAIST': 'RIGHT_WAIST',
+        'LEFT_KNEE': 'LEFT_KNEE',
+        'RIGHT_KNEE': 'RIGHT_KNEE',
+        'LEFT_ANKLE': 'LEFT_ANKLE',
+        'RIGHT_ANKLE': 'RIGHT_ANKLE',
+        'LEFT_TOE': 'LEFT_ANKLE',
+        'RIGHT_TOE': 'RIGHT_ANKLE',
+    }
+
+    for target_name, source_name in sensor_aliases.items():
+        sensor_sample = get_latest_sensor_sample(sensors.get(source_name))
+        if sensor_sample and target_name not in snapshot:
+            snapshot[target_name] = sensor_sample
+
+    left_fsr = [
+        get_latest_fsr_value(fsr_data.get('LEFT_TOE')),
+        get_latest_fsr_value(fsr_data.get('LEFT_MID')),
+        get_latest_fsr_value(fsr_data.get('LEFT_HEEL')),
+    ]
+    right_fsr = [
+        get_latest_fsr_value(fsr_data.get('RIGHT_TOE')),
+        get_latest_fsr_value(fsr_data.get('RIGHT_MID')),
+        get_latest_fsr_value(fsr_data.get('RIGHT_HEEL')),
+    ]
+
+    if any(value is not None for value in left_fsr):
+        snapshot['LEFT_FOOT_FSR'] = [value if value is not None else 0 for value in left_fsr]
+    if any(value is not None for value in right_fsr):
+        snapshot['RIGHT_FOOT_FSR'] = [value if value is not None else 0 for value in right_fsr]
+
+    if payload.get('device_id'):
+        snapshot['device_id'] = payload.get('device_id')
+    if payload.get('timestamp') is not None:
+        snapshot['timestamp'] = payload.get('timestamp')
+
+    return snapshot
+
+
+def get_analysis_payload(document):
+    if not isinstance(document, dict):
+        return {}
+
+    if isinstance(document.get('analysis_payload'), dict):
+        return document['analysis_payload']
+
+    if isinstance(document.get('payload'), dict):
+        payload = document['payload']
+        if isinstance(payload.get('sensors'), dict):
+            return payload
+
+    return {}
+
+
+def build_wearable_query(device_id=None, user_id=None):
+    query = {}
+    if device_id:
+        query['device_id'] = str(device_id)
+    if user_id:
+        query['user_id'] = str(user_id)
+    return query
+
+
+def get_latest_wearable_document(device_id=None, user_id=None):
+    query = build_wearable_query(device_id=device_id, user_id=user_id)
+    if not query:
+        query = {}
+    return wearable_latest_collection.find_one(query, sort=[('updated_at', -1)])
+
+
+def serialize_wearable_metadata(document):
+    updated_at = document.get('updated_at')
+    created_at = document.get('created_at')
+    live_updated_at = document.get('live_updated_at')
+    analysis_updated_at = document.get('analysis_updated_at')
+    is_stale = False
+
+    freshness_reference = live_updated_at or updated_at
+    if freshness_reference and WEARABLE_LATEST_MAX_AGE_SECONDS > 0:
+        try:
+            is_stale = (utc_now() - freshness_reference).total_seconds() > WEARABLE_LATEST_MAX_AGE_SECONDS
+        except TypeError:
+            is_stale = False
+
+    return {
+        'device_id': document.get('device_id'),
+        'user_id': document.get('user_id'),
+        'created_at': created_at.isoformat() if created_at else None,
+        'updated_at': updated_at.isoformat() if updated_at else None,
+        'live_updated_at': live_updated_at.isoformat() if live_updated_at else None,
+        'analysis_updated_at': analysis_updated_at.isoformat() if analysis_updated_at else None,
+        'is_stale': is_stale,
+        'sample_summary': document.get('sample_summary', {}),
+        'analysis_summary': document.get('analysis_summary', {}),
+        'last_payload_kind': document.get('last_payload_kind')
+    }
+
+
+def store_latest_wearable_payload(payload):
+    normalized_payload = dict(payload)
+    device_id = str(normalized_payload.get('device_id') or WEARABLE_DEFAULT_DEVICE_ID)
+    normalized_payload['device_id'] = device_id
+
+    user_id = normalized_payload.get('user_id')
+    if user_id is not None:
+        user_id = str(user_id)
+        normalized_payload['user_id'] = user_id
+
+    received_at = utc_now()
+    sample_summary = summarize_wearable_payload(normalized_payload)
+    live_snapshot = build_live_snapshot(normalized_payload)
+    payload_kind = 'analysis' if isinstance(normalized_payload.get('sensors'), dict) else 'live'
+
+    set_data = {
+        'device_id': device_id,
+        'user_id': user_id,
+        'payload': normalized_payload,
+        'sample_summary': sample_summary,
+        'updated_at': received_at,
+        'last_payload_kind': payload_kind,
+    }
+
+    if live_snapshot:
+        set_data['live_snapshot'] = live_snapshot
+        set_data['live_updated_at'] = received_at
+
+    if payload_kind == 'analysis':
+        set_data['analysis_payload'] = normalized_payload
+        set_data['analysis_summary'] = sample_summary
+        set_data['analysis_updated_at'] = received_at
+
+    wearable_latest_collection.update_one(
+        {'device_id': device_id},
+        {
+            '$set': set_data,
+            '$setOnInsert': {
+                'created_at': received_at,
+            }
+        },
+        upsert=True
+    )
+
+    return {
+        'device_id': device_id,
+        'user_id': user_id,
+        'updated_at': received_at,
+        'sample_summary': sample_summary,
+        'payload_kind': payload_kind,
+    }
+
+
+def normalize_hardware_sensor_data(sensor_data):
+    if not isinstance(sensor_data, dict):
+        return sensor_data
+
+    normalized = dict(sensor_data)
+    sensor_aliases = {
+        'LEFT_TOE': 'LEFT_ANKLE',
+        'RIGHT_TOE': 'RIGHT_ANKLE',
+    }
+
+    for canonical_name, alias_name in sensor_aliases.items():
+        if canonical_name not in normalized and alias_name in normalized:
+            normalized[canonical_name] = normalized[alias_name]
+
+    return normalized
+
+
+def run_hardware_gait_analysis(current_user, data, latest_document=None):
+    from hardware_gait_processor import HardwareGaitProcessor
+
+    if not isinstance(data, dict):
+        return jsonify({
+            'success': False,
+            'message': 'Invalid gait payload'
+        }), 400
+
+    print("\n" + "🎯" + "="*60)
+    print("GAIT ANALYSIS REQUEST RECEIVED")
+    print("="*60)
+
+    sensor_data = normalize_hardware_sensor_data(data.get('sensors', {}))
+    fsr_data = data.get('fsr', {})
+
+    if not isinstance(sensor_data, dict):
+        return jsonify({
+            'success': False,
+            'message': 'sensors payload must be an object'
+        }), 400
+
+    if not isinstance(fsr_data, dict):
+        return jsonify({
+            'success': False,
+            'message': 'fsr payload must be an object'
+        }), 400
+
+    for sensor, readings in sensor_data.items():
+        print(f"  {sensor}: {len(readings) if isinstance(readings, list) else 0} data points")
+
+    required_sensors = ['LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE', 'LEFT_TOE', 'RIGHT_TOE']
+    missing_sensors = [s for s in required_sensors if s not in sensor_data or not sensor_data[s]]
+
+    if len(missing_sensors) > 2:
+        print(f"❌ Too many sensors missing: {missing_sensors}")
+        return jsonify({
+            'success': False,
+            'message': f'Too many sensors missing: {missing_sensors}'
+        }), 400
+
+    print("✅ Sensor validation passed. Processing gait analysis...")
+
+    processor = HardwareGaitProcessor()
+    result = processor.analyze(
+        sensor_data=sensor_data,
+        fsr_data=fsr_data,
+        user_id=str(current_user['_id'])
+    )
+
+    if not result['success']:
+        print(f"❌ Analysis failed: {result.get('error')}")
+        return jsonify(result), 400
+
+    print("✅ Analysis complete!")
+    print(f"  Steps: {result['data']['metrics']['step_count']}")
+    print(f"  Cadence: {result['data']['metrics']['cadence']} steps/min")
+    print(f"  Quality: {result['data']['data_quality']}")
+
+    gait_progress_collection = db['gaitprogresses']
+    result['data']['metrics']['analysis_duration'] = result['data']['analysis_duration']
+
+    gait_document = {
+        'user_id': str(current_user['_id']),
+        'session_id': result['data']['session_id'],
+        'metrics': result['data']['metrics'],
+        'sensors_used': result['data']['sensors_used'],
+        'gait_phases': result['data']['gait_phases'],
+        'analysis_duration': result['data']['analysis_duration'],
+        'data_quality': result['data']['data_quality'],
+        'detected_problems': result['data']['detected_problems'],
+        'problem_summary': result['data']['problem_summary'],
+        'gait_score': result['data'].get('gait_score'),
+        'created_at': utc_now(),
+        'updated_at': utc_now()
+    }
+
+    source_device_id = data.get('device_id')
+    if latest_document:
+        gait_document['wearable_source'] = {
+            'device_id': latest_document.get('device_id'),
+            'user_id': latest_document.get('user_id'),
+            'updated_at': latest_document.get('updated_at'),
+            'sample_summary': latest_document.get('sample_summary', {})
+        }
+        source_device_id = latest_document.get('device_id') or source_device_id
+
+    if source_device_id:
+        gait_document['source_device_id'] = str(source_device_id)
+        result['data']['source_device_id'] = str(source_device_id)
+
+    if getattr(g, 'token_data', {}).get('facility_mode'):
+        gait_document['location'] = 'facility'
+
+    insert_result = gait_progress_collection.insert_one(gait_document)
+    gait_id = str(insert_result.inserted_id)
+
+    print("💾 Saved to MongoDB collection: gaitprogresses")
+    print(f"   Document ID: {gait_id}")
+
+    exercise_plan_created = False
+    if result['data']['detected_problems'] and len(result['data']['detected_problems']) > 0:
+        try:
+            print(f"🏋️  Processing exercise plan for {len(result['data']['detected_problems'])} detected problems...")
+
+            exercise_plans_collection = db['exerciseplans']
+            exercises = []
+            for problem in result['data']['detected_problems']:
+                recommendations = problem.get('exercises') or problem.get('recommendations', [])
+                if recommendations:
+                    rec = recommendations[0]
+                    exercises.append({
+                        'exercise_id': rec.get('id'),
+                        'exercise_name': rec.get('name'),
+                        'problem_targeted': problem.get('problem'),
+                        'severity': problem.get('severity'),
+                        'description': rec.get('description'),
+                        'duration': rec.get('duration'),
+                        'difficulty': rec.get('difficulty')
+                    })
+
+            if len(exercises) == 0:
+                print("⚠️  No exercises found in detected problems")
+            else:
+                print("📝 Creating new exercise plan...")
+                print(f"DEBUG - Gait insert_result.inserted_id: {insert_result.inserted_id}, type: {type(insert_result.inserted_id)}")
+
+                plan = {
+                    'user_id': str(current_user['_id']),
+                    'gait_analysis_id': insert_result.inserted_id,
+                    'gait_metrics': result['data']['metrics'],
+                    'detected_problems': result['data']['detected_problems'],
+                    'exercises': exercises,
+                    'total_exercises': len(exercises),
+                    'status': 'ongoing',
+                    'visibility': 'active',
+                    'created_at': utc_now(),
+                    'updated_at': utc_now()
+                }
+
+                print(f"DEBUG - Plan dict gait_analysis_id before insert: {plan['gait_analysis_id']}")
+
+                plan_result = exercise_plans_collection.insert_one(plan)
+                print(f"✅ Exercise plan created: {plan_result.inserted_id}")
+                print(f"   {len(exercises)} exercises recommended")
+
+                saved_plan = exercise_plans_collection.find_one({'_id': plan_result.inserted_id})
+                print(f"DEBUG - Saved plan gait_analysis_id: {saved_plan.get('gait_analysis_id')}")
+
+                exercise_plan_created = True
+
+        except Exception as plan_error:
+            logger.error(f"Failed to create/update exercise plan: {plan_error}", exc_info=True)
+            print(f"❌ Exercise plan operation failed: {str(plan_error)}")
+    else:
+        print("ℹ️  No problems detected, skipping exercise plan creation")
+
+    print("="*60 + "\n")
+
+    response_payload = {
+        'success': True,
+        'message': 'Hardware gait analysis completed',
+        'data': result['data'],
+        'gait_id': gait_id,
+        'exercise_plan_created': exercise_plan_created
+    }
+
+    if latest_document:
+        response_payload['wearable_source'] = serialize_wearable_metadata(latest_document)
+
+    return jsonify(response_payload), 200
 
 @app.route('/api/wearable/data', methods=['GET', 'POST'])
+@limiter.exempt
 def wearable_data():
     """
     Endpoint for wearable gait analysis sensor data
     POST: Receive combined sensor data from ESP-NOW master device
     GET: Retrieve latest sensor data for web interface
     """
-    global latest_wearable_data
-    
     if request.method == 'POST':
-        # Receive data from wearable sensors (already synchronized via ESP-NOW)
+        if not is_wearable_ingest_authorized():
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid wearable ingest token'
+            }), 401
+
         try:
-            latest_wearable_data = request.json
-            # Log received data for debugging
-            print("\n" + "="*50)
-            print(f"📡 SYNCHRONIZED DATA RECEIVED: {datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
-            print(f"   Device: {latest_wearable_data.get('device_id', 'UNKNOWN')}")
-            print("="*50 + "\n")
-            
-            # NOTE: NOT saving to MongoDB to prevent database from filling up
-            # Only analyzed gait sessions are saved (in gaitprogresses collection)
-            
-            return jsonify({"status": "ok"}), 200
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Invalid JSON payload'
+                }), 400
+
+            ingest_metadata = store_latest_wearable_payload(payload)
+            log_wearable_ingest(ingest_metadata)
+
+            return jsonify({
+                'status': 'ok',
+                'device_id': ingest_metadata['device_id'],
+                'updated_at': ingest_metadata['updated_at'].isoformat(),
+                'sample_summary': ingest_metadata['sample_summary'],
+                'payload_kind': ingest_metadata['payload_kind']
+            }), 200
         except Exception as e:
+            logger.error(f"Error processing wearable data: {e}", exc_info=True)
             print(f"Error processing wearable data: {str(e)}")
-            return jsonify({"status": "error", "message": str(e)}), 400
-    
-    # GET request - return latest data to web interface
-    return jsonify(latest_wearable_data), 200
+            return jsonify({"status": "error", "message": "Failed to process wearable data"}), 400
+
+    device_id = request.args.get('device_id')
+    user_id = request.args.get('user_id')
+    include_meta = request.args.get('include_meta', 'false').lower() == 'true'
+
+    latest_document = get_latest_wearable_document(device_id=device_id, user_id=user_id)
+    if not latest_document:
+        if include_meta:
+            return jsonify({'status': 'empty', 'data': {}, 'meta': None}), 200
+        return jsonify({}), 200
+
+    latest_payload = latest_document.get('live_snapshot') or build_live_snapshot(latest_document.get('payload', {}))
+    if include_meta:
+        return jsonify({
+            'status': 'ok',
+            'data': latest_payload,
+            'meta': serialize_wearable_metadata(latest_document)
+        }), 200
+
+    return jsonify(latest_payload), 200
 
 # ============================================================
 # HARDWARE GAIT ANALYSIS API
@@ -4055,90 +6455,65 @@ def hardware_gait_analyze(current_user):
     Returns same structure as mobile gait analysis for MongoDB compatibility
     """
     try:
-        from hardware_gait_processor import HardwareGaitProcessor
-        
-        print("\n" + "🎯" + "="*60)
-        print("GAIT ANALYSIS REQUEST RECEIVED")
-        print("="*60)
-        
-        data = request.json
-        sensor_data = data.get('sensors', {})
-        fsr_data = data.get('fsr', {})
-        
-        # Log received data sizes
-        for sensor, readings in sensor_data.items():
-            print(f"  {sensor}: {len(readings)} data points")
-        
-        # Validate required sensors
-        required_sensors = ['LEFT_WAIST', 'RIGHT_WAIST', 'LEFT_KNEE', 'RIGHT_KNEE', 'LEFT_TOE', 'RIGHT_TOE']
-        missing_sensors = [s for s in required_sensors if s not in sensor_data or not sensor_data[s]]
-        
-        if len(missing_sensors) > 2:  # Allow some sensors to be missing
-            print(f"❌ Too many sensors missing: {missing_sensors}")
-            return jsonify({
-                'success': False,
-                'message': f'Too many sensors missing: {missing_sensors}'
-            }), 400
-        
-        print(f"✅ Sensor validation passed. Processing gait analysis...")
-        
-        # Process gait data
-        processor = HardwareGaitProcessor()
-        result = processor.analyze(
-            sensor_data=sensor_data,
-            fsr_data=fsr_data,
-            user_id=str(current_user['_id'])
-        )
-        
-        if not result['success']:
-            print(f"❌ Analysis failed: {result.get('error')}")
-            return jsonify(result), 400
-        
-        print(f"✅ Analysis complete!")
-        print(f"  Steps: {result['data']['metrics']['step_count']}")
-        print(f"  Cadence: {result['data']['metrics']['cadence']} steps/min")
-        print(f"  Quality: {result['data']['data_quality']}")
-        
-        # Save to MongoDB (same collection as mobile uses: gaitprogresses)
-        gait_progress_collection = db['gaitprogresses']
-        
-        # Prepare document matching mobile's GaitProgress schema
-        gait_document = {
-            'user_id': str(current_user['_id']),
-            'session_id': result['data']['session_id'],
-            'metrics': result['data']['metrics'],
-            'sensors_used': result['data']['sensors_used'],
-            'gait_phases': result['data']['gait_phases'],
-            'analysis_duration': result['data']['analysis_duration'],
-            'data_quality': result['data']['data_quality'],
-            'detected_problems': result['data']['detected_problems'],
-            'problem_summary': result['data']['problem_summary'],
-            'created_at': utc_now(),
-            'updated_at': utc_now()
-        }
-        
-        # Insert into database
-        insert_result = gait_progress_collection.insert_one(gait_document)
-        
-        print(f"💾 Saved to MongoDB collection: gaitprogresses")
-        print(f"   Document ID: {insert_result.inserted_id}")
-        print("="*60 + "\n")
-        
-        # Return success with MongoDB ID
-        return jsonify({
-            'success': True,
-            'message': 'Hardware gait analysis completed',
-            'data': result['data'],
-            'gait_id': str(insert_result.inserted_id)
-        }), 200
+        return run_hardware_gait_analysis(current_user, request.get_json(silent=True))
         
     except Exception as e:
+        logger.error(f"GAIT ANALYSIS ERROR: {e}", exc_info=True)
         print(f"❌ GAIT ANALYSIS ERROR: {str(e)}")
         print("="*60 + "\n")
         return jsonify({
             'success': False,
-            'error': str(e),
             'message': 'Hardware gait analysis failed'
+        }), 500
+
+
+@app.route('/api/hardware/gait/analyze-latest', methods=['POST'])
+@token_required
+def hardware_gait_analyze_latest(current_user):
+    """Analyze the latest stored wearable payload for a device or user."""
+    try:
+        request_data = request.get_json(silent=True) or {}
+        if not isinstance(request_data, dict):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid request payload'
+            }), 400
+
+        device_id = request_data.get('device_id') or request.args.get('device_id')
+        user_id = request_data.get('user_id') or str(current_user['_id'])
+
+        latest_document = get_latest_wearable_document(device_id=device_id, user_id=user_id)
+        if not latest_document and device_id:
+            latest_document = get_latest_wearable_document(device_id=device_id)
+
+        if not latest_document:
+            return jsonify({
+                'success': False,
+                'message': 'No stored wearable data found for analysis'
+            }), 404
+
+        latest_user_id = latest_document.get('user_id')
+        current_user_id = str(current_user['_id'])
+        if latest_user_id and latest_user_id != current_user_id and current_user.get('role') not in ['therapist', 'admin']:
+            return jsonify({
+                'success': False,
+                'message': 'Not authorized to analyze this wearable data'
+            }), 403
+
+        analysis_payload = get_analysis_payload(latest_document)
+        if not analysis_payload:
+            return jsonify({
+                'success': False,
+                'message': 'No batched wearable analysis payload is available yet'
+            }), 404
+
+        return run_hardware_gait_analysis(current_user, analysis_payload, latest_document=latest_document)
+
+    except Exception as e:
+        logger.error(f"LATEST GAIT ANALYSIS ERROR: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Latest wearable gait analysis failed'
         }), 500
 
 
@@ -4164,9 +6539,393 @@ def hardware_gait_history(current_user):
         }), 200
         
     except Exception as e:
+        logger.error(f"Error fetching gait history: {e}", exc_info=True)
         return jsonify({
             'success': False,
-            'error': str(e)
+            'message': 'Failed to fetch gait history'
+        }), 500
+
+
+@app.route('/api/gait/exercise-plan', methods=['POST'])
+@token_required
+def save_gait_exercise_plan(current_user):
+    """
+    Save exercise plan from gait analysis results
+    Creates one plan per gait analysis
+    """
+    try:
+        data = request.json
+        detected_problems = data.get('detected_problems', [])
+        gait_analysis_id = data.get('gait_analysis_id')
+        # Convert to string if it's not None
+        if gait_analysis_id:
+            gait_analysis_id = str(gait_analysis_id)
+        gait_metrics = data.get('gait_metrics')
+        
+        if not detected_problems:
+            return jsonify({
+                'success': False,
+                'message': 'No problems provided'
+            }), 400
+        
+        exercise_plans_collection = db['exerciseplans']
+        
+        # Always create new plan for each gait analysis
+        exercises = []
+        for problem in detected_problems:
+            recommendations = problem.get('exercises') or problem.get('recommendations', [])
+            if recommendations:
+                # Take first recommendation (one per problem)
+                rec = recommendations[0]
+                exercises.append({
+                    'exercise_id': rec.get('id'),
+                    'exercise_name': rec.get('name'),
+                    'problem_targeted': problem.get('problem'),
+                    'severity': problem.get('severity'),
+                    'description': rec.get('description'),
+                    'duration': rec.get('duration'),
+                    'difficulty': rec.get('difficulty')
+                })
+        
+        plan = {
+            'user_id': str(current_user['_id']),
+            'gait_analysis_id': gait_analysis_id,
+            'gait_metrics': gait_metrics,
+            'detected_problems': detected_problems,
+            'exercises': exercises,
+            'total_exercises': len(exercises),
+            'status': 'ongoing',
+            'visibility': 'active',
+            'created_at': utc_now(),
+            'updated_at': utc_now()
+        }
+        
+        # Check if plan already exists for this gait_analysis_id
+        existing_plan = None
+        if gait_analysis_id:
+            existing_plan = exercise_plans_collection.find_one({'gait_analysis_id': gait_analysis_id})
+        
+        if existing_plan:
+            # Update existing plan (exclude _id from update)
+            update_data = {k: v for k, v in plan.items() if k != '_id'}
+            exercise_plans_collection.update_one(
+                {'_id': existing_plan['_id']},
+                {'$set': update_data}
+            )
+            plan_id = str(existing_plan['_id'])
+        else:
+            try:
+                # Try to insert new plan
+                result = exercise_plans_collection.insert_one(plan)
+                plan_id = str(result.inserted_id)
+            except Exception as dup_error:
+                if 'duplicate key' in str(dup_error).lower():
+                    # If duplicate key error, find and update the existing plan
+                    existing = exercise_plans_collection.find_one({'user_id': str(current_user['_id'])})
+                    if existing:
+                        update_data = {k: v for k, v in plan.items() if k != '_id'}
+                        exercise_plans_collection.update_one(
+                            {'_id': existing['_id']},
+                            {'$set': update_data}
+                        )
+                        plan_id = str(existing['_id'])
+                    else:
+                        raise dup_error
+                else:
+                    raise dup_error
+        
+        return jsonify({
+            'success': True,
+            'message': 'Exercise plan saved',
+            'plan_id': plan_id,
+            'exercises_count': len(exercises)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error saving exercise plan: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to save exercise plan'
+        }), 500
+
+
+@app.route('/api/gait/exercise-plan/current', methods=['GET'])
+@token_required
+def get_current_exercise_plan(current_user):
+    """Get all exercise plans for the user (sorted by most recent first)"""
+    try:
+        exercise_plans_collection = db['exerciseplans']
+        
+        # Get all plans for the user, sorted by creation date (newest first)
+        plans_cursor = exercise_plans_collection.find(
+            {'user_id': str(current_user['_id'])},
+            sort=[('created_at', -1)]
+        )
+        
+        plans = list(plans_cursor)
+        
+        if not plans:
+            return jsonify({
+                'success': True,
+                'has_plans': False,
+                'message': 'No exercise plans'
+            }), 200
+        
+        # Convert ObjectIds to strings
+        for plan in plans:
+            plan['_id'] = str(plan['_id'])
+            if plan.get('gait_analysis_id'):
+                plan['gait_analysis_id'] = str(plan['gait_analysis_id'])
+        
+        return jsonify({
+            'success': True,
+            'has_plans': True,
+            'plans': plans,
+            'count': len(plans)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching current plan: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch exercise plan'
+        }), 500
+
+
+@app.route('/api/gait/demo', methods=['POST'])
+@token_required
+def save_demo_gait_data(current_user):
+    """
+    Save demo/fake gait data with real problem detection and exercise plan creation
+    Allows testing without hardware sensors
+    """
+    try:
+        from gait_problem_detector import GaitProblemDetector
+        
+        print("\n" + "🎭" + "="*60)
+        print("DEMO GAIT DATA SUBMISSION")
+        print("="*60)
+        
+        data = request.json
+        metrics = data.get('metrics', {})
+        
+        if not metrics:
+            return jsonify({
+                'success': False,
+                'message': 'No metrics provided'
+            }), 400
+        
+        print(f"  Steps: {metrics.get('step_count')}")
+        print(f"  Cadence: {metrics.get('cadence')} steps/min")
+        print(f"  Velocity: {metrics.get('velocity')} m/s")
+        
+        # Run REAL problem detection on the demo metrics
+        detector = GaitProblemDetector()
+        detected_problems = detector.detect_problems(metrics)
+        detected_problems = detector.prioritize_problems(detected_problems)
+        problem_summary = detector.generate_summary(detected_problems)
+        
+        # Calculate gait mobility score (0-100)
+        gait_score = detector.calculate_gait_score(metrics, detected_problems)
+        
+        print(f"✅ Problem detection complete: {len(detected_problems)} issues found")
+        print(f"📊 Gait Score: {gait_score['score']}/100 ({gait_score['grade']})")
+        for problem in detected_problems:
+            print(f"   - {problem.get('problem')} ({problem.get('severity')})")
+            print(f"     Has exercises key: {('exercises' in problem)}")
+            print(f"     Has recommendations key: {('recommendations' in problem)}")
+            if 'exercises' in problem:
+                print(f"     Exercises count: {len(problem.get('exercises', []))}")
+        
+        # Prepare gait document for database
+        gait_progress_collection = db['gaitprogresses']
+        
+        # Add analysis_duration to metrics for exercise plan
+        metrics['analysis_duration'] = data.get('analysis_duration', 45)
+        
+        gait_document = {
+            'user_id': str(current_user['_id']),
+            'session_id': f"demo_{int(datetime.datetime.utcnow().timestamp())}",
+            'metrics': metrics,
+            'sensors_used': ['DEMO_DATA'],
+            'gait_phases': data.get('gait_phases', {
+                'stance_percentage': 60,
+                'swing_percentage': 40,
+                'double_support_percentage': 20
+            }),
+            'analysis_duration': data.get('analysis_duration', 45),
+            'data_quality': 'demo',
+            'detected_problems': detected_problems,
+            'problem_summary': problem_summary,
+            'gait_score': gait_score,
+            'created_at': utc_now(),
+            'updated_at': utc_now()
+        }
+        
+        # Save to database
+        insert_result = gait_progress_collection.insert_one(gait_document)
+        gait_id = str(insert_result.inserted_id)
+        
+        print(f"💾 Saved demo data to MongoDB")
+        print(f"   Document ID: {gait_id}")
+        
+        # Create exercise plan if problems detected
+        exercise_plan_created = False
+        plan_id = None
+        
+        if detected_problems and len(detected_problems) > 0:
+            try:
+                print(f"🏋️  Creating exercise plan for {len(detected_problems)} problems...")
+                
+                exercise_plans_collection = db['exerciseplans']
+                
+                # Extract exercises from detected problems
+                exercises = []
+                for problem in detected_problems:
+                    print(f"  Processing problem: {problem.get('problem')}")
+                    recommendations = problem.get('exercises') or problem.get('recommendations', [])
+                    print(f"    Found {len(recommendations) if recommendations else 0} recommendations")
+                    
+                    if recommendations:
+                        rec = recommendations[0]
+                        print(f"    First recommendation: {rec.get('name')}")
+                        exercises.append({
+                            'exercise_id': rec.get('id'),
+                            'exercise_name': rec.get('name'),
+                            'problem_targeted': problem.get('problem'),
+                            'severity': problem.get('severity'),
+                            'description': rec.get('description'),
+                            'duration': rec.get('duration'),
+                            'difficulty': rec.get('difficulty')
+                        })
+                
+                print(f"  Total exercises extracted: {len(exercises)}")
+                
+                if exercises:
+                    plan = {
+                        'user_id': str(current_user['_id']),
+                        'gait_analysis_id': insert_result.inserted_id,
+                        'gait_metrics': metrics,
+                        'detected_problems': detected_problems,
+                        'exercises': exercises,
+                        'total_exercises': len(exercises),
+                        'status': 'ongoing',
+                        'visibility': 'active',
+                        'created_at': utc_now(),
+                        'updated_at': utc_now()
+                    }
+                    
+                    plan_result = exercise_plans_collection.insert_one(plan)
+                    plan_id = str(plan_result.inserted_id)
+                    exercise_plan_created = True
+                    
+                    print(f"✅ Exercise plan created: {plan_id}")
+                    print(f"   {len(exercises)} exercises recommended")
+                else:
+                    print(f"⚠️  No exercises extracted from problems - plan NOT created")
+                    print(f"   Problem detection may have returned empty exercises lists")
+                    
+            except Exception as plan_error:
+                logger.error(f"Failed to create exercise plan: {plan_error}", exc_info=True)
+                print(f"❌ Exercise plan creation failed: {str(plan_error)}")
+        
+        print("="*60 + "\n")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Demo gait data saved with real analysis',
+            'data': {
+                'gait_id': gait_id,
+                'metrics': metrics,
+                'detected_problems': detected_problems,
+                'problem_summary': problem_summary,
+                'gait_score': gait_score,
+                'exercise_plan_created': exercise_plan_created,
+                'plan_id': plan_id,
+                'timestamp': datetime.datetime.utcnow().isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Demo gait data error: {e}", exc_info=True)
+        print(f"❌ DEMO DATA ERROR: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to process demo data'
+        }), 500
+
+
+@app.route('/api/exercises/catalog', methods=['GET'])
+def get_exercise_catalog():
+    """
+    Get full exercise catalog with details
+    
+    Query Parameters:
+    - problem (optional): Filter by problem type (e.g., 'slow_cadence', 'asymmetric_gait')
+    - severity (optional): Filter by severity ('severe', 'moderate')
+    - detectable_only (optional): Return only sensor-detectable exercises (default: false)
+    """
+    try:
+        from pathlib import Path
+        import json
+        
+        # Load exercises database
+        exercises_file = Path(__file__).parent / 'datasets/physionet_gait/gait_exercises.json'
+        
+        if not exercises_file.exists():
+            return jsonify({
+                'success': False,
+                'message': 'Exercise catalog not found'
+            }), 404
+        
+        with open(exercises_file, 'r') as f:
+            exercises_db = json.load(f)
+        
+        # Get query parameters
+        problem_filter = request.args.get('problem')
+        severity_filter = request.args.get('severity')
+        detectable_only = request.args.get('detectable_only', 'false').lower() == 'true'
+        
+        # Filter exercises
+        filtered_exercises = []
+        
+        for problem_key, problem_data in exercises_db.items():
+            if problem_key == 'metadata':
+                continue
+            
+            # Apply problem filter
+            if problem_filter and problem_key != problem_filter:
+                continue
+            
+            for severity in ['severe', 'moderate']:
+                # Apply severity filter
+                if severity_filter and severity != severity_filter:
+                    continue
+                
+                if severity in problem_data:
+                    for exercise in problem_data[severity]:
+                        # Apply detectability filter
+                        if detectable_only and not exercise.get('sensor_validation', {}).get('detectable', False):
+                            continue
+                        
+                        # Add problem context
+                        exercise_copy = exercise.copy()
+                        exercise_copy['problem_category'] = problem_key
+                        exercise_copy['problem_severity'] = severity
+                        filtered_exercises.append(exercise_copy)
+        
+        return jsonify({
+            'success': True,
+            'metadata': exercises_db.get('metadata', {}),
+            'count': len(filtered_exercises),
+            'exercises': filtered_exercises
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching exercise catalog: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch exercise catalog'
         }), 500
 
 
@@ -4181,6 +6940,12 @@ def get_physical_therapy_patients(current_user):
                 'success': False,
                 'message': 'Unauthorized. Therapist access required.'
             }), 403
+
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-physical-patients', scope=f'user:{therapist_id}')
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
         
         gait_progress_collection = db['gaitprogresses']
         
@@ -4189,13 +6954,29 @@ def get_physical_therapy_patients(current_user):
         
         analyses_data = []
         for analysis in all_gait_analyses:
+            # Skip records with invalid ObjectId user_ids (e.g., synthetic users)
+            user_id = analysis.get('user_id')
+            if not user_id or not isinstance(user_id, str) or len(user_id) != 24:
+                continue
+            
             # Get user info for each analysis
-            user = users_collection.find_one({'_id': ObjectId(analysis['user_id'])})
+            try:
+                user = users_collection.find_one({'_id': ObjectId(user_id)})
+            except Exception:
+                continue
             
             if user:
                 # Extract detected problems
                 detected_problems = analysis.get('detected_problems', [])
                 problem_names = [p.get('problem', 'Unknown') for p in detected_problems]
+                problem_details = [
+                    {
+                        'problem': p.get('problem', 'Unknown'),
+                        'severity': p.get('severity', 'mild'),
+                        'clinical_note': p.get('clinical_note', ''),
+                    }
+                    for p in detected_problems
+                ]
                 
                 # Extract metrics
                 metrics = analysis.get('metrics', {})
@@ -4223,6 +7004,7 @@ def get_physical_therapy_patients(current_user):
                     'created_at': analysis.get('created_at', datetime.datetime.utcnow()).isoformat() if analysis.get('created_at') else datetime.datetime.utcnow().isoformat(),
                     'problems_count': len(detected_problems),
                     'problems': problem_names,
+                    'problem_details': problem_details,
                     'gait_metrics': {
                         'step_count': metrics.get('step_count', 0),
                         'cadence': metrics.get('cadence', 0),
@@ -4232,6 +7014,7 @@ def get_physical_therapy_patients(current_user):
                         'stability_score': metrics.get('stability_score', 0) * 100,  # Convert to percentage
                         'step_regularity': metrics.get('step_regularity', 0) * 100  # Convert to percentage
                     },
+                    'gait_score': analysis.get('gait_score'),
                     'overall_score': overall_score,
                     'severity': problem_summary.get('risk_level', 'unknown').lower() if problem_summary else 'unknown',
                     'data_quality': analysis.get('data_quality', 'fair'),
@@ -4240,20 +7023,221 @@ def get_physical_therapy_patients(current_user):
                 
                 analyses_data.append(analysis_info)
         
-        return jsonify({
+        payload = {
             'success': True,
             'data': analyses_data,
             'total': len(analyses_data)
-        }), 200
+        }
+        set_cached_response(cache_key, payload, 60)
+        return jsonify(payload), 200
         
     except Exception as e:
         import traceback
+        logger.error(f"Error fetching gait analyses: {e}", exc_info=True)
         print(f"Error fetching gait analyses: {str(e)}")
         print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch gait analyses',
-            'error': str(e)
+            'message': 'Failed to fetch gait analyses'
+        }), 500
+
+
+@app.route('/api/therapist/physical/recommended-exercises', methods=['GET'])
+@token_required
+@therapist_required
+def get_therapist_recommended_exercises(current_user):
+    """Get recommended physical therapy exercises from exercise plans (therapist only)."""
+    try:
+        therapist_id = str(current_user['_id'])
+        cache_key = build_response_cache_key('therapist-recommended-exercises', scope=f'user:{therapist_id}')
+        cached_payload = get_cached_response(cache_key)
+        if cached_payload is not None:
+            return jsonify(cached_payload), 200
+
+        exercise_plans_collection = db['exerciseplans']
+        gait_progress_collection = db['gaitprogresses']
+
+        plans = list(exercise_plans_collection.find({}).sort('created_at', -1))
+        recommended_rows = []
+
+        for plan in plans:
+            user_id = plan.get('user_id')
+            if not user_id or not isinstance(user_id, str) or len(user_id) != 24:
+                continue
+
+            try:
+                user = users_collection.find_one({'_id': ObjectId(user_id)})
+            except Exception:
+                user = None
+
+            if not user:
+                continue
+
+            raw_gait_analysis_id = plan.get('gait_analysis_id')
+            gait_analysis_id = str(raw_gait_analysis_id) if raw_gait_analysis_id is not None else None
+            gait_record = None
+            if gait_analysis_id:
+                try:
+                    gait_record = gait_progress_collection.find_one({'_id': ObjectId(gait_analysis_id)})
+                except Exception:
+                    gait_record = None
+
+            session_created_at = gait_record.get('created_at') if gait_record else plan.get('created_at')
+            session_created_at_iso = (
+                session_created_at.isoformat()
+                if isinstance(session_created_at, datetime.datetime)
+                else str(session_created_at or '')
+            )
+
+            exercises = plan.get('exercises', []) if isinstance(plan.get('exercises', []), list) else []
+            normalized_exercises = []
+            for ex in exercises:
+                if not isinstance(ex, dict):
+                    continue
+                normalized_exercises.append({
+                    'exercise_id': ex.get('exercise_id'),
+                    'exercise_name': ex.get('exercise_name') or ex.get('name') or 'Unnamed Exercise',
+                    'problem_targeted': ex.get('problem_targeted'),
+                    'severity': ex.get('severity'),
+                    'duration': ex.get('duration'),
+                    'difficulty': ex.get('difficulty')
+                })
+
+            recommended_rows.append({
+                'id': str(plan.get('_id')),
+                'user_id': str(user.get('_id')),
+                'user_name': f"{user.get('firstName', 'Unknown')} {user.get('lastName', 'User')}",
+                'user_email': user.get('email', 'N/A'),
+                'gait_analysis_id': gait_analysis_id,
+                'session_created_at': session_created_at_iso,
+                'exercises': normalized_exercises,
+                'total_exercises': plan.get('total_exercises', len(normalized_exercises)),
+                'status': plan.get('status', 'ongoing'),
+                'visibility': plan.get('visibility', 'active'),
+                'updated_at': (
+                    plan.get('updated_at').isoformat()
+                    if isinstance(plan.get('updated_at'), datetime.datetime)
+                    else str(plan.get('updated_at', ''))
+                )
+            })
+
+        payload = {
+            'success': True,
+            'data': recommended_rows,
+            'total': len(recommended_rows)
+        }
+        set_cached_response(cache_key, payload, 60)
+        return jsonify(payload), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching recommended exercises: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch recommended exercises'
+        }), 500
+
+
+@app.route('/api/therapist/physical/recommended-exercises/<plan_id>', methods=['PATCH'])
+@token_required
+@therapist_required
+def update_therapist_recommended_exercise(current_user, plan_id):
+    """Update recommended exercise entry fields like status and visibility."""
+    try:
+        data = request.get_json() or {}
+        exercise_plans_collection = db['exerciseplans']
+
+        update_doc = {'updated_at': utc_now()}
+
+        if 'status' in data:
+            status = str(data.get('status', '')).strip().lower()
+            if status not in ['ongoing', 'done']:
+                return jsonify({'success': False, 'message': 'Invalid status. Use ongoing or done.'}), 400
+            update_doc['status'] = status
+
+        if 'visibility' in data:
+            visibility = str(data.get('visibility', '')).strip().lower()
+            if visibility not in ['active', 'hidden']:
+                return jsonify({'success': False, 'message': 'Invalid visibility. Use active or hidden.'}), 400
+            update_doc['visibility'] = visibility
+
+        if len(update_doc.keys()) == 1:
+            return jsonify({'success': False, 'message': 'No updatable fields provided'}), 400
+
+        result = exercise_plans_collection.update_one(
+            {'_id': ObjectId(plan_id)},
+            {'$set': update_doc}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'success': False, 'message': 'Recommended exercise entry not found'}), 404
+
+        updated = exercise_plans_collection.find_one({'_id': ObjectId(plan_id)})
+        return jsonify({
+            'success': True,
+            'message': 'Recommended exercise updated successfully',
+            'data': {
+                'id': str(updated.get('_id')),
+                'status': updated.get('status', 'ongoing'),
+                'visibility': updated.get('visibility', 'active'),
+                'updated_at': (
+                    updated.get('updated_at').isoformat()
+                    if isinstance(updated.get('updated_at'), datetime.datetime)
+                    else str(updated.get('updated_at', ''))
+                )
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating recommended exercise entry: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update recommended exercise entry'
+        }), 500
+
+
+@app.route('/api/therapist/physical/recommended-exercises/visibility', methods=['PATCH'])
+@token_required
+@therapist_required
+def bulk_update_recommended_exercise_visibility(current_user):
+    """Bulk update visibility for recommended exercise entries."""
+    try:
+        data = request.get_json() or {}
+        visibility = str(data.get('visibility', '')).strip().lower()
+        if visibility not in ['active', 'hidden']:
+            return jsonify({'success': False, 'message': 'Invalid visibility. Use active or hidden.'}), 400
+
+        plan_ids = data.get('plan_ids') or []
+        exercise_plans_collection = db['exerciseplans']
+
+        query = {}
+        if plan_ids:
+            object_ids = []
+            for plan_id in plan_ids:
+                try:
+                    object_ids.append(ObjectId(plan_id))
+                except Exception:
+                    continue
+            if not object_ids:
+                return jsonify({'success': False, 'message': 'No valid plan IDs provided'}), 400
+            query = {'_id': {'$in': object_ids}}
+
+        result = exercise_plans_collection.update_many(
+            query,
+            {'$set': {'visibility': visibility, 'updated_at': utc_now()}}
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Recommended exercise visibility updated successfully',
+            'updated_count': result.modified_count,
+            'visibility': visibility
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error bulk updating recommended exercise visibility: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to bulk update recommended exercise visibility'
         }), 500
 
 # Serve uploaded files
@@ -4262,7 +7246,11 @@ def serve_uploaded_file(filename):
     """Serve uploaded files (images, etc.)"""
     from flask import send_from_directory
     upload_dir = os.path.join(os.path.dirname(__file__), 'uploads')
-    return send_from_directory(upload_dir, filename)
+    response = send_from_directory(upload_dir, filename)
+    response.cache_control.public = True
+    response.cache_control.max_age = 86400
+    response.headers['Cache-Control'] = 'public, max-age=86400, stale-while-revalidate=604800'
+    return response
 
 # ======================
 # DIAGNOSTIC COMPARISON ENDPOINTS
@@ -4361,7 +7349,7 @@ def create_facility_diagnostic(current_user):
         import traceback
         print(f"❌ Error creating facility diagnostic: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to create facility diagnostic', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to create facility diagnostic'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<user_id>', methods=['GET'])
@@ -4417,7 +7405,7 @@ def get_facility_diagnostics(current_user, user_id):
         import traceback
         print(f"❌ Error fetching facility diagnostics: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch facility diagnostics', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch facility diagnostics'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['PUT'])
@@ -4465,7 +7453,7 @@ def update_facility_diagnostic(current_user, diagnostic_id):
         import traceback
         print(f"❌ Error updating facility diagnostic: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to update diagnostic', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to update diagnostic'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<diagnostic_id>', methods=['DELETE'])
@@ -4488,14 +7476,102 @@ def delete_facility_diagnostic(current_user, diagnostic_id):
         }), 200
 
     except Exception as e:
-        return jsonify({'success': False, 'message': 'Failed to delete diagnostic', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete diagnostic'}), 500
+
+
+
+
+def aggregate_facility_scores(user_id):
+    """Aggregate facility scores from trial collections filtered by location='facility'."""
+    facility_scores = {}
+
+    # Articulation: per-sound average computed_score from articulation_trials
+    art_pipeline = [
+        {'$match': {'user_id': user_id, 'location': 'facility'}},
+        {'$group': {
+            '_id': '$sound_id',
+            'avg_score': {'$avg': '$scores.computed_score'}
+        }}
+    ]
+    art_results = list(articulation_trials_collection.aggregate(art_pipeline))
+    art_scores = {}
+    for r in art_results:
+        sound = r.get('_id', '')
+        if sound:
+            art_scores[sound] = round((r.get('avg_score') or 0) * 100, 1)
+    facility_scores['articulation'] = art_scores
+
+    # Fluency: average fluency_score from fluency_trials
+    fluency_pipeline = [
+        {'$match': {'user_id': user_id, 'location': 'facility'}},
+        {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+    ]
+    fluency_results = list(fluency_trials_collection.aggregate(fluency_pipeline))
+    if fluency_results and fluency_results[0].get('avg_score') is not None:
+        raw = fluency_results[0]['avg_score']
+        facility_scores['fluency'] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
+    else:
+        facility_scores['fluency'] = None
+
+    # Receptive language: accuracy from language_trials
+    receptive_pipeline = [
+        {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': 'facility'}},
+        {'$group': {
+            '_id': None,
+            'total': {'$sum': 1},
+            'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+        }}
+    ]
+    receptive_results = list(language_trials_collection.aggregate(receptive_pipeline))
+    if receptive_results and receptive_results[0].get('total', 0) > 0:
+        r = receptive_results[0]
+        facility_scores['receptive'] = round((r['correct'] / r['total']) * 100, 1)
+    else:
+        facility_scores['receptive'] = None
+
+    # Expressive language: accuracy from language_trials
+    expressive_pipeline = [
+        {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': 'facility'}},
+        {'$group': {
+            '_id': None,
+            'total': {'$sum': 1},
+            'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+        }}
+    ]
+    expressive_results = list(language_trials_collection.aggregate(expressive_pipeline))
+    if expressive_results and expressive_results[0].get('total', 0) > 0:
+        r = expressive_results[0]
+        facility_scores['expressive'] = round((r['correct'] / r['total']) * 100, 1)
+    else:
+        facility_scores['expressive'] = None
+
+    # Gait: average metrics from gaitprogresses where location='facility'
+    gait_records = list(db['gaitprogresses'].find({'user_id': user_id, 'location': 'facility'}))
+    if gait_records:
+        gm_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+        for rec in gait_records:
+            m = rec.get('metrics', {})
+            gm_avg['stability_score'] += m.get('stability_score', 0)
+            gm_avg['gait_symmetry'] += m.get('gait_symmetry', 0)
+            gm_avg['step_regularity'] += m.get('step_regularity', 0)
+        cnt = len(gait_records)
+        facility_scores['gait'] = {
+            'stability_score': round((gm_avg['stability_score'] / cnt) * 100, 1),
+            'gait_symmetry': round((gm_avg['gait_symmetry'] / cnt) * 100, 1),
+            'step_regularity': round((gm_avg['step_regularity'] / cnt) * 100, 1),
+            'overall_gait': round(((gm_avg['stability_score'] + gm_avg['gait_symmetry'] + gm_avg['step_regularity']) / (cnt * 3)) * 100, 1)
+        }
+    else:
+        facility_scores['gait'] = {}
+
+    return facility_scores
 
 
 @app.route('/api/therapist/diagnostics/<user_id>/comparison', methods=['GET'])
 @token_required
 @therapist_required
 def get_diagnostic_comparison(current_user, user_id):
-    """Get computed comparison between facility diagnostic and current at-home performance"""
+    """Get computed comparison between facility sessions and current at-home performance"""
     try:
         # Verify the patient exists
         try:
@@ -4505,71 +7581,87 @@ def get_diagnostic_comparison(current_user, user_id):
         if not patient:
             return jsonify({'success': False, 'message': 'Patient not found'}), 404
 
-        # Get the latest facility diagnostic (or specific one if diagnostic_id query param provided)
-        diagnostic_id = request.args.get('diagnostic_id')
-        if diagnostic_id:
-            try:
-                facility_diag = facility_diagnostics_collection.find_one({'_id': ObjectId(diagnostic_id)})
-            except Exception:
-                facility_diag = None
-        else:
-            facility_diag = facility_diagnostics_collection.find_one(
-                {'user_id': user_id},
-                sort=[('assessment_date', -1)]
-            )
+        # Build facility scores from trial collections (location='facility')
+        facility_scores = aggregate_facility_scores(user_id)
 
-        if not facility_diag:
-            return jsonify({
-                'success': True,
-                'has_facility_data': False,
-                'message': 'No facility diagnostic found for this patient'
-            }), 200
+        # Determine if any facility data exists
+        has_facility_data = bool(
+            facility_scores.get('articulation') or
+            facility_scores.get('fluency') is not None or
+            facility_scores.get('receptive') is not None or
+            facility_scores.get('expressive') is not None or
+            facility_scores.get('gait')
+        )
 
-        # Build facility scores
-        facility_scores = {
-            'articulation': facility_diag.get('articulation_scores', {}),
-            'fluency': facility_diag.get('fluency_score'),
-            'receptive': facility_diag.get('receptive_score'),
-            'expressive': facility_diag.get('expressive_score'),
-            'gait': facility_diag.get('gait_scores', {})
-        }
-
-        # Aggregate current at-home scores from progress collections
+        # Aggregate home scores from trial collections, excluding facility sessions.
+        # Uses the same sources as aggregate_facility_scores but with location != 'facility',
+        # so facility and home data are strictly non-overlapping.
         home_scores = {}
+        home_filter = {'$ne': 'facility'}
 
-        # Articulation: get mastery per sound from articulation_progress
-        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        # Articulation: avg computed_score per sound from home trials
+        art_home_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {
+                '_id': '$sound_id',
+                'avg_score': {'$avg': '$scores.computed_score'}
+            }}
+        ]
+        art_home_results = list(articulation_trials_collection.aggregate(art_home_pipeline))
         art_scores = {}
-        for prog in articulation_progress:
-            sound = prog.get('sound_id', '')
-            mastery = prog.get('overall_mastery', 0)
-            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        for row in art_home_results:
+            sound = row.get('_id', '')
+            raw = row.get('avg_score')
+            if sound and raw is not None:
+                art_scores[sound] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
         home_scores['articulation'] = art_scores
 
-        # Fluency: get from fluency_progress
-        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
-        if fluency_progress:
-            fluency_mastery = fluency_progress.get('overall_mastery', 0)
-            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        # Fluency: avg fluency_score from home trials
+        fluency_home_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+        ]
+        fluency_home_results = list(fluency_trials_collection.aggregate(fluency_home_pipeline))
+        if fluency_home_results and fluency_home_results[0].get('avg_score') is not None:
+            raw = fluency_home_results[0]['avg_score']
+            home_scores['fluency'] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
         else:
             home_scores['fluency'] = None
 
-        # Receptive: get from language_progress (mode=receptive)
-        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
-        if receptive_progress:
-            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        # Receptive: accuracy from home language trials
+        receptive_home_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': home_filter}},
+            {'$group': {
+                '_id': None,
+                'total': {'$sum': 1},
+                'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+            }}
+        ]
+        receptive_home_results = list(language_trials_collection.aggregate(receptive_home_pipeline))
+        if receptive_home_results and receptive_home_results[0].get('total', 0) > 0:
+            r = receptive_home_results[0]
+            home_scores['receptive'] = round((r['correct'] / r['total']) * 100, 1)
         else:
             home_scores['receptive'] = None
 
-        # Expressive: get from language_progress (mode=expressive)
-        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
-        if expressive_progress:
-            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        # Expressive: accuracy from home language trials
+        expressive_home_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': home_filter}},
+            {'$group': {
+                '_id': None,
+                'total': {'$sum': 1},
+                'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}
+            }}
+        ]
+        expressive_home_results = list(language_trials_collection.aggregate(expressive_home_pipeline))
+        if expressive_home_results and expressive_home_results[0].get('total', 0) > 0:
+            e = expressive_home_results[0]
+            home_scores['expressive'] = round((e['correct'] / e['total']) * 100, 1)
         else:
             home_scores['expressive'] = None
 
-        # Gait: get average from gaitprogresses
-        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        # Gait: average metrics from home gait records only
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id, 'location': home_filter}))
         if gait_records:
             gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
             for gait in gait_records:
@@ -4586,6 +7678,16 @@ def get_diagnostic_comparison(current_user, user_id):
             }
         else:
             home_scores['gait'] = {}
+
+        if not has_facility_data:
+            return jsonify({
+                'success': True,
+                'has_facility_data': False,
+                'message': 'No facility sessions found for this patient',
+                'facility_scores': {'articulation': {}, 'fluency': None, 'receptive': None, 'expressive': None, 'gait': {}},
+                'home_scores': home_scores,
+                'deltas': {}
+            }), 200
 
         # Compute deltas
         deltas = {}
@@ -4623,16 +7725,8 @@ def get_diagnostic_comparison(current_user, user_id):
         else:
             deltas['gait'] = None
 
-        # Look up assessor name
-        try:
-            assessor = users_collection.find_one({'_id': ObjectId(facility_diag.get('assessed_by', ''))})
-            assessor_name = f"{assessor['firstName']} {assessor['lastName']}" if assessor else 'Unknown'
-        except Exception:
-            assessor_name = 'Unknown'
-
         # Compute summary insights
         all_deltas = []
-        art_deltas = deltas.get('articulation', {})
         for sound, d in art_deltas.items():
             if d is not None:
                 all_deltas.append({'metric': f'/{sound.upper()}/ Sound', 'delta': d, 'category': 'articulation'})
@@ -4655,16 +7749,18 @@ def get_diagnostic_comparison(current_user, user_id):
             summary_insights['declining_count'] = len([d for d in valid_deltas if d < 0])
             summary_insights['stable_count'] = len([d for d in valid_deltas if d == 0])
 
+        patient_name = f"{patient['firstName']} {patient['lastName']}"
+
         return jsonify({
             'success': True,
             'has_facility_data': True,
-            'patient_name': f"{patient['firstName']} {patient['lastName']}",
-            'assessment_date': facility_diag['assessment_date'].isoformat() if isinstance(facility_diag['assessment_date'], datetime.datetime) else str(facility_diag['assessment_date']),
-            'assessment_type': facility_diag.get('assessment_type', 'initial'),
-            'assessor_name': assessor_name,
-            'severity_level': facility_diag.get('severity_level', ''),
-            'notes': facility_diag.get('notes', ''),
-            'recommended_focus': facility_diag.get('recommended_focus', []),
+            'patient_name': patient_name,
+            'assessment_date': None,
+            'assessment_type': 'auto',
+            'assessor_name': '',
+            'severity_level': '',
+            'notes': '',
+            'recommended_focus': [],
             'facility_scores': facility_scores,
             'home_scores': home_scores,
             'deltas': deltas,
@@ -4675,7 +7771,7 @@ def get_diagnostic_comparison(current_user, user_id):
         import traceback
         print(f"❌ Error computing diagnostic comparison: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to compute diagnostic comparison'}), 500
 
 
 @app.route('/api/therapist/diagnostics/<user_id>/comparison-history', methods=['GET'])
@@ -4720,7 +7816,7 @@ def get_diagnostic_comparison_history(current_user, user_id):
         import traceback
         print(f"❌ Error fetching diagnostic history: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic history', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic history'}), 500
 
 
 @app.route('/api/diagnostic-comparison', methods=['GET'])
@@ -4744,10 +7840,79 @@ def get_patient_diagnostic_comparison(current_user):
             )
 
         if not facility_diag:
+            home_scores_nf = {}
+            home_filter_nf = {'$ne': 'facility'}
+
+            art_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'location': home_filter_nf}},
+                {'$group': {'_id': '$sound_id', 'avg_score': {'$avg': '$scores.computed_score'}}}
+            ]
+            art_results_nf = list(articulation_trials_collection.aggregate(art_pipeline_nf))
+            art_scores_nf = {}
+            for r in art_results_nf:
+                sound = r.get('_id', '')
+                if sound:
+                    art_scores_nf[sound] = round((r.get('avg_score') or 0) * 100, 1)
+            home_scores_nf['articulation'] = art_scores_nf
+
+            fluency_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'location': home_filter_nf}},
+                {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+            ]
+            fluency_results_nf = list(fluency_trials_collection.aggregate(fluency_pipeline_nf))
+            if fluency_results_nf and fluency_results_nf[0].get('avg_score') is not None:
+                raw_nf = fluency_results_nf[0]['avg_score']
+                home_scores_nf['fluency'] = round(raw_nf * 100, 1) if raw_nf <= 1 else round(raw_nf, 1)
+            else:
+                home_scores_nf['fluency'] = None
+
+            receptive_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': home_filter_nf}},
+                {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+            ]
+            receptive_results_nf = list(language_trials_collection.aggregate(receptive_pipeline_nf))
+            if receptive_results_nf and receptive_results_nf[0].get('total', 0) > 0:
+                r_nf = receptive_results_nf[0]
+                home_scores_nf['receptive'] = round((r_nf['correct'] / r_nf['total']) * 100, 1)
+            else:
+                home_scores_nf['receptive'] = None
+
+            expressive_pipeline_nf = [
+                {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': home_filter_nf}},
+                {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+            ]
+            expressive_results_nf = list(language_trials_collection.aggregate(expressive_pipeline_nf))
+            if expressive_results_nf and expressive_results_nf[0].get('total', 0) > 0:
+                r_nf = expressive_results_nf[0]
+                home_scores_nf['expressive'] = round((r_nf['correct'] / r_nf['total']) * 100, 1)
+            else:
+                home_scores_nf['expressive'] = None
+
+            gait_records_nf = list(db['gaitprogresses'].find({'user_id': user_id, 'location': home_filter_nf}))
+            if gait_records_nf:
+                gm_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
+                for rec in gait_records_nf:
+                    m = rec.get('metrics', {})
+                    gm_avg['stability_score'] += m.get('stability_score', 0)
+                    gm_avg['gait_symmetry'] += m.get('gait_symmetry', 0)
+                    gm_avg['step_regularity'] += m.get('step_regularity', 0)
+                cnt = len(gait_records_nf)
+                home_scores_nf['gait'] = {
+                    'stability_score': round((gm_avg['stability_score'] / cnt) * 100, 1),
+                    'gait_symmetry': round((gm_avg['gait_symmetry'] / cnt) * 100, 1),
+                    'step_regularity': round((gm_avg['step_regularity'] / cnt) * 100, 1),
+                    'overall_gait': round(((gm_avg['stability_score'] + gm_avg['gait_symmetry'] + gm_avg['step_regularity']) / (cnt * 3)) * 100, 1)
+                }
+            else:
+                home_scores_nf['gait'] = {}
+
             return jsonify({
                 'success': True,
                 'has_facility_data': False,
-                'message': 'No facility diagnostic found'
+                'message': 'No facility diagnostic found',
+                'facility_scores': {'articulation': {}, 'fluency': None, 'receptive': None, 'expressive': None, 'gait': {}},
+                'home_scores': home_scores_nf,
+                'deltas': {}
             }), 200
 
         # Build facility scores (now includes gait)
@@ -4759,48 +7924,65 @@ def get_patient_diagnostic_comparison(current_user):
             'gait': facility_diag.get('gait_scores', {})
         }
 
-        # Aggregate at-home scores (same logic as therapist comparison)
+        # Aggregate at-home scores (trials-based, excludes facility sessions)
         home_scores = {}
+        home_filter = {'$ne': 'facility'}
 
         # Articulation
-        articulation_progress = list(articulation_progress_collection.find({'user_id': user_id}))
+        art_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {'_id': '$sound_id', 'avg_score': {'$avg': '$scores.computed_score'}}}
+        ]
+        art_results = list(articulation_trials_collection.aggregate(art_pipeline))
         art_scores = {}
-        for prog in articulation_progress:
-            sound = prog.get('sound_id', '')
-            if not sound:
-                continue
-            mastery = prog.get('overall_mastery', 0)
-            art_scores[sound] = round(mastery * 100, 1) if mastery <= 1 else round(mastery, 1)
+        for r in art_results:
+            sound = r.get('_id', '')
+            if sound:
+                art_scores[sound] = round((r.get('avg_score') or 0) * 100, 1)
         home_scores['articulation'] = art_scores
 
         # Fluency
-        fluency_progress = db['fluency_progress'].find_one({'user_id': user_id})
-        if fluency_progress:
-            fluency_mastery = fluency_progress.get('overall_mastery', 0)
-            home_scores['fluency'] = round(fluency_mastery * 100, 1) if fluency_mastery <= 1 else round(fluency_mastery, 1)
+        fluency_pipeline = [
+            {'$match': {'user_id': user_id, 'location': home_filter}},
+            {'$group': {'_id': None, 'avg_score': {'$avg': '$fluency_score'}}}
+        ]
+        fluency_results = list(fluency_trials_collection.aggregate(fluency_pipeline))
+        if fluency_results and fluency_results[0].get('avg_score') is not None:
+            raw = fluency_results[0]['avg_score']
+            home_scores['fluency'] = round(raw * 100, 1) if raw <= 1 else round(raw, 1)
         else:
             home_scores['fluency'] = None
 
         # Receptive
-        receptive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'receptive'})
-        if receptive_progress:
-            home_scores['receptive'] = round(receptive_progress.get('accuracy', 0) * 100, 1) if receptive_progress.get('accuracy', 0) <= 1 else round(receptive_progress.get('accuracy', 0), 1)
+        receptive_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'receptive', 'location': home_filter}},
+            {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+        ]
+        receptive_results = list(language_trials_collection.aggregate(receptive_pipeline))
+        if receptive_results and receptive_results[0].get('total', 0) > 0:
+            r = receptive_results[0]
+            home_scores['receptive'] = round((r['correct'] / r['total']) * 100, 1)
         else:
             home_scores['receptive'] = None
 
         # Expressive
-        expressive_progress = language_progress_collection.find_one({'user_id': user_id, 'mode': 'expressive'})
-        if expressive_progress:
-            home_scores['expressive'] = round(expressive_progress.get('accuracy', 0) * 100, 1) if expressive_progress.get('accuracy', 0) <= 1 else round(expressive_progress.get('accuracy', 0), 1)
+        expressive_pipeline = [
+            {'$match': {'user_id': user_id, 'mode': 'expressive', 'location': home_filter}},
+            {'$group': {'_id': None, 'total': {'$sum': 1}, 'correct': {'$sum': {'$cond': ['$is_correct', 1, 0]}}}}
+        ]
+        expressive_results = list(language_trials_collection.aggregate(expressive_pipeline))
+        if expressive_results and expressive_results[0].get('total', 0) > 0:
+            r = expressive_results[0]
+            home_scores['expressive'] = round((r['correct'] / r['total']) * 100, 1)
         else:
             home_scores['expressive'] = None
 
-        # Gait: get average from gaitprogresses
-        gait_records = list(db['gaitprogresses'].find({'user_id': user_id}))
+        # Gait: home-only records (excludes facility)
+        gait_records = list(db['gaitprogresses'].find({'user_id': user_id, 'location': home_filter}))
         if gait_records:
             gait_metrics_avg = {'stability_score': 0, 'gait_symmetry': 0, 'step_regularity': 0}
-            for gait in gait_records:
-                metrics = gait.get('metrics', {})
+            for rec in gait_records:
+                metrics = rec.get('metrics', {})
                 gait_metrics_avg['stability_score'] += metrics.get('stability_score', 0)
                 gait_metrics_avg['gait_symmetry'] += metrics.get('gait_symmetry', 0)
                 gait_metrics_avg['step_regularity'] += metrics.get('step_regularity', 0)
@@ -4898,7 +8080,7 @@ def get_patient_diagnostic_comparison(current_user):
         import traceback
         print(f"❌ Error fetching patient diagnostic comparison: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic comparison', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch diagnostic comparison'}), 500
 
 # ================= mDNS SERVICE INTEGRATION =================
 def start_mdns_service():
@@ -4960,11 +8142,13 @@ def start_mdns_service():
 
 
 if __name__ == '__main__':
-    # Start mDNS service in background
-    mdns_thread = threading.Thread(target=start_mdns_service, daemon=True)
-    mdns_thread.start()
+    enable_mdns = get_bool_env('ENABLE_MDNS', default=not IS_CLOUD_RUN)
+    if enable_mdns:
+        mdns_thread = threading.Thread(target=start_mdns_service, daemon=True)
+        mdns_thread.start()
     
     # Start Flask app
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    default_port = '8080' if IS_CLOUD_RUN else '5000'
+    port = int(os.getenv('PORT', default_port))
+    debug = get_bool_env('FLASK_DEBUG', default=not IS_CLOUD_RUN)
     app.run(host='0.0.0.0', debug=debug, port=port)

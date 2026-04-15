@@ -2,7 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import Header from '../components/Header';
+import { generateExercisePlanPdf } from '../components/PdfReportTemplate';
+import { authService } from '../services/api';
 import './ExercisePlans.css';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Placeholder exercise data – structured so real API data can replace it later
 const EXERCISE_CATEGORIES = [
@@ -56,6 +60,27 @@ const EXERCISE_METADATA = {
   'ex-018': { gaitPhase: 'Mid-Stance',       targetedDeviation: 'Gait Asymmetry'  },
   'ex-022': { gaitPhase: 'Swing Phase',      targetedDeviation: 'Gait Asymmetry'  },
   'ex-023': { gaitPhase: 'Mid-Stance',       targetedDeviation: 'Poor Stability'  },
+};
+
+// Gait Exercise ID Mapping (backend gait_exercises.json → frontend EXERCISES)
+const GAIT_EXERCISE_MAPPING = {
+  'cadence_001': 'ex-005',      // Metronome-Paced Walking
+  'cadence_002': 'ex-006',      // High Knee Marching
+  'cadence_003': 'ex-008',      // Fast Stepping Drills → Quick Stepping Drills
+  'cadence_004': 'ex-007',      // Interval Walking → Interval Speed Walking
+  'symmetry_001': 'ex-001',     // Single-Leg Stance Training → Single-Leg Stance
+  'symmetry_002': 'ex-003',     // Weight-Shifting Drills
+  'symmetry_003': 'ex-012',     // Mirror Walking Practice → Lateral Side-Stepping (similar)
+  'symmetry_004': 'ex-015',     // Step-Up Exercises → Sit-to-Stand Transfers (similar strength)
+  'stride_001': 'ex-009',       // Lunge Walking
+  'stride_002': 'ex-010',       // Visual Target Stepping → Obstacle Stepping (similar)
+  'stride_003': 'ex-011',       // Heel-to-Toe Walking → Heel-Strike Walking
+  'velocity_002': 'ex-007',     // Overground Speed Walking → Interval Speed Walking
+  'stability_001': 'ex-002',    // Tandem Walking
+  'stability_002': 'ex-004',    // Foam Pad Balance Training
+  'stability_003': 'ex-019',    // Star Excursion Balance Reach
+  'regularity_001': 'ex-005',   // Metronome Walking (rhythm)
+  'regularity_002': 'ex-005',   // Paced Walking Practice → Metronome-Paced Walking
 };
 
 const EXERCISES = [
@@ -508,7 +533,7 @@ const EXERCISES = [
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-function ExercisePlans({ onLogout }) {
+function ExercisePlans({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
 
@@ -518,288 +543,443 @@ function ExercisePlans({ onLogout }) {
   }, [selectCategory]);
 
   // State
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [activeDifficulty, setActiveDifficulty] = useState(null); // null = all
-  const [expandedExercise, setExpandedExercise] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [selectedExerciseModal, setSelectedExerciseModal] = useState(null);
 
-  // Load gait analysis result from localStorage (set by GaitRecording page)
-  const gaitResult = useMemo(() => {
-    try {
-      const saved = localStorage.getItem('gaitAnalysisResult');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
+  // Fetch user's exercise plans
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setLoadingPlans(false);
+          return;
+        }
+
+        const response = await fetch(`${API_URL}/gait/exercise-plan/current`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+        if (data.success && data.has_plans) {
+          setPlans(data.plans);
+          // Auto-select the most recent plan
+          if (data.plans.length > 0) {
+            setSelectedPlan(data.plans[0]);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch exercise plans:', err);
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+
+    fetchPlans();
   }, []);
 
-  // Derive recommended exercise IDs from gait analysis detected problems
-  const recommendedIds = useMemo(() => {
-    if (!gaitResult?.detected_problems) return new Set();
-    const problemNames = gaitResult.detected_problems.map((p) => p.problem);
-    const ids = new Set();
-    EXERCISES.forEach((ex) => {
-      if (ex.relatedProblems.some((rp) => problemNames.includes(rp))) {
-        ids.add(ex.id);
-      }
-    });
-    return ids;
-  }, [gaitResult]);
+  const exportToPDF = async () => {
+    if (!selectedPlan) return;
 
-  // Filtered exercises
-  const filteredExercises = useMemo(() => {
-    return EXERCISES.filter((ex) => {
-      const matchesCategory = activeCategory === 'all' || ex.category === activeCategory;
-      const matchesDifficulty = !activeDifficulty || ex.difficulty === activeDifficulty;
-      const matchesSearch =
-        !searchQuery ||
-        ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ex.targetMuscleOrFunction.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ex.description.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesDifficulty && matchesSearch;
-    });
-  }, [activeCategory, activeDifficulty, searchQuery]);
+    const user = authService.getStoredUser();
+    const userName = user
+      ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Patient'
+      : 'Patient';
+    const userEmail = user?.email || '';
 
-  // Sort recommended to the top when "all" category is selected
-  const sortedExercises = useMemo(() => {
-    if (recommendedIds.size === 0) return filteredExercises;
-    return [...filteredExercises].sort((a, b) => {
-      const aRec = recommendedIds.has(a.id) ? 0 : 1;
-      const bRec = recommendedIds.has(b.id) ? 0 : 1;
-      return aRec - bRec;
+    const exerciseDetails = selectedPlan.exercises.map((exercise) => {
+      const fullExercise = EXERCISES.find(
+        (ex) => ex.name === exercise.exercise_name || ex.id === exercise.exercise_id
+      );
+      return {
+        ...exercise,
+        instructions: fullExercise?.instructions || [],
+        targetMuscleOrFunction: fullExercise?.targetMuscleOrFunction || '',
+        reps: fullExercise?.reps || '',
+        duration: fullExercise?.duration || exercise.duration || '',
+        difficulty: fullExercise?.difficulty || exercise.difficulty || '',
+      };
     });
-  }, [filteredExercises, recommendedIds]);
 
-  const toggleExpand = (id) => {
-    setExpandedExercise((prev) => (prev === id ? null : id));
+    const baseMetrics = selectedPlan.gait_metrics || selectedPlan.gaitMetrics || {};
+    const mergedMetrics = {
+      ...baseMetrics,
+      analysis_duration:
+        baseMetrics.analysis_duration ??
+        selectedPlan.analysis_duration ??
+        null,
+    };
+
+    await generateExercisePlanPdf({
+      patientName: userName,
+      patientEmail: userEmail,
+      gaitMetrics: mergedMetrics,
+      analysisDate: selectedPlan.created_at || selectedPlan.gait_metrics?.created_at || null,
+      detectedProblems: selectedPlan.detected_problems || [],
+      exercises: exerciseDetails,
+      filename: `CVAPed_ExercisePlan_${userName.replace(/\s+/g, '_')}`,
+    });
   };
 
-  const getDifficultyColor = (level) => {
-    switch (level) {
-      case 'Beginner':
-        return '#388e3c';
-      case 'Intermediate':
-        return '#e8b04e';
-      case 'Advanced':
-        return '#ce3630';
-      default:
-        return '#666';
-    }
-  };
+  // Mark exercise as complete - DISABLED: Hardware auto-detects completion
+  // const markExerciseComplete = async (exerciseId) => {
+  //   if (!currentPlan) return;
+  //   try {
+  //     const token = localStorage.getItem('token');
+  //     const response = await fetch(`${API_URL}/gait/exercise-plan/mark-complete`, {
+  //       method: 'PATCH',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'Authorization': `Bearer ${token}`
+  //       },
+  //       body: JSON.stringify({
+  //         plan_id: currentPlan._id,
+  //         exercise_id: exerciseId
+  //       })
+  //     });
+  //     const data = await response.json();
+  //     if (data.success) {
+  //       setCurrentPlan(prev => ({
+  //         ...prev,
+  //         exercises: prev.exercises.map(ex =>
+  //           ex.exercise_id === exerciseId
+  //             ? { ...ex, completed: true, completed_at: new Date().toISOString() }
+  //             : ex
+  //         ),
+  //         exercises_completed: data.exercises_completed,
+  //         completion_percentage: data.completion_percentage
+  //       }));
+  //     }
+  //   } catch (err) {
+  //     console.error('Failed to mark exercise complete:', err);
+  //   }
+  // };
 
-  return (
-    <div className="exercise-plans-page">
-      <Header onLogout={onLogout} />
-
-      <main className="exercise-plans-main">
-        {/* ── Page Header ─────────────────────────────────────────── */}
-        <div className="ep-header-section">
-          <div className="ep-header-icon">
-            <i className="fas fa-dumbbell"></i>
+  // Show loading state
+  if (loadingPlans) {
+    return (
+      <div className="exercise-plans-page">
+        <Header onLogout={onLogout} />
+        <main className="exercise-plans-main">
+          <div className="ep-loading">
+            <i className="fas fa-spinner fa-spin"></i>
+            <p>Loading your exercise plans...</p>
           </div>
-          <h1 className="ep-title">Exercise Plans</h1>
-          <p className="ep-subtitle">
-            Stroke Rehabilitation — Targeted exercises to improve your mobility
-            and address detected gait problems
-          </p>
+        </main>
+      </div>
+    );
+  }
 
-          {gaitResult && recommendedIds.size > 0 && (
-            <div className="ep-recommendation-banner">
-              <i className="fas fa-star"></i>
-              <span>
-                Based on your latest gait analysis, <strong>{recommendedIds.size} exercises</strong> are
-                recommended for you. They are highlighted below.
-              </span>
-            </div>
-          )}
+  // If user has plans and selected one, show it
+  if (selectedPlan && !showCatalog) {
+    return (
+      <div className="exercise-plans-page">
+        <Header onLogout={onLogout} />
 
-          {/* ── Detected Issues strip ────────────────────────────── */}
-          {gaitResult?.detected_problems?.length > 0 && (
-            <div className="ep-detected-issues">
-              <span className="ep-issues-label">
-                <i className="fas fa-exclamation-circle"></i> Detected Issues:
-              </span>
-              <div className="ep-issue-tags">
-                {gaitResult.detected_problems.map((p) => {
-                  const meta = PROBLEM_LABELS[p.problem];
-                  return (
-                    <span
-                      key={p.problem}
-                      className={`ep-issue-tag ${p.severity}`}
-                      title={p.description}
-                    >
-                      {meta && <i className={meta.icon}></i>}
-                      {meta ? meta.label : p.problem.replace(/_/g, ' ')}
-                    </span>
-                  );
-                })}
+        <main className="exercise-plans-main">
+          {/* Daily Plan Header */}
+          <div className="ep-header-section">
+            <h1 className="ep-title">Your Exercise Plans</h1>
+            <p className="ep-subtitle">
+              Exercise recommendations from your gait analyses
+            </p>
+
+            {/* Plan Selector */}
+            {plans.length > 1 && (
+              <div className="plan-selector" style={{
+                marginTop: '20px',
+                padding: '16px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '8px',
+                border: '1px solid #e0e0e0'
+              }}>
+                <label htmlFor="plan-select" style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: '600',
+                  color: '#2c3e50'
+                }}>
+                  Select Analysis:
+                </label>
+                <select
+                  id="plan-select"
+                  value={selectedPlan._id}
+                  onChange={(e) => {
+                    const plan = plans.find(p => p._id === e.target.value);
+                    setSelectedPlan(plan);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '14px',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {plans.map((plan, index) => (
+                    <option key={plan._id} value={plan._id}>
+                      Analysis #{plans.length - index} - {new Date(plan.created_at).toLocaleDateString()} at {new Date(plan.created_at).toLocaleTimeString()} ({plan.total_exercises} exercises)
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Filters ─────────────────────────────────────────────── */}
-        <div className="ep-filters">
-          {/* Search */}
-          <div className="ep-search-box">
-            <i className="fas fa-search"></i>
-            <input
-              type="text"
-              placeholder="Search exercises..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button className="ep-search-clear" onClick={() => setSearchQuery('')}>
-                <i className="fas fa-times"></i>
-              </button>
             )}
           </div>
 
-          {/* Category Tabs */}
-          <div className="ep-category-tabs">
-            {EXERCISE_CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                className={`ep-cat-tab ${activeCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-              >
-                <i className={cat.icon}></i>
-                <span>{cat.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Difficulty Pills */}
-          <div className="ep-difficulty-pills">
-            <span className="ep-pill-label">Difficulty:</span>
-            <button
-              className={`ep-diff-pill ${!activeDifficulty ? 'active' : ''}`}
-              onClick={() => setActiveDifficulty(null)}
-            >
-              All
-            </button>
-            {DIFFICULTY_LEVELS.map((lvl) => (
-              <button
-                key={lvl}
-                className={`ep-diff-pill ${activeDifficulty === lvl ? 'active' : ''}`}
-                style={
-                  activeDifficulty === lvl
-                    ? { background: getDifficultyColor(lvl), borderColor: getDifficultyColor(lvl) }
-                    : {}
-                }
-                onClick={() => setActiveDifficulty(lvl)}
-              >
-                {lvl}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Exercise Grid ───────────────────────────────────────── */}
-        {sortedExercises.length === 0 ? (
-          <div className="ep-empty-state">
-            <i className="fas fa-search"></i>
-            <p>No exercises match your filters. Try adjusting the category or difficulty level.</p>
-          </div>
-        ) : (
-          <div className="ep-exercise-grid">
-            {sortedExercises.map((ex) => {
-              const isRecommended = recommendedIds.has(ex.id);
-              const isExpanded = expandedExercise === ex.id;
-
+          {/* Exercise List */}
+          <div className="daily-plan-exercises">
+            {selectedPlan.exercises.map((exercise, index) => {
+              const problemLabel = exercise.problem_targeted?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              // Find full exercise details from EXERCISES array
+              const fullExercise = EXERCISES.find(ex => ex.name === exercise.exercise_name || ex.id === exercise.exercise_id);
+              
               return (
-                <div
-                  key={ex.id}
-                  className={`ep-exercise-card ${isRecommended ? 'recommended' : ''} ${isExpanded ? 'expanded' : ''}`}
+                <div 
+                  key={exercise.exercise_id || index} 
+                  className="daily-exercise-card"
                 >
-                  {isRecommended && (
-                    <div className="ep-recommended-badge">
-                      <i className="fas fa-star"></i> Recommended
+                  <div className="exercise-number">{index + 1}</div>
+                  
+                  <div className="exercise-main-content">
+                    <div className="exercise-header">
+                      <h3 className="exercise-name">{exercise.exercise_name}</h3>
+                      {exercise.severity && (
+                        <span className={`severity-badge ${exercise.severity}`}>
+                          {exercise.severity}
+                        </span>
+                      )}
                     </div>
-                  )}
 
-                  <div className="ep-card-header">
-                    <div className="ep-card-icon" style={{ color: getDifficultyColor(ex.difficulty) }}>
-                      <i className={ex.icon}></i>
+                    <div className="exercise-problem-tag">
+                      <i className="fas fa-bullseye"></i>
+                      <span>Targets: {problemLabel}</span>
                     </div>
-                    <div className="ep-card-title-group">
-                      <h3 className="ep-card-title">{ex.name}</h3>
-                      <span
-                        className="ep-difficulty-badge"
-                        style={{ background: getDifficultyColor(ex.difficulty) }}
+
+                    <p className="exercise-description">{exercise.description}</p>
+
+                    <div className="exercise-meta">
+                      {exercise.duration && (
+                        <div className="meta-item">
+                          <i className="fas fa-clock"></i>
+                          <span>{exercise.duration}</span>
+                        </div>
+                      )}
+                      {exercise.difficulty && (
+                        <div className="meta-item">
+                          <i className="fas fa-signal"></i>
+                          <span>{exercise.difficulty}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {fullExercise && (
+                      <button 
+                        className="view-details-btn"
+                        onClick={() => setSelectedExerciseModal(fullExercise)}
                       >
-                        {ex.difficulty}
-                      </span>
-                    </div>
+                        <i className="fas fa-info-circle"></i>
+                        <span>View Exercise Details</span>
+                        <i className="fas fa-arrow-right"></i>
+                      </button>
+                    )}
+
                   </div>
-
-                  <div className="ep-card-target">
-                    <i className="fas fa-crosshairs"></i>
-                    <span>{ex.targetMuscleOrFunction}</span>
-                  </div>
-
-                  {/* Gait phase badge */}
-                  {EXERCISE_METADATA[ex.id]?.gaitPhase && (
-                    <div className="ep-card-phase-badge">
-                      <i className="fas fa-shoe-prints"></i>
-                      <span>{EXERCISE_METADATA[ex.id].gaitPhase}</span>
-                    </div>
-                  )}
-
-                  <p className="ep-card-description">{ex.description}</p>
-
-                  {/* Addresses tag – shown only on recommended cards */}
-                  {isRecommended && gaitResult && (() => {
-                    const addressed = gaitResult.detected_problems
-                      .filter((p) => ex.relatedProblems.includes(p.problem))
-                      .map((p) => PROBLEM_LABELS[p.problem]?.label ?? p.problem.replace(/_/g, ' '));
-                    return addressed.length > 0 ? (
-                      <div className="ep-addresses-tag">
-                        <i className="fas fa-check-circle"></i>
-                        <span>Addresses: {addressed.join(' · ')}</span>
-                      </div>
-                    ) : null;
-                  })()}
-
-                  <div className="ep-card-meta">
-                    <div className="ep-meta-item">
-                      <i className="fas fa-redo"></i>
-                      <span>{ex.reps}</span>
-                    </div>
-                    <div className="ep-meta-item">
-                      <i className="fas fa-clock"></i>
-                      <span>{ex.duration}</span>
-                    </div>
-                  </div>
-
-                  {/* Expandable Instructions */}
-                  <button className="ep-expand-btn" onClick={() => toggleExpand(ex.id)}>
-                    <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i>
-                    {isExpanded ? 'Hide Instructions' : 'Show Instructions'}
-                  </button>
-
-                  {isExpanded && (
-                    <div className="ep-instructions">
-                      <h4>Step-by-Step Instructions</h4>
-                      <ol>
-                        {ex.instructions.map((step, idx) => (
-                          <li key={idx}>{step}</li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
-        )}
 
-        {/* ── Back Button ─────────────────────────────────────────── */}
-        <div className="ep-actions">
+          {/* Action Buttons */}
+          <div className="ep-actions">
+            <button className="export-pdf-btn" onClick={exportToPDF}>
+              <i className="fas fa-file-pdf"></i>
+              Export to PDF
+            </button>
+            <button className="back-btn" onClick={() => navigate(-1)}>
+              <i className="fas fa-arrow-left"></i>
+              Back to Results
+            </button>
+          </div>
+
+          {/* Exercise Details Modal */}
+          {selectedExerciseModal && (
+            <div className="exercise-modal-overlay" onClick={() => setSelectedExerciseModal(null)}>
+              <div className="exercise-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div className="modal-title-section">
+                    <i className="fas fa-dumbbell"></i>
+                    <h2>{selectedExerciseModal.name}</h2>
+                  </div>
+                  <button className="modal-close-btn" onClick={() => setSelectedExerciseModal(null)}>
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+
+                <div className="modal-body">
+                  {/* Description */}
+                  <div className="modal-section">
+                    <h3 className="modal-section-title">
+                      <i className="fas fa-align-left"></i>
+                      Description
+                    </h3>
+                    <p className="modal-description">{selectedExerciseModal.description}</p>
+                  </div>
+
+                  {/* Step-by-Step Instructions */}
+                  {selectedExerciseModal.instructions && (
+                    <div className="modal-section">
+                      <h3 className="modal-section-title">
+                        <i className="fas fa-list-ol"></i>
+                        Step-by-Step Instructions
+                      </h3>
+                      <ol className="modal-instructions" style={{ counterReset: 'step' }}>
+                        {selectedExerciseModal.instructions.map((instruction, idx) => (
+                          <li key={idx}>{instruction}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  {/* Target Muscles/Function */}
+                  {selectedExerciseModal.targetMuscleOrFunction && (
+                    <div className="modal-section">
+                      <h3 className="modal-section-title">
+                        <i className="fas fa-bullseye"></i>
+                        Target Muscles/Function
+                      </h3>
+                      <div className="modal-info-box info-blue">
+                        <i className="fas fa-info-circle"></i>
+                        <span>{selectedExerciseModal.targetMuscleOrFunction}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Meta Information */}
+                  <div className="modal-meta-grid">
+                    {selectedExerciseModal.reps && (
+                      <div className="modal-info-box info-warning">
+                        <i className="fas fa-repeat"></i>
+                        <div>
+                          <strong>Repetitions</strong>
+                          <p>{selectedExerciseModal.reps}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedExerciseModal.duration && (
+                      <div className="modal-info-box info-success">
+                        <i className="fas fa-clock"></i>
+                        <div>
+                          <strong>Duration</strong>
+                          <p>{selectedExerciseModal.duration}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedExerciseModal.difficulty && (
+                      <div className="modal-info-box info-primary">
+                        <i className="fas fa-signal"></i>
+                        <div>
+                          <strong>Difficulty</strong>
+                          <p>{selectedExerciseModal.difficulty}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button className="modal-btn-secondary" onClick={() => setSelectedExerciseModal(null)}>
+                    <i className="fas fa-times"></i>
+                    Close
+                  </button>
+                  <button className="modal-btn-primary" onClick={() => setSelectedExerciseModal(null)}>
+                    <i className="fas fa-check"></i>
+                    Got It!
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="ep-footer">
+          <div className="ep-footer-container">
+            <p>&copy; 2025 CVAPed. All rights reserved.</p>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // If no plans, show message to complete gait analysis first
+  return (
+    <div className="exercise-plans-page">
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
+
+      <main className="exercise-plans-main">
+        {/* No Active Plan Message */}
+        <div className="no-plan-section" style={{
+          textAlign: 'center',
+          padding: '80px 20px',
+          maxWidth: '600px',
+          margin: '0 auto'
+        }}>
+          <div className="no-plan-icon" style={{
+            fontSize: '72px',
+            color: '#3498db',
+            marginBottom: '24px'
+          }}>
+            <i className="fas fa-clipboard-list"></i>
+          </div>
+          <h2 style={{
+            fontSize: '32px',
+            marginBottom: '16px',
+            color: '#2c3e50'
+          }}>No Exercise Plans</h2>
+          <p style={{
+            fontSize: '18px',
+            color: '#7f8c8d',
+            marginBottom: '32px',
+            lineHeight: '1.6'
+          }}>
+            Complete a gait analysis to receive personalized exercise recommendations based on detected gait problems.
+          </p>
+          <button 
+            className="btn-primary" 
+            onClick={() => navigate('/gait-recording')}
+            style={{
+              padding: '14px 32px',
+              fontSize: '16px',
+              backgroundColor: '#3498db',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              transition: 'all 0.3s ease'
+            }}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
+          >
+            <i className="fas fa-walking"></i>
+            Start Gait Analysis
+          </button>
+        </div>
+
+        {/* Back Button */}
+        <div className="ep-actions" style={{ marginTop: '40px' }}>
           <button className="back-btn" onClick={() => navigate(-1)}>
             <i className="fas fa-arrow-left"></i>
-            Back to Results
+            Back
           </button>
         </div>
       </main>

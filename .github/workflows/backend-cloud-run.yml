@@ -1,0 +1,129 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - gwyn
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-cloud-run.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-cloud-run-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_PROJECT_ID: project-897ce48e-6275-4757-ab9
+  GCP_REGION: us-central1
+  CLOUD_RUN_SERVICE: cvaped-backend
+  ARTIFACT_REPOSITORY: cvaped-backend
+  GCP_SERVICE_ACCOUNT: github-actions-cloud-run@project-897ce48e-6275-4757-ab9.iam.gserviceaccount.com
+  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/592360297121/locations/global/workloadIdentityPools/github-actions-cicd/providers/github-provider
+  CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: 592360297121-compute@developer.gserviceaccount.com
+  IMAGE_NAME: cvaped-backend
+  FACILITY_LOCATION_NAME: Taguig City Disability Resource and Development Center
+  FACILITY_LATITUDE: "14.514722"
+  FACILITY_LONGITUDE: "121.055833"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Validate backend Python files
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib
+          import py_compile
+
+          backend_dir = pathlib.Path('backend')
+          skipped_dirs = {'venv', '.venv', '__pycache__'}
+
+          for path in backend_dir.rglob('*.py'):
+              if any(part in skipped_dirs for part in path.parts):
+                  continue
+              py_compile.compile(str(path), doraise=True)
+
+          print('Backend Python validation passed')
+          PY
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Build and push backend container image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy backend image to Cloud Run
+        id: deploy
+        shell: bash
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: |
+          gcloud run services update "$CLOUD_RUN_SERVICE" \
+            --image "$IMAGE_URI" \
+            --update-env-vars "FACILITY_LOCATION_NAME=${FACILITY_LOCATION_NAME},FACILITY_LATITUDE=${FACILITY_LATITUDE},FACILITY_LONGITUDE=${FACILITY_LONGITUDE}" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --quiet
+
+          SERVICE_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format='value(status.url)')
+
+          echo "service_url=$SERVICE_URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed backend to $SERVICE_URL"
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## Backend Deploy Succeeded"
+            echo ""
+            echo "- Service: \`${CLOUD_RUN_SERVICE}\`"
+            echo "- Region: \`${GCP_REGION}\`"
+            echo "- Image: \`${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}\`"
+            echo "- URL: ${{ steps.deploy.outputs.service_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

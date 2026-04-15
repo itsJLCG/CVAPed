@@ -8,7 +8,9 @@ import bodyFullImage from '../assets/body-full.png';
 import soleLeftImage from '../assets/sole-left.png';
 import soleRightImage from '../assets/sole-right.png';
 
-function GaitAnalysis({ onLogout }) {
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+function GaitAnalysis({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { selectCategory } = useTherapyCategory();
@@ -28,7 +30,7 @@ function GaitAnalysis({ onLogout }) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/wearable/data');
+        const response = await fetch(`${API_URL}/wearable/data`);
         if (response.ok) {
           const data = await response.json();
           setSensorData(data);
@@ -176,7 +178,7 @@ function GaitAnalysis({ onLogout }) {
   return (
     <div className="gait-analysis-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Gait Analysis Header */}
       <div className="gait-header">

@@ -5,7 +5,7 @@ import { authService } from '../services/api';
 import noProfileImg from '../assets/no_profile.png';
 import './Profile.css';
 
-function Profile({ onLogout }) {
+function Profile({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +103,7 @@ function Profile({ onLogout }) {
   return (
     <div className="profile-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <div className="profile-content">
@@ -117,10 +117,6 @@ function Profile({ onLogout }) {
             <h1 className="profile-name">{user.firstName} {user.lastName}</h1>
             <p className="profile-email">{user.email}</p>
             <div className="profile-badges">
-              <span className="badge badge-role">
-                <span className="badge-icon">👤</span>
-                {user.role || 'Patient'}
-              </span>
               <span className="badge badge-therapy">
                 <span className="badge-icon">🏥</span>
                 {user.therapyType || 'N/A'}
@@ -225,13 +221,6 @@ function Profile({ onLogout }) {
                     Patient Type
                   </label>
                   <p className="info-value capitalize">{user.patientType || 'Not Set'}</p>
-                </div>
-                <div className="info-item">
-                  <label className="info-label">
-                    <span className="label-icon">🎭</span>
-                    Account Role
-                  </label>
-                  <p className="info-value capitalize">{user.role || 'Patient'}</p>
                 </div>
               </div>
               {isEditing && (

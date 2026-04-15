@@ -4,7 +4,7 @@ import { successStoryService } from '../services/api';
 import { images, hasImage } from '../assets/images';
 import './SuccessStoryPage.css';
 
-const API_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
 function SuccessStoryPage() {
   const { storyId } = useParams();
@@ -133,17 +133,7 @@ function SuccessStoryPage() {
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
-    return `${API_URL}/${imagePath}`;
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    return `${API_BASE_URL}/${imagePath}`;
   };
 
   const openLightbox = (index) => {
@@ -315,6 +305,8 @@ function SuccessStoryPage() {
     );
   }
 
+  const storyTitle = story.patientName?.trim() || 'Recovery Journey';
+
   return (
     <div className="story-page">
       {/* Navigation */}
@@ -350,13 +342,12 @@ function SuccessStoryPage() {
             <button className="breadcrumb-btn" onClick={handleGoBack}>
               ← Back to Success Stories
             </button>
-            <h1 className="story-title">{story.patientName}</h1>
-            <div className="story-meta">
-              <span className="story-date">{formatDate(story.createdAt)}</span>
-              {story.createdByName && (
+            <h1 className="story-title">{storyTitle}</h1>
+            {story.createdByName && (
+              <div className="story-meta">
                 <span className="story-author">by {story.createdByName}</span>
-              )}
-            </div>
+              </div>
+            )}
           </header>
 
           {/* Image Gallery with Carousel */}
@@ -366,7 +357,7 @@ function SuccessStoryPage() {
                 <div className="gallery-single" onClick={() => openLightbox(0)}>
                   <img 
                     src={getImageUrl(story.images[0])} 
-                    alt={`${story.patientName}'s journey`}
+                    alt={storyTitle}
                     className="gallery-image"
                   />
                   <div className="gallery-overlay">
@@ -380,7 +371,7 @@ function SuccessStoryPage() {
                   <div className="carousel-main-image" onClick={() => openLightbox(galleryIndex)}>
                     <img 
                       src={getImageUrl(story.images[galleryIndex])} 
-                      alt={`${story.patientName}'s journey ${galleryIndex + 1}`}
+                      alt={`${storyTitle} ${galleryIndex + 1}`}
                       className={`gallery-image ${isGalleryTransitioning ? 'transitioning' : ''}`}
                       key={galleryIndex}
                     />
@@ -439,26 +430,6 @@ function SuccessStoryPage() {
             {renderStoryContent(story.story)}
           </section>
 
-          {/* Footer */}
-          <footer className="story-footer">
-            <div className="share-section">
-              <span className="share-label">Share this story:</span>
-              <div className="share-buttons">
-                <button className="share-btn" title="Share on Facebook">
-                  📘
-                </button>
-                <button className="share-btn" title="Share on Twitter">
-                  🐦
-                </button>
-                <button className="share-btn" title="Copy link">
-                  🔗
-                </button>
-              </div>
-            </div>
-            <button className="back-to-stories-btn" onClick={handleGoBack}>
-              ← Back to Success Stories
-            </button>
-          </footer>
         </article>
       </main>
 
@@ -480,7 +451,7 @@ function SuccessStoryPage() {
           <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img 
               src={getImageUrl(story.images[currentImageIndex])} 
-              alt={`${story.patientName}'s journey ${currentImageIndex + 1}`}
+              alt={`${storyTitle} ${currentImageIndex + 1}`}
               className="lightbox-image"
             />
             <div className="lightbox-counter">

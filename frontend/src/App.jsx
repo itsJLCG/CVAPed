@@ -2,8 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/ToastContext';
 import { TherapyCategoryProvider } from './components/TherapyCategoryContext';
+import { VoiceSettingsProvider } from './components/VoiceSettingsContext';
+import ErrorBoundary from './components/ErrorBoundary';
+import audioManager from './services/audioManager';
+import { authService, clearStoredAuth, wakeBackend } from './services/api';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import FacilityLogin from './pages/FacilityLogin';
 import Register from './pages/Register';
 import CompleteProfile from './pages/CompleteProfile';
 import Dashboard from './pages/Dashboard';
@@ -13,7 +18,10 @@ import TherapySelection from './pages/TherapySelection';
 import PhysicalTherapy from './pages/PhysicalTherapy';
 import GaitAnalysis from './pages/GaitAnalysis';
 import GaitRecording from './pages/GaitRecording';
+import GaitProblems from './pages/GaitProblems';
 import ExercisePlans from './pages/ExercisePlans';
+import DetectionProblems from './pages/DetectionProblems';
+import ExerciseRecommendations from './pages/ExerciseRecommendations';
 import SpeechTherapy from './pages/SpeechTherapy';
 import ArticulationTherapy from './pages/ArticulationTherapy';
 import ArticulationExercise from './pages/ArticulationExercise';
@@ -25,6 +33,7 @@ import Prediction from './pages/Prediction';
 import Prescription from './pages/Prescription';
 import Profile from './pages/Profile';
 import SuccessStoryPage from './pages/SuccessStoryPage';
+import Diagnostic from './pages/Diagnostic';
 import './App.css';
 
 function App() {
@@ -33,19 +42,52 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('token');
-    const user = localStorage.getItem('user');
-    if (token && user) {
-      setIsAuthenticated(true);
-      try {
-        const userData = JSON.parse(user);
-        setUserRole(userData.role);
-      } catch (error) {
-        console.error('Error parsing user data:', error);
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      wakeBackend();
+
+      const token = localStorage.getItem('token');
+      const user = localStorage.getItem('user');
+      if (!token || !user) {
+        if (isMounted) {
+          setLoading(false);
+        }
+        return;
       }
-    }
-    setLoading(false);
+
+      try {
+        await authService.getMe();
+        if (!isMounted) return;
+
+        setIsAuthenticated(true);
+        try {
+          const userData = JSON.parse(user);
+          setUserRole(userData.role);
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+          await clearStoredAuth();
+          if (!isMounted) return;
+          setIsAuthenticated(false);
+          setUserRole(null);
+        }
+      } catch (error) {
+        await clearStoredAuth();
+        if (!isMounted) return;
+        setIsAuthenticated(false);
+        setUserRole(null);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleLogin = () => {
@@ -61,21 +103,28 @@ function App() {
     }
   };
 
+  const handleFacilityExit = () => {
+    const therapistToken = localStorage.getItem('therapistToken');
+    const therapistUser = localStorage.getItem('therapistUser');
+    if (therapistToken && therapistUser) {
+      localStorage.setItem('token', therapistToken);
+      localStorage.setItem('user', therapistUser);
+    }
+    localStorage.removeItem('facilityMode');
+    localStorage.removeItem('therapistToken');
+    localStorage.removeItem('therapistUser');
+    handleLogin();
+  };
+
   const handleLogout = async () => {
-    // Clear localStorage
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    // Immediately stop any active Azure/Web Speech TTS or audio playback
+    audioManager.stopAll();
+
+    await clearStoredAuth();
+
     // Clear gait analysis result
     localStorage.removeItem('gaitAnalysisResult');
-    
-    // Sign out from Firebase to clear auth state
-    try {
-      const { firebaseSignOut } = await import('./services/firebase');
-      await firebaseSignOut();
-    } catch (error) {
-      console.error('Error signing out from Firebase:', error);
-    }
-    
+
     // Update app state
     setIsAuthenticated(false);
     setUserRole(null);
@@ -94,7 +143,9 @@ function App() {
   };
 
   return (
+    <ErrorBoundary>
     <ToastProvider>
+      <VoiceSettingsProvider>
       <TherapyCategoryProvider>
         <Router>
           <div className="App">
@@ -116,6 +167,10 @@ function App() {
               element={
                 isAuthenticated ? <RoleBasedRedirect /> : <Login onLogin={handleLogin} />
               } 
+            />
+            <Route
+              path="/facility-login"
+              element={<FacilityLogin onLogin={handleLogin} />}
             />
             <Route 
               path="/register" 
@@ -150,98 +205,124 @@ function App() {
             <Route 
               path="/therapy-selection" 
               element={
-                isAuthenticated ? <TherapySelection onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <TherapySelection onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/physical-therapy" 
               element={
-                isAuthenticated ? <PhysicalTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <PhysicalTherapy onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/gait-analysis" 
               element={
-                isAuthenticated ? <GaitAnalysis onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <GaitAnalysis onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/gait-recording" 
               element={
-                isAuthenticated ? <GaitRecording onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <GaitRecording onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/gait-problems" 
+              element={
+                isAuthenticated ? <GaitProblems onLogout={handleLogout} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/exercise-plans" 
               element={
-                isAuthenticated ? <ExercisePlans onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <ExercisePlans onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
+            />
+            <Route
+              path="/detection-problems"
+              element={
+                isAuthenticated ? <DetectionProblems onLogout={handleLogout} /> : <Navigate to="/login" />
+              }
+            />
+            <Route
+              path="/exercise-recommendations"
+              element={
+                isAuthenticated ? <ExerciseRecommendations onLogout={handleLogout} /> : <Navigate to="/login" />
+              }
             />
             <Route 
               path="/speech-therapy" 
               element={
-                isAuthenticated ? <SpeechTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <SpeechTherapy onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/articulation" 
               element={
-                isAuthenticated ? <ArticulationTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <ArticulationTherapy onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/articulation/:soundId" 
               element={
-                isAuthenticated ? <ArticulationExercise onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <ArticulationExercise onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/language-therapy" 
               element={
-                isAuthenticated ? <LanguageTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <LanguageTherapy onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/fluency-therapy" 
               element={
-                isAuthenticated ? <FluencyTherapy onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <FluencyTherapy onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/health-logs" 
               element={
-                isAuthenticated ? <HealthLogs onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <HealthLogs onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/appointments" 
               element={
-                isAuthenticated ? <Appointments onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <Appointments onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/prediction" 
               element={
-                isAuthenticated ? <Prediction onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <Prediction onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/prescription" 
               element={
-                isAuthenticated ? <Prescription onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <Prescription onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
             />
             <Route 
               path="/profile" 
               element={
-                isAuthenticated ? <Profile onLogout={handleLogout} /> : <Navigate to="/login" />
+                isAuthenticated ? <Profile onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
               } 
+            />
+            <Route
+              path="/diagnostic"
+              element={
+                isAuthenticated ? <Diagnostic onLogout={handleLogout} onFacilityExit={handleFacilityExit} /> : <Navigate to="/login" />
+              }
             />
           </Routes>
         </div>
       </Router>
       </TherapyCategoryProvider>
+      </VoiceSettingsProvider>
     </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

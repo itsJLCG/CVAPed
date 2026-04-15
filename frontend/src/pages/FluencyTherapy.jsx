@@ -2,15 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
+import { useVoiceSettings } from '../components/VoiceSettingsContext';
 import axios from 'axios';
 import { fluencyExerciseService } from '../services/api';
+import audioManager from '../services/audioManager';
 import './FluencyTherapy.css';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-function FluencyTherapy({ onLogout }) {
+function FluencyTherapy({ onLogout, onFacilityExit }) {
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const { voiceSpeed, setVoiceSpeed } = useVoiceSettings();
 
   // Ensure the category is set to 'speech' when this page is loaded
   useEffect(() => {
@@ -43,6 +46,8 @@ function FluencyTherapy({ onLogout }) {
   const timerRef = useRef(null);
   const breathingTimerRef = useRef(null);
   const speechTimeoutRef = useRef(null);
+  // Set to true on unmount so all in-flight async speech chains abort immediately
+  const isCancelledRef = useRef(false);
 
   // Load active exercises from database
   useEffect(() => {
@@ -111,7 +116,16 @@ function FluencyTherapy({ onLogout }) {
   }, [navigate]);
 
   useEffect(() => {
+    // Register with audioManager so Header logout can abort this chain immediately
+    const unregister = audioManager.registerAbortCallback('FluencyTherapy', () => {
+      isCancelledRef.current = true;
+      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+      window.speechSynthesis.cancel();
+    });
     return () => {
+      unregister();
+      // Signal all in-flight async chains to abort
+      isCancelledRef.current = true;
       if (timerRef.current) clearInterval(timerRef.current);
       if (breathingTimerRef.current) clearInterval(breathingTimerRef.current);
       if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
@@ -142,12 +156,23 @@ function FluencyTherapy({ onLogout }) {
   // Text-to-Speech function
   const speakText = (text, repeatCount = 1) => {
     return new Promise((resolve) => {
+      // Abort immediately if the component has been unmounted (e.g. logout)
+      if (isCancelledRef.current) {
+        resolve();
+        return;
+      }
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         
         let currentRepeat = 0;
         
         const speakOnce = () => {
+          // Guard every re-entry point so queued repeats also abort
+          if (isCancelledRef.current) {
+            setIsSpeaking(false);
+            resolve();
+            return;
+          }
           if (currentRepeat >= repeatCount) {
             setIsSpeaking(false);
             resolve();
@@ -156,7 +181,7 @@ function FluencyTherapy({ onLogout }) {
           
           setIsSpeaking(true);
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = 0.85;
+          utterance.rate = 0.85 * voiceSpeed;
           utterance.pitch = 1;
           utterance.volume = 1;
           
@@ -186,10 +211,14 @@ function FluencyTherapy({ onLogout }) {
   };
 
   const speakInstruction = (text) => {
+    // Reset cancelled state so replay works after a previous stop
+    isCancelledRef.current = false;
     speakText(text, 1);
   };
 
   const startExercise = () => {
+    // Reset cancelled state so a new exercise always plays after any previous stop
+    isCancelledRef.current = false;
     setHasPlayedAudio(true);
     if (currentExercise.breathing) {
       startBreathing();
@@ -197,6 +226,17 @@ function FluencyTherapy({ onLogout }) {
       startRecording();
     }
   };
+
+  // Cancellable delay helper — resolves early if component unmounts
+  const cancelableDelay = (ms) =>
+    new Promise((resolve) => {
+      const id = setTimeout(resolve, ms);
+      // If already cancelled by the time this runs, resolve immediately
+      if (isCancelledRef.current) {
+        clearTimeout(id);
+        resolve();
+      }
+    });
 
   const startBreathing = async () => {
     setIsBreathing(true);
@@ -206,38 +246,49 @@ function FluencyTherapy({ onLogout }) {
     setBreathingPhase('inhale');
     setBreathingTimer(3);
     await speakText('Breathe in slowly through your nose', 1);
+    if (isCancelledRef.current) return;
     
     for (let i = 3; i > 0; i--) {
+      if (isCancelledRef.current) return;
       setBreathingTimer(i);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await cancelableDelay(1000);
     }
     
     // Phase 2: Hold (2 seconds)
+    if (isCancelledRef.current) return;
     setBreathingPhase('hold');
     setBreathingTimer(2);
     await speakText('Hold', 1);
+    if (isCancelledRef.current) return;
     
     for (let i = 2; i > 0; i--) {
+      if (isCancelledRef.current) return;
       setBreathingTimer(i);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await cancelableDelay(1000);
     }
     
     // Phase 3: Exhale (4 seconds)
+    if (isCancelledRef.current) return;
     setBreathingPhase('exhale');
     setBreathingTimer(4);
     await speakText('Now breathe out slowly through your mouth', 1);
+    if (isCancelledRef.current) return;
     
     for (let i = 4; i > 0; i--) {
+      if (isCancelledRef.current) return;
       setBreathingTimer(i);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await cancelableDelay(1000);
     }
     
     // Phase 4: Ready (1 second)
+    if (isCancelledRef.current) return;
     setBreathingPhase('ready');
     setBreathingTimer(1);
     await speakText('Get ready to speak', 1);
+    if (isCancelledRef.current) return;
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await cancelableDelay(1000);
+    if (isCancelledRef.current) return;
     
     // Complete breathing and auto-start recording
     setIsBreathing(false);
@@ -246,7 +297,7 @@ function FluencyTherapy({ onLogout }) {
     
     // Auto-start recording after breathing
     setTimeout(() => {
-      startRecording();
+      if (!isCancelledRef.current) startRecording();
     }, 500);
   };
 
@@ -439,7 +490,7 @@ function FluencyTherapy({ onLogout }) {
     if (results) {
       try {
         const token = localStorage.getItem('token');
-        await axios.post(`${API_URL}/fluency/progress`, {
+        const fluencyPayload = {
           level: currentLevel,
           exercise_index: currentExerciseIndex,
           exercise_id: currentExercise.id,
@@ -448,7 +499,8 @@ function FluencyTherapy({ onLogout }) {
           pause_count: results.pauseCount,
           disfluencies: results.disfluencies,
           passed: results.passed
-        }, {
+        };
+        await axios.post(`${API_URL}/fluency/progress`, fluencyPayload, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -499,6 +551,8 @@ function FluencyTherapy({ onLogout }) {
     if (audioBlob) {
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
+      audioManager.setActiveAudio(audio);
+      audio.onended = () => audioManager.clearActiveAudio();
       audio.play();
     }
   };
@@ -537,7 +591,7 @@ function FluencyTherapy({ onLogout }) {
       )}
 
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="fluency-main">
@@ -592,6 +646,26 @@ function FluencyTherapy({ onLogout }) {
               </div>
               <div className="target-text">"{currentExercise.target}"</div>
               <div className="target-hint">Expected duration: ~{currentExercise.expectedDuration} seconds</div>
+            </div>
+
+            {/* Voice Speed Control */}
+            <div className="voice-speed-control">
+              <span className="voice-speed-label">🔊 Voice Speed</span>
+              <div className="voice-speed-slider-row">
+                <span className="speed-tag">Slow</span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.1"
+                  value={voiceSpeed}
+                  onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                  className="voice-speed-slider"
+                  style={{ accentColor: levelData.color }}
+                />
+                <span className="speed-tag">Fast</span>
+              </div>
+              <span className="voice-speed-value">{voiceSpeed === 1.0 ? 'Normal' : voiceSpeed < 1.0 ? `${voiceSpeed}x (Slower)` : `${voiceSpeed}x (Faster)`}</span>
             </div>
 
             {/* Automatic Flow Status */}

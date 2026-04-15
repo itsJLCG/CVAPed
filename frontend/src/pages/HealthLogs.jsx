@@ -3,7 +3,7 @@ import Header from '../components/Header';
 import { healthService, diagnosticComparisonService } from '../services/api';
 import './HealthLogs.css';
 
-function HealthLogs({ onLogout }) {
+function HealthLogs({ onLogout, onFacilityExit }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [healthLogs, setHealthLogs] = useState([]);
@@ -20,12 +20,15 @@ function HealthLogs({ onLogout }) {
   const [facilityComparison, setFacilityComparison] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     fetchHealthData();
     fetchPredictions();
     fetchFacilityComparison();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchHealthData = async () => {
+    let cancelled = false;
     try {
       setLoading(true);
       setError(null);
@@ -35,18 +38,35 @@ function HealthLogs({ onLogout }) {
         healthService.getSummary()
       ]);
 
-      setHealthLogs(logsData.logs || []);
-      setSummary(summaryData.summary || null);
+      if (!cancelled) {
+        setHealthLogs(logsData.logs || []);
+        setSummary(summaryData.summary || null);
+        
+        // Debug: Check exercise plan and gait score data
+        console.log('🔍 Health Logs Data:', logsData.logs?.filter(l => l.therapyType === 'gait').map(l => ({
+          date: l.createdAt,
+          hasExercisePlan: !!l.exercisePlan,
+          exercises: l.exercisePlan?.exercises?.length || 0,
+          hasGaitScore: !!l.gait_score,
+          gaitScore: l.gait_score?.score,
+          gaitGrade: l.gait_score?.grade
+        })));
+      }
     } catch (err) {
-      console.error('Error fetching health data:', err);
-      setError(err.response?.data?.message || 'Failed to load health data');
+      if (!cancelled) {
+        console.error('Error fetching health data:', err);
+        setError(err.response?.data?.message || 'Failed to load health data');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!cancelled) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   const fetchPredictions = async () => {
+    let cancelled = false;
     try {
       // Fetch all predictions in parallel
       const [
@@ -63,13 +83,17 @@ function HealthLogs({ onLogout }) {
         healthService.getOverallSpeechPrediction()
       ]);
 
-      if (articulationData) setPredictions(articulationData.predictions || {});
-      if (fluencyData) setFluencyPrediction(fluencyData);
-      if (receptiveData) setReceptivePrediction(receptiveData);
-      if (expressiveData) setExpressivePrediction(expressiveData);
-      if (overallData) setOverallSpeechPrediction(overallData);
+      if (!cancelled) {
+        if (articulationData) setPredictions(articulationData.predictions || {});
+        if (fluencyData) setFluencyPrediction(fluencyData);
+        if (receptiveData) setReceptivePrediction(receptiveData);
+        if (expressiveData) setExpressivePrediction(expressiveData);
+        if (overallData) setOverallSpeechPrediction(overallData);
+      }
     } catch (error) {
-      console.error('Error fetching predictions:', error);
+      if (!cancelled) {
+        console.error('Error fetching predictions:', error);
+      }
     }
   };
 
@@ -81,13 +105,16 @@ function HealthLogs({ onLogout }) {
   };
 
   const fetchFacilityComparison = async () => {
+    let cancelled = false;
     try {
       const data = await diagnosticComparisonService.getMyComparison();
-      if (data.success && data.has_facility_data) {
+      if (!cancelled && data.success && data.has_facility_data) {
         setFacilityComparison(data);
       }
     } catch (error) {
-      console.log('Facility comparison not available');
+      if (!cancelled) {
+        console.log('Facility comparison not available');
+      }
     }
   };
 
@@ -127,6 +154,26 @@ function HealthLogs({ onLogout }) {
   };
 
   const getFilteredLogs = () => {
+    if (selectedFilter === 'gait-exercises') {
+      const gaitExerciseLogs = healthLogs
+        .filter(log => log.therapyType === 'gait' && log.exercisePlan?.exercises?.length)
+        .flatMap(log => {
+          const planStatus = log.exercisePlan?.status || 'ongoing';
+          const planVisibility = log.exercisePlan?.visibility || 'active';
+          return (log.exercisePlan?.exercises || []).map((exercise, index) => ({
+            _id: `${log._id}_exercise_${index}`,
+            therapyType: 'gait-exercises',
+            exerciseName: exercise.exercise_name || `Exercise ${index + 1}`,
+            exerciseTarget: exercise.problem_targeted,
+            status: planVisibility === 'active' ? planStatus : null,
+            visibility: planVisibility,
+            createdAt: log.createdAt,
+            sessionDate: log.createdAt
+          }));
+        });
+      return showFullHistory ? gaitExerciseLogs : gaitExerciseLogs.slice(0, 20);
+    }
+
     if (selectedFilter === 'all') {
       return showFullHistory ? healthLogs : healthLogs.slice(0, 20);
     }
@@ -159,7 +206,8 @@ function HealthLogs({ onLogout }) {
       receptive: '#2196F3',
       expressive: '#2196F3',
       fluency: '#FF9800',
-      gait: '#4CAF50'
+      gait: '#4CAF50',
+      'gait-exercises': '#0ea5a4'
     };
     return colors[type] || '#666';
   };
@@ -171,7 +219,8 @@ function HealthLogs({ onLogout }) {
       receptive: '👂',
       expressive: '🗣️',
       fluency: '💬',
-      gait: '🚶'
+      gait: '🚶',
+      'gait-exercises': '🏋️'
     };
     return icons[type] || '📊';
   };
@@ -197,7 +246,7 @@ function HealthLogs({ onLogout }) {
   if (loading) {
     return (
       <div className="health-logs-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="health-logs-content">
           <div className="loading-container">
             <div className="spinner"></div>
@@ -211,7 +260,7 @@ function HealthLogs({ onLogout }) {
   if (error) {
     return (
       <div className="health-logs-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="health-logs-content">
           <div className="error-container">
             <span className="error-icon">⚠️</span>
@@ -225,7 +274,7 @@ function HealthLogs({ onLogout }) {
 
   return (
     <div className="health-logs-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <main className="health-logs-content">
         <div className="health-logs-container">
           {/* Page Header */}
@@ -523,14 +572,14 @@ function HealthLogs({ onLogout }) {
             <div className="section-header">
               <h2 className="section-title">Recent Activity</h2>
               <div className="filter-container">
-                {['all', 'articulation', 'language', 'fluency', 'gait'].map(filter => (
+                {['all', 'articulation', 'language', 'fluency', 'gait', 'gait-exercises'].map(filter => (
                   <button
                     key={filter}
                     className={`filter-button ${selectedFilter === filter ? 'active' : ''}`}
                     onClick={() => setSelectedFilter(filter)}
                   >
                     <span className="filter-icon">{filter === 'all' ? '📊' : getTherapyIcon(filter)}</span>
-                    {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    {filter === 'all' ? 'All' : filter === 'gait-exercises' ? 'Gait Exercises' : filter.charAt(0).toUpperCase() + filter.slice(1)}
                   </button>
                 ))}
               </div>
@@ -544,18 +593,67 @@ function HealthLogs({ onLogout }) {
               </div>
             ) : (
               <div className="table-wrapper">
-                <table className="logs-table">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Therapy</th>
-                      <th>Level</th>
-                      <th>Score</th>
-                      <th>Date & Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getFilteredLogs().map(log => (
+                {selectedFilter === 'gait-exercises' ? (
+                  (() => {
+                    const gaitExerciseLogs = getFilteredLogs();
+                    const showStatusColumn = gaitExerciseLogs.some(log => Boolean(log.status));
+
+                    return (
+                      <table className={`logs-table gait-exercises-table ${showStatusColumn ? 'status-visible' : ''}`}>
+                        <thead>
+                          <tr>
+                            <th>Exercise</th>
+                            <th>Target</th>
+                            {showStatusColumn && <th>Status</th>}
+                            <th>Date & Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {gaitExerciseLogs.map(log => (
+                        <tr key={log._id}>
+                          <td>
+                            <div className="therapy-cell">
+                              <span className="therapy-type">{log.exerciseName}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="therapy-detail">
+                              {log.exerciseTarget ? log.exerciseTarget.replace(/_/g, ' ') : 'General gait exercise'}
+                            </span>
+                          </td>
+                          {showStatusColumn && (
+                          <td>
+                            {log.status ? (
+                              <span className={`gait-exercise-status-badge ${log.status}`}>
+                                {log.status === 'done' ? 'Completed' : 'Ongoing'}
+                              </span>
+                            ) : (
+                              <span className="gait-exercise-status-hidden">Hidden</span>
+                            )}
+                          </td>
+                          )}
+                          <td>
+                            <span className="date-cell">{formatDate(log.createdAt)}</span>
+                          </td>
+                        </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                ) : (
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Therapy</th>
+                        <th>Level</th>
+                        <th>Score</th>
+                        <th>Date & Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getFilteredLogs().map(log => (
                       <React.Fragment key={log._id}>
                         <tr className={log.therapyType === 'gait' ? 'gait-row' : ''}>
                           <td>
@@ -610,6 +708,25 @@ function HealthLogs({ onLogout }) {
                           <tr className="gait-details-row">
                             <td colSpan="5">
                               <div className="gait-details-container">
+                                {/* Gait Score Display */}
+                                {log.gait_score && (
+                                  <div className="gait-score-section">
+                                    <div className={`gait-score-badge gait-score-${log.gait_score.color}`}>
+                                      <div className="score-circle">
+                                        <div className="score-number">{log.gait_score.score}</div>
+                                        <div className="score-label">/ 100</div>
+                                      </div>
+                                      <div className="score-info">
+                                        <div className="score-grade">
+                                          <span className="grade-emoji">{log.gait_score.grade_emoji}</span>
+                                          <span className="grade-text">{log.gait_score.grade}</span>
+                                        </div>
+                                        <div className="score-recommendation">{log.gait_score.recommendation}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                
                                 <div className="gait-metrics-grid">
                                   <div className="gait-metric-item">
                                     <i className="fas fa-shoe-prints"></i>
@@ -669,14 +786,41 @@ function HealthLogs({ onLogout }) {
                                     </div>
                                   </div>
                                 )}
+                                {log.exercisePlan && log.exercisePlan.exercises && log.exercisePlan.exercises.length > 0 && (
+                                  <div className="gait-exercises-summary">
+                                    <div className="exercises-header">
+                                      <i className="fas fa-dumbbell"></i>
+                                      <strong>Recommended Exercises ({log.exercisePlan.exercises.length})</strong>
+                                    </div>
+                                    <div className="exercises-list">
+                                      {log.exercisePlan.exercises.map((exercise, idx) => (
+                                        <div key={idx} className="exercise-item-card">
+                                          <div className="exercise-number">{idx + 1}</div>
+                                          <div className="exercise-info">
+                                            <div className="exercise-title">{exercise.exercise_name}</div>
+                                            <div className="exercise-meta">
+                                              <span className="exercise-target">
+                                                <i className="fas fa-bullseye"></i> {exercise.problem_targeted?.replace(/_/g, ' ')}
+                                              </span>
+                                              <span className="exercise-difficulty">
+                                                <i className="fas fa-signal"></i> {exercise.difficulty}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
                         )}
                       </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
 

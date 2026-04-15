@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { successStoryService } from '../services/api';
 import './SuccessStoriesSection.css';
 
-const API_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
 
 function SuccessStoriesSection() {
   const navigate = useNavigate();
@@ -11,14 +11,10 @@ function SuccessStoriesSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const sectionRef = useRef(null);
-  const carouselRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
-  
-  // Carousel state
+
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
-  const [cardsPerView, setCardsPerView] = useState(4);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
@@ -27,27 +23,6 @@ function SuccessStoriesSection() {
     fetchStories();
   }, []);
 
-  // Handle responsive cards per view
-  useEffect(() => {
-    const handleResize = () => {
-      const width = window.innerWidth;
-      if (width < 576) {
-        setCardsPerView(1);
-      } else if (width < 768) {
-        setCardsPerView(2);
-      } else if (width < 1024) {
-        setCardsPerView(3);
-      } else {
-        setCardsPerView(4);
-      }
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Intersection Observer for scroll animation
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -66,16 +41,33 @@ function SuccessStoriesSection() {
     return () => observer.disconnect();
   }, []);
 
-  // Auto-play carousel
+  const slides = useMemo(() => {
+    return stories.flatMap((story) => {
+      const images = story.images && story.images.length > 0 ? story.images : [null];
+      return images.map((image, imageIndex) => ({
+        story,
+        image,
+        imageIndex,
+        totalImages: images.length,
+      }));
+    });
+  }, [stories]);
+
   useEffect(() => {
-    if (!isAutoPlaying || isPaused || stories.length <= cardsPerView) return;
+    if (isPaused || slides.length <= 1) return;
 
     const interval = setInterval(() => {
       goToNext();
-    }, 5000);
+    }, 5500);
 
     return () => clearInterval(interval);
-  }, [isAutoPlaying, isPaused, currentIndex, stories.length, cardsPerView]);
+  }, [isPaused, currentIndex, slides.length]);
+
+  useEffect(() => {
+    if (currentIndex > 0 && currentIndex >= slides.length) {
+      setCurrentIndex(0);
+    }
+  }, [slides.length, currentIndex]);
 
   const fetchStories = async () => {
     try {
@@ -95,30 +87,19 @@ function SuccessStoriesSection() {
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
-    return `${API_URL}/${imagePath}`;
+    return `${API_BASE_URL}/${imagePath}`;
   };
 
-  const truncateText = (text, maxLength = 120) => {
+  const truncateText = (text, maxLength = 260) => {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength).trim() + '...';
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
   };
 
   const handleReadMore = (storyId) => {
     navigate(`/success-story/${storyId}`);
   };
 
-  // Carousel navigation
-  const maxIndex = Math.max(0, stories.length - cardsPerView);
+  const maxIndex = Math.max(0, slides.length - 1);
 
   const goToNext = useCallback(() => {
     setCurrentIndex(prev => (prev >= maxIndex ? 0 : prev + 1));
@@ -129,10 +110,9 @@ function SuccessStoriesSection() {
   }, [maxIndex]);
 
   const goToSlide = (index) => {
-    setCurrentIndex(Math.min(index, maxIndex));
+    setCurrentIndex(index);
   };
 
-  // Touch/Drag handlers for swipe
   const handleDragStart = (e) => {
     setIsDragging(true);
     setDragStart(e.type === 'touchstart' ? e.touches[0].clientX : e.clientX);
@@ -148,7 +128,7 @@ function SuccessStoriesSection() {
   const handleDragEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
-    
+
     if (Math.abs(dragOffset) > 50) {
       if (dragOffset > 0) {
         goToPrev();
@@ -159,17 +139,11 @@ function SuccessStoriesSection() {
     setDragOffset(0);
   };
 
-  // Calculate carousel transform
   const getCarouselTransform = () => {
-    const cardWidth = 100 / cardsPerView;
-    const baseTransform = -(currentIndex * cardWidth);
-    const dragTransform = isDragging ? (dragOffset / (carouselRef.current?.offsetWidth || 1)) * 100 : 0;
+    const baseTransform = -(currentIndex * 100);
+    const dragTransform = isDragging ? (dragOffset / Math.max(window.innerWidth, 1)) * 100 : 0;
     return `translateX(${baseTransform + dragTransform}%)`;
   };
-
-  // Generate dot indicators
-  const totalDots = Math.ceil(stories.length / cardsPerView);
-  const activeDot = Math.floor(currentIndex / cardsPerView);
 
   if (loading) {
     return (
@@ -222,13 +196,12 @@ function SuccessStoriesSection() {
         <h2 className="section-title animate-title">Success Stories</h2>
         <p className="section-subtitle animate-subtitle">Inspiring journeys of recovery and achievement</p>
         
-        <div 
+        <div
           className="carousel-wrapper"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
-          {/* Navigation Arrows */}
-          {stories.length > cardsPerView && (
+          {slides.length > 1 && (
             <button 
               className="carousel-arrow carousel-arrow-prev"
               onClick={goToPrev}
@@ -238,9 +211,11 @@ function SuccessStoriesSection() {
             </button>
           )}
 
-          <div 
+          <div
             className="carousel-viewport"
-            ref={carouselRef}
+            role="button"
+            tabIndex={0}
+            aria-label="Success stories carousel"
             onMouseDown={handleDragStart}
             onMouseMove={handleDragMove}
             onMouseUp={handleDragEnd}
@@ -248,28 +223,26 @@ function SuccessStoriesSection() {
             onTouchStart={handleDragStart}
             onTouchMove={handleDragMove}
             onTouchEnd={handleDragEnd}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') goToPrev();
+              if (e.key === 'ArrowRight') goToNext();
+            }}
           >
             <div 
               className={`carousel-track ${isDragging ? 'dragging' : ''}`}
-              style={{ 
-                transform: getCarouselTransform(),
-                '--cards-per-view': cardsPerView
-              }}
+              style={{ transform: getCarouselTransform() }}
             >
-              {stories.map((story, index) => (
-                <article 
-                  key={story._id || story.id} 
-                  className={`story-card ${isVisible ? 'animate' : ''}`}
-                  style={{ 
-                    animationDelay: `${Math.min(index, 4) * 0.1}s`,
-                    '--card-index': index
-                  }}
+              {slides.map((slide, index) => (
+                <article
+                  key={`${slide.story._id || slide.story.id}-${slide.imageIndex}`}
+                  className={`story-slide ${isVisible ? 'animate' : ''}`}
+                  style={{ animationDelay: `${Math.min(index, 1) * 0.1}s` }}
                 >
-                  <div className="story-image-container">
-                    {story.images && story.images.length > 0 ? (
-                      <img 
-                        src={getImageUrl(story.images[0])} 
-                        alt={`${story.patientName}'s story`}
+                  <div className="slide-image-panel">
+                    {slide.image ? (
+                      <img
+                        src={getImageUrl(slide.image)}
+                        alt={`Success story ${index + 1}`}
                         className="story-image"
                         loading="lazy"
                       />
@@ -278,21 +251,21 @@ function SuccessStoriesSection() {
                         <span className="placeholder-icon">🌟</span>
                       </div>
                     )}
-                    {story.images && story.images.length > 1 && (
-                      <div className="image-count-badge">
-                        +{story.images.length - 1} more
-                      </div>
-                    )}
-                    <div className="image-overlay"></div>
                   </div>
-                  
-                  <div className="story-content">
-                    <h3 className="story-patient-name">{story.patientName}</h3>
-                    <p className="story-date">{formatDate(story.createdAt)}</p>
-                    <p className="story-excerpt">{truncateText(story.story)}</p>
-                    <button 
+
+                  <div className="slide-content-panel">
+                    <h3 className="story-title">Success Story</h3>
+                    <p className="story-excerpt">{truncateText(slide.story.story)}</p>
+
+                    {slide.totalImages > 1 && (
+                      <p className="story-image-meta">
+                        Image {slide.imageIndex + 1} of {slide.totalImages}
+                      </p>
+                    )}
+
+                    <button
                       className="read-more-btn"
-                      onClick={() => handleReadMore(story._id || story.id)}
+                      onClick={() => handleReadMore(slide.story._id || slide.story.id)}
                     >
                       <span className="btn-text">Read Full Story</span>
                       <span className="btn-arrow">→</span>
@@ -303,7 +276,7 @@ function SuccessStoriesSection() {
             </div>
           </div>
 
-          {stories.length > cardsPerView && (
+          {slides.length > 1 && (
             <button 
               className="carousel-arrow carousel-arrow-next"
               onClick={goToNext}
@@ -314,43 +287,19 @@ function SuccessStoriesSection() {
           )}
         </div>
 
-        {/* Carousel Dots */}
-        {stories.length > cardsPerView && (
+        {slides.length > 1 && (
           <div className="carousel-dots">
-            {Array.from({ length: totalDots }).map((_, index) => (
+            {slides.map((_, index) => (
               <button
                 key={index}
-                className={`carousel-dot ${index === activeDot ? 'active' : ''}`}
-                onClick={() => goToSlide(index * cardsPerView)}
+                className={`carousel-dot ${index === currentIndex ? 'active' : ''}`}
+                onClick={() => goToSlide(index)}
                 aria-label={`Go to slide ${index + 1}`}
               />
             ))}
           </div>
         )}
 
-        {/* Auto-play indicator */}
-        {stories.length > cardsPerView && (
-          <div className="carousel-controls">
-            <button 
-              className={`autoplay-toggle ${isAutoPlaying ? 'playing' : ''}`}
-              onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-              aria-label={isAutoPlaying ? 'Pause slideshow' : 'Play slideshow'}
-            >
-              {isAutoPlaying ? '⏸' : '▶'}
-            </button>
-          </div>
-        )}
-
-        {stories.length > 4 && (
-          <div className="view-all-container">
-            <button 
-              className="view-all-btn"
-              onClick={() => navigate('/success-stories')}
-            >
-              View All Success Stories
-            </button>
-          </div>
-        )}
       </div>
     </section>
   );

@@ -9,6 +9,9 @@ import taguigPRU from './CVACare_TPMRU.jpeg';
 import imageBig from './CVACare_ImageBig.png';
 import physicalTherapy from './CVACare_Physical_Therapy.png';
 import speechTherapy from './CVACare_Speech_Therapy.png';
+import cvapedQr from './CVAPed_QR.png';
+import hardwareFoot from './Hardware_Foot.png';
+import hardwareWaist from './Hardware_Waist.png';
 
 // Team photos
 import mayorLani from './team/mayor_lani.png';
@@ -27,8 +30,10 @@ export const images = {
   imageBig: imageBig, // CVACare big image for auth pages
   
   // Device screenshots
-  webSystem: null, // Add web system screenshot when available
+  webSystem: cvapedQr, // CVAPed application QR code
   mobileApp: mobileApp, // CVACare Android mobile app screenshot
+  hardwareFoot: hardwareFoot, // CVAPed foot wearable hardware image
+  hardwareWaist: hardwareWaist, // CVAPed waist wearable hardware image
   
   // Partner logos
   tupLogo: tupLogo, // TUP logo

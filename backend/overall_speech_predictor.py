@@ -356,7 +356,7 @@ class OverallSpeechPredictor:
         print(f"\n📈 Model Performance:")
         print(f"   MAE:  {mae:.2f} weeks")
         print(f"   RMSE: {rmse:.2f} weeks")
-        print(f"   R²:   {r2:.4f}")
+        print(f"   R2:   {r2:.4f}")
         
         # Save model
         os.makedirs(os.path.dirname(self.model_path), exist_ok=True)

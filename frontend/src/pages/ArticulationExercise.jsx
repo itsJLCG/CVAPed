@@ -2,9 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
+import { useVoiceSettings } from '../components/VoiceSettingsContext';
 import WaveSurfer from 'wavesurfer.js';
 import { articulationService, articulationExerciseService } from '../services/api';
+import audioManager from '../services/audioManager';
 import './ArticulationExercise.css';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Exercise data will be loaded from database
 // Keeping this for metadata only (colors, names, etc.)
@@ -16,16 +20,32 @@ const soundMetadata = {
   th: { name: 'TH Sound', color: '#27ae60' }
 };
 
-function ArticulationExercise({ onLogout }) {
+function ArticulationExercise({ onLogout, onFacilityExit }) {
   const { soundId } = useParams();
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
+  const { voiceSpeed, setVoiceSpeed } = useVoiceSettings();
   
   // Ensure the category is set to 'speech' when this page is loaded
   useEffect(() => {
     selectCategory('speech');
   }, [selectCategory]);
-  
+
+  // Stop all speech synthesis when this component unmounts (e.g. on logout)
+  useEffect(() => {
+    // Register with audioManager so Header logout can cancel speech immediately,
+    // before React unmounts this component
+    const unregister = audioManager.registerAbortCallback('ArticulationExercise', () => {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    });
+    return () => {
+      unregister();
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const [currentLevel, setCurrentLevel] = useState(1);
   const [currentItem, setCurrentItem] = useState(0);
   const [currentTrial, setCurrentTrial] = useState(1);
@@ -234,7 +254,7 @@ function ArticulationExercise({ onLogout }) {
       formData.append('target', currentTarget);
       formData.append('trial', currentTrial);
 
-      const response = await fetch('http://localhost:5000/api/articulation/record', {
+      const response = await fetch(`${API_URL}/articulation/record`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -326,6 +346,9 @@ function ArticulationExercise({ onLogout }) {
 
   const playModelAudio = () => {
     if ('speechSynthesis' in window) {
+      // Always cancel any in-progress speech before starting a new utterance.
+      // No isCancelledRef needed here — playModelAudio is a one-shot synchronous
+      // speak() call, not an async chain, so cancel() alone is sufficient.
       window.speechSynthesis.cancel();
 
       // Get phonetic representation if it exists, otherwise use original
@@ -334,14 +357,15 @@ function ArticulationExercise({ onLogout }) {
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
       
       // For isolated sounds (level 1), use slower rate and emphasize the sound
+      // Multiply base rate by user-selected voice speed
       if (currentLevel === 1) {
-        utterance.rate = 0.6;  // Very slow for isolated sounds
-        utterance.pitch = 1.1;  // Slightly higher pitch for clarity
+        utterance.rate = 0.6 * voiceSpeed;
+        utterance.pitch = 1.1;
       } else if (currentLevel === 2) {
-        utterance.rate = 0.7;  // Slow for syllables
+        utterance.rate = 0.7 * voiceSpeed;
         utterance.pitch = 1.0;
       } else {
-        utterance.rate = 0.85;  // Near-normal for words/phrases/sentences
+        utterance.rate = 0.85 * voiceSpeed;
         utterance.pitch = 1.0;
       }
       
@@ -373,7 +397,7 @@ function ArticulationExercise({ onLogout }) {
 
   const saveProgressToServer = async (completed = false) => {
     try {
-      await articulationService.saveProgress({
+      const progressPayload = {
         sound_id: soundId,
         level: currentLevel,
         item_index: currentItem,
@@ -388,7 +412,8 @@ function ArticulationExercise({ onLogout }) {
           fluency_score: d.fluency_score,
           transcription: d.transcription
         }))
-      });
+      };
+      await articulationService.saveProgress(progressPayload);
       console.log('Progress saved successfully');
     } catch (error) {
       console.error('Error saving progress:', error);
@@ -514,7 +539,7 @@ function ArticulationExercise({ onLogout }) {
   return (
     <div className="articulation-exercise-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="exercise-main">
@@ -553,6 +578,24 @@ function ArticulationExercise({ onLogout }) {
                   <button className="model-btn" onClick={playModelAudio}>
                     <span className="btn-icon">▶</span> Play Model Audio
                   </button>
+                  <div className="voice-speed-control">
+                    <span className="voice-speed-label">🔊 Voice Speed</span>
+                    <div className="voice-speed-slider-row">
+                      <span className="speed-tag">Slow</span>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="1.5"
+                        step="0.1"
+                        value={voiceSpeed}
+                        onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                        className="voice-speed-slider"
+                        style={{ accentColor: soundData.color }}
+                      />
+                      <span className="speed-tag">Fast</span>
+                    </div>
+                    <span className="voice-speed-value">{voiceSpeed === 1.0 ? 'Normal' : voiceSpeed < 1.0 ? `${voiceSpeed}x (Slower)` : `${voiceSpeed}x (Faster)`}</span>
+                  </div>
                 </div>
 
                 {/* Recording Section - Shows after audio play */}

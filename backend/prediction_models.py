@@ -8,6 +8,9 @@ import os
 import sys
 import requests
 from flask import jsonify
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Therapy service URL (Python Flask service running on port 5001)
 THERAPY_SERVICE_URL = os.getenv('THERAPY_SERVICE_URL', 'http://localhost:5001')
@@ -41,10 +44,11 @@ class PredictionService:
                     'error': f'Prediction failed: {response.status_code}'
                 }
         except Exception as e:
+            logger.error(f"Error predicting articulation mastery: {e}", exc_info=True)
             print(f"Error predicting articulation mastery: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'Prediction failed'
             }
     
     def predict_fluency_mastery(self, user_id):
@@ -66,10 +70,11 @@ class PredictionService:
                     'error': f'Prediction failed: {response.status_code}'
                 }
         except Exception as e:
+            logger.error(f"Error predicting fluency mastery: {e}", exc_info=True)
             print(f"Error predicting fluency mastery: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'Prediction failed'
             }
     
     def predict_language_mastery(self, user_id, mode='receptive'):
@@ -95,10 +100,11 @@ class PredictionService:
                     'error': f'Prediction failed: {response.status_code}'
                 }
         except Exception as e:
+            logger.error(f"Error predicting language mastery: {e}", exc_info=True)
             print(f"Error predicting language mastery: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'Prediction failed'
             }
     
     def predict_overall_improvement(self, user_id):
@@ -120,10 +126,11 @@ class PredictionService:
                     'error': f'Prediction failed: {response.status_code}'
                 }
         except Exception as e:
+            logger.error(f"Error predicting overall improvement: {e}", exc_info=True)
             print(f"Error predicting overall improvement: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'Prediction failed'
             }
     
     def get_all_predictions(self, user_id):
@@ -167,8 +174,9 @@ class PredictionService:
                 'predictions': predictions
             }
         except Exception as e:
+            logger.error(f"Error getting all predictions: {e}", exc_info=True)
             print(f"Error getting all predictions: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': 'Failed to get predictions'
             }

@@ -4,7 +4,7 @@ import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import './ArticulationTherapy.css';
 
-function ArticulationTherapy({ onLogout }) {
+function ArticulationTherapy({ onLogout, onFacilityExit }) {
   const [selectedSound, setSelectedSound] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const navigate = useNavigate();
@@ -92,7 +92,7 @@ function ArticulationTherapy({ onLogout }) {
   return (
     <div className="articulation-therapy-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="articulation-main">

@@ -1,26 +1,168 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import { predictionService } from '../services/api';
 import './Prediction.css';
 import './BlankPage.css';
 
-function Prediction({ onLogout }) {
+const clampPercent = (value) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+
+const formatPercent = (value) => `${Math.round(clampPercent(value))}%`;
+
+const buildProgressMeta = (prediction) => {
+  if (!prediction) {
+    return {
+      progressPercent: 0,
+      confidencePercent: 0,
+      performancePercent: 0,
+    };
+  }
+
+  const confidencePercent = clampPercent((prediction.confidence || 0) * 100);
+  const performancePercent = clampPercent((prediction.current_performance || prediction.current_accuracy || 0) * 100);
+
+  if (typeof prediction.current_exercises_completed === 'number' && typeof prediction.total_exercises === 'number' && prediction.total_exercises > 0) {
+    return {
+      progressPercent: clampPercent((prediction.current_exercises_completed / prediction.total_exercises) * 100),
+      confidencePercent,
+      performancePercent,
+    };
+  }
+
+  if (typeof prediction.current_level === 'number') {
+    return {
+      progressPercent: clampPercent(((prediction.current_level - 1) / 4) * 100),
+      confidencePercent,
+      performancePercent,
+    };
+  }
+
+  return {
+    progressPercent: performancePercent,
+    confidencePercent,
+    performancePercent,
+  };
+};
+
+function PredictionProgress({ label, value, tone = 'primary' }) {
+  return (
+    <div className="prediction-progress-block">
+      <div className="prediction-progress-header">
+        <span className="prediction-progress-label">{label}</span>
+        <span className="prediction-progress-value">{formatPercent(value)}</span>
+      </div>
+      <div className="prediction-progress-track">
+        <div className={`prediction-progress-fill ${tone}`} style={{ width: `${clampPercent(value)}%` }}></div>
+      </div>
+    </div>
+  );
+}
+
+function SpeechPredictionCharts({ predictions }) {
+  const articulationEntries = Object.entries(predictions?.articulation || {}).map(([soundKey, prediction]) => {
+    const progressMeta = buildProgressMeta(prediction);
+    return {
+      key: `articulation-${soundKey}`,
+      label: `${soundKey.toUpperCase()} Sound`,
+      days: prediction.predicted_days || 0,
+      progress: progressMeta.progressPercent,
+      confidence: progressMeta.confidencePercent,
+      color: '#3b82f6',
+    };
+  });
+
+  const therapyEntries = [
+    predictions?.fluency && {
+      key: 'fluency',
+      label: 'Fluency',
+      days: predictions.fluency.predicted_days || 0,
+      progress: buildProgressMeta(predictions.fluency).progressPercent,
+      confidence: buildProgressMeta(predictions.fluency).confidencePercent,
+      color: '#10b981',
+    },
+    predictions?.receptive && {
+      key: 'receptive',
+      label: 'Receptive',
+      days: predictions.receptive.predicted_days || 0,
+      progress: buildProgressMeta(predictions.receptive).progressPercent,
+      confidence: buildProgressMeta(predictions.receptive).confidencePercent,
+      color: '#f59e0b',
+    },
+    predictions?.expressive && {
+      key: 'expressive',
+      label: 'Expressive',
+      days: predictions.expressive.predicted_days || 0,
+      progress: buildProgressMeta(predictions.expressive).progressPercent,
+      confidence: buildProgressMeta(predictions.expressive).confidencePercent,
+      color: '#8b5cf6',
+    },
+  ].filter(Boolean);
+
+  const timelineData = [...articulationEntries, ...therapyEntries];
+  const progressData = timelineData.map((item) => ({
+    key: item.key,
+    label: item.label,
+    progress: Math.round(item.progress),
+    confidence: Math.round(item.confidence),
+    color: item.color,
+  }));
+
+  if (!timelineData.length) return null;
+
+  return (
+    <div className="speech-chart-grid">
+      <div className="speech-chart-card">
+        <div className="speech-chart-header">
+          <h3>Predicted Days to Mastery</h3>
+          <p>Estimated therapy days needed based on the current speech prediction models.</p>
+        </div>
+        <div className="speech-chart-body">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={timelineData} margin={{ top: 10, right: 10, left: -10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-15} textAnchor="end" height={58} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
+              <Tooltip formatter={(value) => [`${value} days`, 'Prediction']} />
+              <Bar dataKey="days" radius={[8, 8, 0, 0]}>
+                {timelineData.map((item) => (
+                  <Cell key={item.key} fill={item.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="speech-chart-card">
+        <div className="speech-chart-header">
+          <h3>Progress and Confidence</h3>
+          <p>Percent-based view of current progress versus model confidence across speech therapies.</p>
+        </div>
+        <div className="speech-chart-body">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={progressData} margin={{ top: 10, right: 10, left: -10, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-15} textAnchor="end" height={58} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <Tooltip formatter={(value) => [`${value}%`, '']} />
+              <Bar dataKey="progress" name="Progress" radius={[8, 8, 0, 0]} fill="#ce3630" />
+              <Bar dataKey="confidence" name="Confidence" radius={[8, 8, 0, 0]} fill="#94a3b8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Prediction({ onLogout, onFacilityExit }) {
   const { selectedCategory } = useTherapyCategory();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [predictions, setPredictions] = useState(null);
 
-  useEffect(() => {
-    // Only fetch predictions for speech therapy
-    if (selectedCategory === 'speech') {
-      fetchPredictions();
-    } else {
-      setLoading(false);
-    }
-  }, [selectedCategory]);
-
-  const fetchPredictions = async () => {
+  const fetchPredictions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -37,7 +179,15 @@ function Prediction({ onLogout }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (selectedCategory === 'speech' || selectedCategory === 'physical') {
+      fetchPredictions();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchPredictions, selectedCategory]);
 
   const renderOverallCard = () => {
     if (!predictions?.overall) return null;
@@ -70,7 +220,8 @@ function Prediction({ onLogout }) {
 
         <div className="prediction-hero-right">
           <div className="accuracy-circle">
-            <svg viewBox="0 0 36 36" className="circular-chart">
+            <svg viewBox="0 0 36 36" className="circular-chart" role="img" aria-label="Overall speech progress">
+              <title>Overall speech progress</title>
               <path className="circle-bg"
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
@@ -113,11 +264,16 @@ function Prediction({ onLogout }) {
         <div className="prediction-table">
           {Object.entries(predictions.articulation).map(([sound, prediction]) => {
             const confidencePercent = Math.round(prediction.confidence * 100);
+            const { progressPercent, performancePercent } = buildProgressMeta(prediction);
             return (
               <div key={sound} className="table-row">
                 <div className="row-left">
                   <span className="row-name">{soundNames[sound]}</span>
                   <span className="row-meta">Level {prediction.current_level}/5 • {confidencePercent}% confidence</span>
+                  <div className="prediction-inline-metrics">
+                    <PredictionProgress label="Level Progress" value={progressPercent} tone="primary" />
+                    <PredictionProgress label="Current Accuracy" value={performancePercent} tone="warm" />
+                  </div>
                 </div>
                 <div className="row-right">
                   <span className="row-value">{prediction.predicted_days}</span>
@@ -136,6 +292,7 @@ function Prediction({ onLogout }) {
 
     const fluency = predictions.fluency;
     const confidencePercent = Math.round(fluency.confidence * 100);
+    const { progressPercent, performancePercent } = buildProgressMeta(fluency);
 
     return (
       <div className="therapy-section">
@@ -159,6 +316,12 @@ function Prediction({ onLogout }) {
             <span className="detail-separator">•</span>
             <span className="detail-item confidence-text">{confidencePercent}% confidence</span>
           </div>
+        </div>
+
+        <div className="prediction-progress-panel">
+          <PredictionProgress label="Therapy Progress" value={progressPercent} tone="success" />
+          <PredictionProgress label="Current Fluency Score" value={performancePercent} tone="success-soft" />
+          <PredictionProgress label="Prediction Confidence" value={confidencePercent} tone="neutral" />
         </div>
       </div>
     );
@@ -195,6 +358,24 @@ function Prediction({ onLogout }) {
                 <span className="detail-item confidence-text">{Math.round(predictions.receptive.confidence * 100)}% confidence</span>
               </div>
             </div>
+
+            <div className="prediction-progress-panel">
+              <PredictionProgress
+                label="Exercises Completed"
+                value={buildProgressMeta(predictions.receptive).progressPercent}
+                tone="warm"
+              />
+              <PredictionProgress
+                label="Current Accuracy"
+                value={(predictions.receptive.current_accuracy || 0) * 100}
+                tone="warm-soft"
+              />
+              <PredictionProgress
+                label="Prediction Confidence"
+                value={(predictions.receptive.confidence || 0) * 100}
+                tone="neutral"
+              />
+            </div>
           </div>
         )}
 
@@ -221,16 +402,341 @@ function Prediction({ onLogout }) {
                 <span className="detail-item confidence-text">{Math.round(predictions.expressive.confidence * 100)}% confidence</span>
               </div>
             </div>
+
+            <div className="prediction-progress-panel">
+              <PredictionProgress
+                label="Exercises Completed"
+                value={buildProgressMeta(predictions.expressive).progressPercent}
+                tone="purple"
+              />
+              <PredictionProgress
+                label="Current Accuracy"
+                value={(predictions.expressive.current_accuracy || 0) * 100}
+                tone="purple-soft"
+              />
+              <PredictionProgress
+                label="Prediction Confidence"
+                value={(predictions.expressive.confidence || 0) * 100}
+                tone="neutral"
+              />
+            </div>
           </div>
         )}
       </>
     );
   };
 
+  const renderGaitCard = () => {
+    if (!predictions?.gait) return null;
+
+    const gait = predictions.gait;
+    const confidencePercent = Math.round(gait.confidence * 100);
+    const daysPerWeek = gait.total_sessions / (gait.days_practicing / 7);
+
+    return (
+      <div className="gait-clinical-container">
+        {/* Header Section */}
+        <div className="clinical-header">
+          <div className="clinical-title-section">
+            <div className="clinical-icon">
+              <i className="fas fa-brain"></i>
+            </div>
+            <div>
+              <h2>XGBoost Gait Recovery Prediction</h2>
+              <p className="clinical-subtitle">Machine Learning-Based Rehabilitation Timeline Estimation</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Prediction Card */}
+        <div className="clinical-prediction-main">
+          <div className="prediction-primary">
+            <div className="prediction-label">Estimated Days to Healthy Gait</div>
+            <div className="prediction-value">
+              <span className="days-number">{gait.predicted_days}</span>
+              <span className="days-unit">days</span>
+              <span className="weeks-conversion">({Math.round(gait.predicted_days / 7)} weeks)</span>
+            </div>
+            <div className="confidence-indicator">
+              <div className="confidence-bar-container">
+                <div className="confidence-bar-fill" style={{ width: `${confidencePercent}%` }}></div>
+              </div>
+              <span className="confidence-text">Model Confidence: {confidencePercent}%</span>
+            </div>
+          </div>
+
+          <div className="prediction-methodology">
+            <h4><i className="fas fa-flask"></i> Prediction Methodology</h4>
+            <div className="methodology-grid">
+              <div className="method-item">
+                <span className="method-label">Algorithm:</span>
+                <span className="method-value">XGBoost Regression</span>
+              </div>
+              <div className="method-item">
+                <span className="method-label">Training Samples:</span>
+                <span className="method-value">37 completed recoveries</span>
+              </div>
+              <div className="method-item">
+                <span className="method-label">Model Accuracy:</span>
+                <span className="method-value">R² = 0.839 (MAE: 8.5 days)</span>
+              </div>
+              <div className="method-item">
+                <span className="method-label">Features Analyzed:</span>
+                <span className="method-value">53 gait parameters</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Patient Data Summary */}
+        <div className="clinical-data-section">
+          <h3><i className="fas fa-chart-line"></i> Current Patient Data</h3>
+          <div className="data-summary-grid">
+            <div className="data-card">
+              <i className="fas fa-calendar-check"></i>
+              <div className="data-content">
+                <span className="data-value">{gait.total_sessions}</span>
+                <span className="data-label">Sessions Completed</span>
+              </div>
+            </div>
+            <div className="data-card">
+              <i className="fas fa-clock"></i>
+              <div className="data-content">
+                <span className="data-value">{gait.days_practicing}</span>
+                <span className="data-label">Days Since Start</span>
+              </div>
+            </div>
+            <div className="data-card">
+              <i className="fas fa-running"></i>
+              <div className="data-content">
+                <span className="data-value">{daysPerWeek.toFixed(1)}</span>
+                <span className="data-label">Sessions/Week</span>
+              </div>
+            </div>
+            <div className="data-card">
+              <i className="fas fa-arrow-trend-up"></i>
+              <div className="data-content">
+                <span className="data-value">{(gait.improvement_rate * 100).toFixed(2)}%</span>
+                <span className="data-label">Daily Improvement Rate</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Feature Importance */}
+        <div className="clinical-data-section">
+          <h3><i className="fas fa-weight-hanging"></i> Key Predictive Features</h3>
+          <p className="section-description">
+            The model weighs these factors to calculate your personalized timeline. 
+            Higher impact features have greater influence on the prediction.
+          </p>
+          <div className="feature-importance-list">
+            <div className="feature-item">
+              <div className="feature-bar" style={{ width: '100%', background: '#3b82f6' }}>
+                <span className="feature-name">Total Sessions Completed</span>
+                <span className="feature-weight">47.8%</span>
+              </div>
+              <p className="feature-explanation">Most critical factor - consistent practice accelerates recovery</p>
+            </div>
+            <div className="feature-item">
+              <div className="feature-bar" style={{ width: '60%', background: '#10b981' }}>
+                <span className="feature-name">Days Since First Session</span>
+                <span className="feature-weight">9.5%</span>
+              </div>
+              <p className="feature-explanation">Recovery time correlates with practice duration</p>
+            </div>
+            <div className="feature-item">
+              <div className="feature-bar" style={{ width: '50%', background: '#f59e0b' }}>
+                <span className="feature-name">Average Fatigue Level</span>
+                <span className="feature-weight">8.2%</span>
+              </div>
+              <p className="feature-explanation">Lower fatigue indicates better physiological adaptation</p>
+            </div>
+            <div className="feature-item">
+              <div className="feature-bar" style={{ width: '40%', background: '#8b5cf6' }}>
+                <span className="feature-name">Initial Velocity</span>
+                <span className="feature-weight">5.9%</span>
+              </div>
+              <p className="feature-explanation">Baseline walking speed predicts recovery trajectory</p>
+            </div>
+            <div className="feature-item">
+              <div className="feature-bar" style={{ width: '35%', background: '#ec4899' }}>
+                <span className="feature-name">Initial Cadence</span>
+                <span className="feature-weight">4.9%</span>
+              </div>
+              <p className="feature-explanation">Starting step frequency affects timeline</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Gait Metrics Progress */}
+        {gait.metric_progress && (
+          <div className="clinical-data-section">
+            <h3><i className="fas fa-stethoscope"></i> Clinical Gait Parameters</h3>
+            <p className="section-description">
+              Current measurements compared to healthy adult thresholds (PhysioNet standards).
+              All six parameters must reach target values for successful recovery.
+            </p>
+            <div className="clinical-metrics-grid">
+              {/* Cadence */}
+              <div className="clinical-metric-card">
+                <div className="metric-header">
+                  <i className="fas fa-shoe-prints"></i>
+                  <span className="metric-title">Cadence</span>
+                  {gait.metric_progress.cadence?.is_healthy && <span className="healthy-badge">✓ Healthy</span>}
+                </div>
+                <div className="metric-values">
+                  <span className="current-val">{gait.metric_progress.cadence?.current?.toFixed(1)}</span>
+                  <span className="unit">steps/min</span>
+                </div>
+                <div className="metric-bar-clinical">
+                  <div className="bar-fill-clinical" style={{ 
+                    width: `${Math.min(100, (gait.metric_progress.cadence?.current / gait.metric_progress.cadence?.target) * 100)}%`,
+                    background: gait.metric_progress.cadence?.is_healthy ? '#10b981' : '#f59e0b'
+                  }}></div>
+                </div>
+                <div className="metric-footer">
+                  <span>Target: {gait.metric_progress.cadence?.target}</span>
+                  <span className="deficit">Deficit: {gait.metric_progress.cadence?.deficit?.toFixed(1)}</span>
+                </div>
+              </div>
+
+              {/* Velocity */}
+              <div className="clinical-metric-card">
+                <div className="metric-header">
+                  <i className="fas fa-gauge-high"></i>
+                  <span className="metric-title">Walking Velocity</span>
+                  {gait.metric_progress.velocity?.is_healthy && <span className="healthy-badge">✓ Healthy</span>}
+                </div>
+                <div className="metric-values">
+                  <span className="current-val">{gait.metric_progress.velocity?.current?.toFixed(2)}</span>
+                  <span className="unit">m/s</span>
+                </div>
+                <div className="metric-bar-clinical">
+                  <div className="bar-fill-clinical" style={{ 
+                    width: `${Math.min(100, (gait.metric_progress.velocity?.current / gait.metric_progress.velocity?.target) * 100)}%`,
+                    background: gait.metric_progress.velocity?.is_healthy ? '#10b981' : '#f59e0b'
+                  }}></div>
+                </div>
+                <div className="metric-footer">
+                  <span>Target: {gait.metric_progress.velocity?.target} m/s</span>
+                  <span className="deficit">Deficit: {gait.metric_progress.velocity?.deficit?.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Stride Length */}
+              <div className="clinical-metric-card">
+                <div className="metric-header">
+                  <i className="fas fa-ruler-horizontal"></i>
+                  <span className="metric-title">Stride Length</span>
+                  {gait.metric_progress.stride_length?.is_healthy && <span className="healthy-badge">✓ Healthy</span>}
+                </div>
+                <div className="metric-values">
+                  <span className="current-val">{gait.metric_progress.stride_length?.current?.toFixed(2)}</span>
+                  <span className="unit">meters</span>
+                </div>
+                <div className="metric-bar-clinical">
+                  <div className="bar-fill-clinical" style={{ 
+                    width: `${Math.min(100, (gait.metric_progress.stride_length?.current / gait.metric_progress.stride_length?.target) * 100)}%`,
+                    background: gait.metric_progress.stride_length?.is_healthy ? '#10b981' : '#f59e0b'
+                  }}></div>
+                </div>
+                <div className="metric-footer">
+                  <span>Target: {gait.metric_progress.stride_length?.target}m</span>
+                  <span className="deficit">Deficit: {gait.metric_progress.stride_length?.deficit?.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Stability */}
+              <div className="clinical-metric-card">
+                <div className="metric-header">
+                  <i className="fas fa-balance-scale"></i>
+                  <span className="metric-title">Stability Score</span>
+                  {gait.metric_progress.stability?.is_healthy && <span className="healthy-badge">✓ Healthy</span>}
+                </div>
+                <div className="metric-values">
+                  <span className="current-val">{(gait.metric_progress.stability?.current * 100)?.toFixed(0)}</span>
+                  <span className="unit">%</span>
+                </div>
+                <div className="metric-bar-clinical">
+                  <div className="bar-fill-clinical" style={{ 
+                    width: `${Math.min(100, (gait.metric_progress.stability?.current / gait.metric_progress.stability?.target) * 100)}%`,
+                    background: gait.metric_progress.stability?.is_healthy ? '#10b981' : '#f59e0b'
+                  }}></div>
+                </div>
+                <div className="metric-footer">
+                  <span>Target: {(gait.metric_progress.stability?.target * 100)?.toFixed(0)}%</span>
+                  <span className="deficit">Deficit: {(gait.metric_progress.stability?.deficit * 100)?.toFixed(0)}%</span>
+                </div>
+              </div>
+
+              {/* Symmetry */}
+              <div className="clinical-metric-card">
+                <div className="metric-header">
+                  <i className="fas fa-equals"></i>
+                  <span className="metric-title">Gait Symmetry</span>
+                  {gait.metric_progress.symmetry?.is_healthy && <span className="healthy-badge">✓ Healthy</span>}
+                </div>
+                <div className="metric-values">
+                  <span className="current-val">{(gait.metric_progress.symmetry?.current * 100)?.toFixed(0)}</span>
+                  <span className="unit">%</span>
+                </div>
+                <div className="metric-bar-clinical">
+                  <div className="bar-fill-clinical" style={{ 
+                    width: `${Math.min(100, (gait.metric_progress.symmetry?.current / gait.metric_progress.symmetry?.target) * 100)}%`,
+                    background: gait.metric_progress.symmetry?.is_healthy ? '#10b981' : '#f59e0b'
+                  }}></div>
+                </div>
+                <div className="metric-footer">
+                  <span>Target: {(gait.metric_progress.symmetry?.target * 100)?.toFixed(0)}%</span>
+                  <span className="deficit">Deficit: {(gait.metric_progress.symmetry?.deficit * 100)?.toFixed(0)}%</span>
+                </div>
+              </div>
+
+              {/* Regularity */}
+              <div className="clinical-metric-card">
+                <div className="metric-header">
+                  <i className="fas fa-wave-square"></i>
+                  <span className="metric-title">Step Regularity</span>
+                  {gait.metric_progress.regularity?.is_healthy && <span className="healthy-badge">✓ Healthy</span>}
+                </div>
+                <div className="metric-values">
+                  <span className="current-val">{(gait.metric_progress.regularity?.current * 100)?.toFixed(0)}</span>
+                  <span className="unit">%</span>
+                </div>
+                <div className="metric-bar-clinical">
+                  <div className="bar-fill-clinical" style={{ 
+                    width: `${Math.min(100, (gait.metric_progress.regularity?.current / gait.metric_progress.regularity?.target) * 100)}%`,
+                    background: gait.metric_progress.regularity?.is_healthy ? '#10b981' : '#f59e0b'
+                  }}></div>
+                </div>
+                <div className="metric-footer">
+                  <span>Target: {(gait.metric_progress.regularity?.target * 100)?.toFixed(0)}%</span>
+                  <span className="deficit">Deficit: {(gait.metric_progress.regularity?.deficit * 100)?.toFixed(0)}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clinical Note */}
+        <div className="clinical-note">
+          <i className="fas fa-circle-info"></i>
+          <div>
+            <strong>Clinical Interpretation:</strong> This prediction uses gradient boosting (XGBoost) trained on 37 patients 
+            who achieved healthy gait parameters. The model analyzes your current metrics, improvement trends, consistency, 
+            and engagement patterns. Predictions update after each session as more data becomes available. 
+            <strong>Note:</strong> Individual recovery may vary based on adherence, severity, and external factors.
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prediction-container">
             <div className="loading-state">
@@ -245,34 +751,42 @@ function Prediction({ onLogout }) {
 
   // Show "Coming Soon" for Physical Therapy
   if (selectedCategory === 'physical') {
+    // If we have gait predictions, show them
+    if (predictions?.gait) {
+      return (
+        <div className="blank-page">
+          <Header onLogout={onLogout} />
+          <main className="blank-page-content gait-full-width">
+            <div className="pred-page-header">
+              <h1>Physical Therapy Predictions</h1>
+              <p>AI-powered gait recovery timeline based on your progress</p>
+            </div>
+
+            {renderGaitCard()}
+
+            <div className="pred-note gait-note">
+              <i className="fas fa-lightbulb"></i>
+              <span>Predictions are based on your gait analysis sessions and may improve with consistent practice.</span>
+            </div>
+          </main>
+        </div>
+      );
+    }
+    
+    // Show message if no gait data available
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prediction-container">
-            <div className="coming-soon-message">
-              <div className="coming-soon-icon">🚧</div>
-              <h2>Physical Therapy Predictions</h2>
-              <h3>Coming Soon</h3>
-              <p>AI-powered predictions for physical therapy progress are currently under development.</p>
+            <div className="no-data-message">
+              <i className="fas fa-robot"></i>
+              <h2>No Gait Predictions Yet</h2>
+              <p>Complete more gait analysis sessions to generate AI predictions.</p>
               <p className="coming-soon-detail">
-                This feature will provide insights on gait analysis improvements, 
-                mobility recovery timelines, and personalized rehabilitation progress tracking.
+                The AI model analyzes your walking patterns including cadence, stride length, 
+                velocity, stability, symmetry, and regularity to predict your recovery timeline.
               </p>
-              <div className="coming-soon-features">
-                <div className="feature-item">
-                  <i className="fas fa-chart-line"></i>
-                  <span>Gait Progress Tracking</span>
-                </div>
-                <div className="feature-item">
-                  <i className="fas fa-walking"></i>
-                  <span>Mobility Predictions</span>
-                </div>
-                <div className="feature-item">
-                  <i className="fas fa-brain"></i>
-                  <span>AI-Powered Analysis</span>
-                </div>
-              </div>
             </div>
           </div>
         </main>
@@ -283,14 +797,14 @@ function Prediction({ onLogout }) {
   if (error) {
     return (
       <div className="blank-page">
-        <Header onLogout={onLogout} />
+        <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
         <main className="blank-page-content">
           <div className="prediction-container">
             <div className="error-message">
               <i className="fas fa-exclamation-circle"></i>
               <h2>Error Loading Predictions</h2>
               <p>{error}</p>
-              <button onClick={fetchPredictions} className="retry-button">
+              <button type="button" onClick={fetchPredictions} className="retry-button">
                 <i className="fas fa-redo"></i>
                 Try Again
               </button>
@@ -303,7 +817,7 @@ function Prediction({ onLogout }) {
 
   return (
     <div className="blank-page">
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <main className="blank-page-content">
         <div className="prediction-container">
           <div className="pred-page-header">
@@ -321,6 +835,8 @@ function Prediction({ onLogout }) {
           ) : (
             <>
               {renderOverallCard()}
+
+              <SpeechPredictionCharts predictions={predictions} />
               
               <div className="therapies-list">
                 {renderArticulationCard()}

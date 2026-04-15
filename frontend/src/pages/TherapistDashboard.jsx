@@ -1,14 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService } from '../services/api';
+import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService, detectionProblemsService, exerciseRecommendationsService } from '../services/api';
+import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
 import './TherapistDashboard.css';
+import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf, generateTherapistReportsPdf } from '../components/PdfReportTemplate';
+import DashboardOverview from '../components/DashboardOverview';
+import SidebarDrawer from '../components/SidebarDrawer';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5000';
+
+const REPORT_CATEGORY_OPTIONS = [
+  { key: 'age', label: 'Age', icon: '👥' },
+  { key: 'gender', label: 'Gender', icon: '⚧️' },
+  { key: 'work', label: 'Work', icon: '💼' },
+];
+
+const REPORT_GENDER_META = {
+  male: { label: 'Male', icon: '👨' },
+  female: { label: 'Female', icon: '👩' },
+  other: { label: 'Other', icon: '🧑' },
+  'prefer-not-to-say': { label: 'Prefer not to say', icon: '❓' },
+};
 
 function TherapistDashboard({ onLogout }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
   const [speechDropdownOpen, setSpeechDropdownOpen] = useState(false);
+  const [physicalDropdownOpen, setPhysicalDropdownOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [activeSub, setActiveSub] = useState('receptive');
   const [therapyData, setTherapyData] = useState([]);
@@ -106,6 +128,21 @@ function TherapistDashboard({ onLogout }) {
   const [expandedGaitRows, setExpandedGaitRows] = useState({});
   const [currentGaitPage, setCurrentGaitPage] = useState(1);
   const [gaitEntriesPerPage, setGaitEntriesPerPage] = useState(5);
+  const [speechEntries, setSpeechEntries] = useState([]);
+  const [loadingSpeechEntries, setLoadingSpeechEntries] = useState(false);
+  const [speechSearchTerm, setSpeechSearchTerm] = useState('');
+  const [currentSpeechPage, setCurrentSpeechPage] = useState(1);
+  const [speechEntriesPerPage, setSpeechEntriesPerPage] = useState(10);
+  const [expandedSpeechRows, setExpandedSpeechRows] = useState({});
+  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState(new Set());
+  const [recommendedExercises, setRecommendedExercises] = useState([]);
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
+  const [recommendedSearchTerm, setRecommendedSearchTerm] = useState('');
+  const [currentRecommendedPage, setCurrentRecommendedPage] = useState(1);
+  const [recommendedEntriesPerPage, setRecommendedEntriesPerPage] = useState(10);
+  const [updatingRecommendedIds, setUpdatingRecommendedIds] = useState(new Set());
+  const [showRecommendedStatusControls, setShowRecommendedStatusControls] = useState(false);
+  const [bulkUpdatingRecommendedVisibility, setBulkUpdatingRecommendedVisibility] = useState(false);
 
   // Success Stories state
   const [successStories, setSuccessStories] = useState([]);
@@ -118,28 +155,49 @@ function TherapistDashboard({ onLogout }) {
   const [selectedImages, setSelectedImages] = useState([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
   const [newStory, setNewStory] = useState({
-    patientName: '',
     story: ''
   });
 
   // Reports state
   const [reportsData, setReportsData] = useState(null);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [activeReportCategory, setActiveReportCategory] = useState('age');
+  const [reportsDropdownOpen, setReportsDropdownOpen] = useState(false);
+  const [exportingReports, setExportingReports] = useState(false);
+
+  // Speech therapy analytics state (for PDF export)
+  const [articulationAnalytics, setArticulationAnalytics] = useState(null);
+  const [fluencyAnalytics, setFluencyAnalytics] = useState(null);
+  const [languageAnalytics, setLanguageAnalytics] = useState(null);
+  const [exportingArticulation, setExportingArticulation] = useState(false);
+  const [exportingFluency, setExportingFluency] = useState(false);
+  const [exportingLanguage, setExportingLanguage] = useState(false);
 
   // Diagnostic Comparison state
   const [diagComparisonData, setDiagComparisonData] = useState(null);
   const [diagPatientDiagnostics, setDiagPatientDiagnostics] = useState([]);
   const [diagComparisonHistory, setDiagComparisonHistory] = useState([]);
   const [loadingDiagComparison, setLoadingDiagComparison] = useState(false);
+  const [patientSelfReport, setPatientSelfReport] = useState(null);
   const [showDiagModal, setShowDiagModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(null);
   const [diagSearchQuery, setDiagSearchQuery] = useState('');
   const [diagSearchResults, setDiagSearchResults] = useState([]);
   const [showDiagPatientDropdown, setShowDiagPatientDropdown] = useState(false);
   const [searchingDiagPatients, setSearchingDiagPatients] = useState(false);
+  const [diagSearchError, setDiagSearchError] = useState(null);
+  const diagSearchAbortRef = useRef(null);
   const [selectedDiagPatient, setSelectedDiagPatient] = useState(null);
   const [selectedDiagnosticId, setSelectedDiagnosticId] = useState(null);
   const [savingDiagnostic, setSavingDiagnostic] = useState(false);
+
+  // Pre-Evaluation tab state
+  const [preEvalPatientList, setPreEvalPatientList] = useState([]);
+  const [preEvalLoading, setPreEvalLoading] = useState(false);
+  const [preEvalTableFilter, setPreEvalTableFilter] = useState('');
+  const [preEvalModalEntry, setPreEvalModalEntry] = useState(null);
+  const [preEvalEntriesPerPage, setPreEvalEntriesPerPage] = useState(10);
+  const [preEvalCurrentPage, setPreEvalCurrentPage] = useState(1);
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [newDiagnostic, setNewDiagnostic] = useState({
     assessment_date: new Date().toISOString().split('T')[0],
@@ -187,6 +245,33 @@ function TherapistDashboard({ onLogout }) {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchingPatients, setSearchingPatients] = useState(false);
 
+  // Detection Problems state
+  const [detectionProblems, setDetectionProblems] = useState([]);
+  const [loadingDetectionProblems, setLoadingDetectionProblems] = useState(false);
+  const [showDPModal, setShowDPModal] = useState(false);
+  const [editingDP, setEditingDP] = useState(null);
+  const [dpSearchTerm, setDPSearchTerm] = useState('');
+  const [currentDPPage, setCurrentDPPage] = useState(1);
+  const [dpEntriesPerPage, setDPEntriesPerPage] = useState(10);
+  const [newDP, setNewDP] = useState({
+    name: '', category: '', description: '', severity_level: 'moderate',
+    indicators: '', affected_area: '', normal_range: '', is_active: true
+  });
+
+  // Exercise Recommendations state
+  const [exerciseRecs, setExerciseRecs] = useState([]);
+  const [loadingExerciseRecs, setLoadingExerciseRecs] = useState(false);
+  const [showERModal, setShowERModal] = useState(false);
+  const [editingER, setEditingER] = useState(null);
+  const [erSearchTerm, setERSearchTerm] = useState('');
+  const [currentERPage, setCurrentERPage] = useState(1);
+  const [erEntriesPerPage, setEREntriesPerPage] = useState(10);
+  const [newER, setNewER] = useState({
+    name: '', category: '', description: '', target_problems: '',
+    difficulty_level: 'beginner', duration_minutes: 15, repetitions: 10,
+    sets: 3, instructions: '', precautions: '', equipment_needed: '', is_active: true
+  });
+
   // Load overview statistics
   const loadOverviewStats = async (days = selectedDays) => {
     setLoadingStats(true);
@@ -203,9 +288,12 @@ function TherapistDashboard({ onLogout }) {
 
   // Load stats when overview tab is active or filter changes
   useEffect(() => {
+    let cancelled = false;
     if (activeTab === 'overview' && user) {
       loadOverviewStats();
+      if (!reportsData) loadReports();
     }
+    return () => { cancelled = true; };
   }, [activeTab, user, selectedDays]);
 
   // Load exercises from database and group by level
@@ -669,38 +757,71 @@ function TherapistDashboard({ onLogout }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const stored = authService.getStoredUser();
     setUser(stored);
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     // Load available orders when creating new exercise and sound/level changes
     if (showArticulationModal) {
       loadAvailableOrders(newArticulationExercise.sound_id, newArticulationExercise.level);
     }
+    return () => { cancelled = true; };
   }, [showArticulationModal, newArticulationExercise.sound_id, newArticulationExercise.level]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load available orders when creating new fluency exercise and level changes
     if (showExerciseModal) {
       loadAvailableFluencyOrders(newExercise.level);
     }
+    return () => { cancelled = true; };
   }, [showExerciseModal, newExercise.level]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load available orders when creating new language exercise and level changes
     if (showLanguageModal && activeSub === 'receptive') {
       loadAvailableLanguageOrders(newLanguageExercise.level);
     }
+    return () => { cancelled = true; };
   }, [showLanguageModal, newLanguageExercise.level, activeSub]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load default overview stats via admin stats
     if (activeTab !== 'overview') return;
     loadOverview();
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
+  // Auto-load all patients who completed the pre-evaluation wizard
+  useEffect(() => {
+    if (activeTab !== 'pre-evaluation') return;
+    if (preEvalPatientList.length > 0) return; // already loaded
+    let cancelled = false;
+    setPreEvalLoading(true);
+    diagnosticComparisonService.getAllCompletedEvaluations()
+      .then((res) => {
+        if (cancelled) return;
+        const patients = res?.patients ?? [];
+        setPreEvalPatientList(patients.map(p => ({ patient: p, selfReport: p.diagnosticData ?? null })));
+        setPreEvalCurrentPage(1);
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('Pre-eval fetch error:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setPreEvalLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [activeTab]);
 
   useEffect(() => {
+    let cancelled = false;
     // Load therapy data when switching tabs
     if (activeTab === 'articulation') {
       loadArticulation(); // Load patient session data
@@ -714,7 +835,11 @@ function TherapistDashboard({ onLogout }) {
       loadFluency(); // Load patient session data
       loadFluencyExercises(); // Always load exercises for fluency
     }
-    if (activeTab === 'physical') loadPhysical();
+    if (activeTab === 'speech-entries') loadSpeechEntries();
+    if (activeTab === 'physical' || activeTab === 'most-common-problem') loadPhysical();
+    if (activeTab === 'recommended-exercises') loadRecommendedExercises();
+    if (activeTab === 'detection-problems') loadDetectionProblems();
+    if (activeTab === 'exercise-recommendations') loadExerciseRecs();
     if (activeTab === 'success-stories') loadSuccessStories();
     if (activeTab === 'reports') loadReports();
     if (activeTab === 'appointments') {
@@ -725,9 +850,11 @@ function TherapistDashboard({ onLogout }) {
     if (activeTab === 'diagnostics') {
       // Keep selectedDiagPatient if already set; otherwise no auto-load
     }
+    return () => { cancelled = true; };
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
+    let cancelled = false;
     try {
       // Therapists don't have access to admin stats
       // Show a simple welcome message instead
@@ -737,10 +864,13 @@ function TherapistDashboard({ onLogout }) {
       ]);
     } catch (e) {
       console.error('Failed to load overview', e);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadArticulation = async () => {
+    let cancelled = false;
     try {
       // Therapists don't have access to patient data
       // This is for managing exercises only
@@ -750,10 +880,13 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load articulation', e);
       setTherapyData([]);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadLanguage = async (mode) => {
+    let cancelled = false;
     try {
       // Therapists don't have access to patient data
       setTherapyData([
@@ -762,10 +895,13 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load language', e);
       setTherapyData([]);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadFluency = async () => {
+    let cancelled = false;
     try {
       // Therapists don't have access to patient session data
       // They can only manage exercises via the Therapy Levels tab
@@ -773,21 +909,120 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load fluency', e);
       setTherapyData([]);
+    } finally {
+      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadPhysical = async () => {
+    let cancelled = false;
     setLoadingPhysical(true);
     try {
       const response = await therapistService.getPhysicalPatients();
-      if (response.success) {
+      if (!cancelled && response.success) {
         setGaitAnalyses(response.data || []);
       }
     } catch (e) {
       console.error('Failed to load gait analyses', e);
       setGaitAnalyses([]);
     } finally {
-      setLoadingPhysical(false);
+      if (!cancelled) setLoadingPhysical(false);
+    }
+  };
+
+  const loadSpeechEntries = async () => {
+    let cancelled = false;
+    setLoadingSpeechEntries(true);
+    try {
+      const response = await therapistService.getSpeechEntries(selectedDays, 1000);
+      if (!cancelled && response.success) {
+        setSpeechEntries(response.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to load speech entries', e);
+      if (!cancelled) setSpeechEntries([]);
+    } finally {
+      if (!cancelled) setLoadingSpeechEntries(false);
+    }
+  };
+
+  const loadRecommendedExercises = async () => {
+    let cancelled = false;
+    setLoadingRecommended(true);
+    try {
+      const response = await therapistService.getRecommendedExercises();
+      if (!cancelled && response.success) {
+        const rows = response.data || [];
+        setRecommendedExercises(rows);
+        setShowRecommendedStatusControls(rows.length > 0 && rows.every(row => (row.visibility || 'active') === 'active'));
+      }
+    } catch (e) {
+      console.error('Failed to load recommended exercises', e);
+      if (!cancelled) setRecommendedExercises([]);
+    } finally {
+      if (!cancelled) setLoadingRecommended(false);
+    }
+  };
+
+  const handleUpdateRecommendedField = async (planId, field, value) => {
+    const previousRows = recommendedExercises;
+    setUpdatingRecommendedIds(prev => new Set([...prev, planId]));
+    setRecommendedExercises(prev =>
+      prev.map(row => (row.id === planId ? { ...row, [field]: value } : row))
+    );
+
+    try {
+      const response = await therapistService.updateRecommendedExercise(planId, { [field]: value });
+      if (!response.success) {
+        setRecommendedExercises(previousRows);
+        toast.error('Update failed. Please try again.');
+      } else {
+        toast.success(`${field === 'status' ? 'Status' : 'Visibility'} updated successfully.`);
+      }
+    } catch (error) {
+      console.error(`Failed to update ${field}:`, error);
+      setRecommendedExercises(previousRows);
+      toast.error('Update failed. Please check your connection.');
+    } finally {
+      setUpdatingRecommendedIds(prev => {
+        const next = new Set(prev);
+        next.delete(planId);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleRecommendedStatusControls = async (checked) => {
+    const previousRows = recommendedExercises;
+    const previousToggle = showRecommendedStatusControls;
+    const nextVisibility = checked ? 'active' : 'hidden';
+    const planIds = recommendedExercises.map(plan => plan.id);
+
+    setShowRecommendedStatusControls(checked);
+    setBulkUpdatingRecommendedVisibility(true);
+    setRecommendedExercises(prev => prev.map(plan => ({ ...plan, visibility: nextVisibility })));
+
+    if (!planIds.length) {
+      setBulkUpdatingRecommendedVisibility(false);
+      return;
+    }
+
+    try {
+      const response = await therapistService.updateRecommendedExercisesVisibility(nextVisibility, planIds);
+      if (!response.success) {
+        setRecommendedExercises(previousRows);
+        setShowRecommendedStatusControls(previousToggle);
+        toast.error('Failed to update status display setting.');
+      } else {
+        toast.success(`Status display ${checked ? 'enabled' : 'hidden'} for recommended exercises.`);
+      }
+    } catch (error) {
+      console.error('Failed to bulk update recommended exercise visibility:', error);
+      setRecommendedExercises(previousRows);
+      setShowRecommendedStatusControls(previousToggle);
+      toast.error('Failed to update status display setting.');
+    } finally {
+      setBulkUpdatingRecommendedVisibility(false);
     }
   };
 
@@ -798,8 +1033,165 @@ function TherapistDashboard({ onLogout }) {
     }));
   };
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return '#4CAF50';
+  const toggleSpeechDetails = (id) => {
+    setExpandedSpeechRows(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    if (isMobile) {
+      setSidebarDrawerOpen(prev => !prev);
+    } else {
+      setSidebarCollapsed(prev => !prev);
+    }
+  }, [isMobile]);
+
+  const closeSidebarDrawer = useCallback(() => {
+    setSidebarDrawerOpen(false);
+  }, []);
+
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+    setTherapyData([]);
+  }, []);
+
+  const toggleSelectAnalysis = useCallback((id) => {
+    setSelectedAnalysisIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllOnPage = useCallback((pageIds) => {
+    setSelectedAnalysisIds(prev => {
+      const allSelected = pageIds.every(id => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        pageIds.forEach(id => next.delete(id));
+        return next;
+      }
+      return new Set([...prev, ...pageIds]);
+    });
+  }, []);
+
+  const handleExportPhysicalPdf = useCallback(async () => {
+    const selected = gaitAnalyses.filter(a => selectedAnalysisIds.has(a.id));
+    if (!selected.length) return;
+
+    const patients = selected.map(analysis => ({
+      name: analysis.user_name,
+      email: analysis.user_email,
+      score: analysis.overall_score,
+      severity: analysis.severity,
+      date: formatDate(analysis.created_at),
+      problem_details: analysis.problem_details ?? [],
+      gait_score: analysis.gait_score ?? null,
+      metricsRows: buildGaitMetricsRows(
+        analysis.gait_metrics,
+        analysis.analysis_duration,
+        analysis.data_quality
+      ),
+    }));
+
+    const uniqueNames = [...new Set(selected.map(a => a.user_name))];
+    const namePart =
+      uniqueNames.length === 1
+        ? uniqueNames[0].replace(/\s+/g, '_')
+        : 'Multiple_Patients';
+    const filename = `CVAPed_PhysicalTherapyReport_${namePart}`;
+
+    await generatePhysicalTherapyPdf({ patients, filename });
+  }, [selectedAnalysisIds, gaitAnalyses]);
+
+  const handleExportArticulationPdf = useCallback(async () => {
+    setExportingArticulation(true);
+    try {
+      let analytics = articulationAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getArticulationAnalytics(selectedDays);
+        setArticulationAnalytics(analytics);
+      }
+      await generateArticulationPdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Articulation_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Articulation PDF export failed:', error);
+    } finally {
+      setExportingArticulation(false);
+    }
+  }, [articulationAnalytics, selectedDays, user]);
+
+  const handleExportFluencyPdf = useCallback(async () => {
+    setExportingFluency(true);
+    try {
+      let analytics = fluencyAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getFluencyAnalytics(selectedDays);
+        setFluencyAnalytics(analytics);
+      }
+      await generateFluencyPdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Fluency_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Fluency PDF export failed:', error);
+    } finally {
+      setExportingFluency(false);
+    }
+  }, [fluencyAnalytics, selectedDays, user]);
+
+  const handleExportLanguagePdf = useCallback(async () => {
+    setExportingLanguage(true);
+    try {
+      let analytics = languageAnalytics;
+      if (!analytics) {
+        analytics = await therapistService.getLanguageAnalytics(selectedDays);
+        setLanguageAnalytics(analytics);
+      }
+      await generateLanguagePdf({
+        analytics,
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_Language_Analytics_${new Date().toISOString().split('T')[0]}`,
+      });
+    } catch (error) {
+      console.error('Language PDF export failed:', error);
+    } finally {
+      setExportingLanguage(false);
+    }
+  }, [languageAnalytics, selectedDays, user]);
+
+  const handleExportDiagnosticPdf = useCallback(async () => {
+    if (!selectedDiagPatient || !diagComparisonData) return;
+    await generateDiagnosticComparisonPdf({
+      comparisonData: diagComparisonData,
+      patient: selectedDiagPatient,
+    });
+  }, [selectedDiagPatient, diagComparisonData]);
+
+  const handleExportPreEvalPdf = useCallback(async (entry) => {
+    if (!entry) return;
+    const { patient, selfReport } = entry;
+    await generatePreEvalPdf({ patient, selfReport });
+  }, []);
+
+  const getScoreColor = (score) => {    if (score >= 80) return '#4CAF50';
     if (score >= 60) return '#FF9800';
     return '#F44336';
   };
@@ -815,45 +1207,292 @@ function TherapistDashboard({ onLogout }) {
     });
   };
 
+  const formatSpeechTherapyType = (type) => {
+    if (type === 'receptive') return 'Language (Receptive)';
+    if (type === 'expressive') return 'Language (Expressive)';
+    if (type === 'articulation') return 'Articulation';
+    if (type === 'fluency') return 'Fluency';
+    return 'Language';
+  };
+
+  const getSpeechDetailsText = (entry) => {
+    if (!entry || !entry.details) return 'No details provided';
+
+    if (entry.therapy_type === 'articulation') {
+      const sound = entry.details.sound_id ? `/${String(entry.details.sound_id).toUpperCase()}/` : 'N/A';
+      const target = entry.details.target_word || 'N/A';
+      return `Sound: ${sound} | Target: ${target}`;
+    }
+
+    if (entry.therapy_type === 'fluency') {
+      const exerciseType = entry.details.exercise_type || 'N/A';
+      const instruction = entry.details.instruction || 'N/A';
+      return `Type: ${exerciseType} | Instruction: ${instruction}`;
+    }
+
+    const exerciseId = entry.details.exercise_id || 'N/A';
+    const prompt = entry.details.prompt || 'N/A';
+    return `Exercise: ${exerciseId} | Prompt: ${prompt}`;
+  };
+
   // Success Stories Functions
+  // ============= DETECTION PROBLEMS CRUD =============
+
+  const loadDetectionProblems = async () => {
+    setLoadingDetectionProblems(true);
+    try {
+      const response = await detectionProblemsService.getAll();
+      if (response.success) setDetectionProblems(response.problems || []);
+    } catch (e) {
+      console.error('Failed to load detection problems', e);
+      setDetectionProblems([]);
+    } finally {
+      setLoadingDetectionProblems(false);
+    }
+  };
+
+  const resetDPForm = () => setNewDP({
+    name: '', category: '', description: '', severity_level: 'moderate',
+    indicators: '', affected_area: '', normal_range: '', is_active: true
+  });
+
+  const handleOpenDPCreate = () => {
+    setEditingDP(null);
+    resetDPForm();
+    setShowDPModal(true);
+  };
+
+  const handleOpenDPEdit = (item) => {
+    setEditingDP(item);
+    setNewDP({
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      severity_level: item.severity_level,
+      indicators: (item.indicators || []).join(', '),
+      affected_area: item.affected_area,
+      normal_range: item.normal_range,
+      is_active: item.is_active
+    });
+    setShowDPModal(true);
+  };
+
+  const handleSaveDP = async () => {
+    if (!newDP.name.trim()) { alert('Name is required'); return; }
+    const payload = {
+      ...newDP,
+      indicators: newDP.indicators.split(',').map(s => s.trim()).filter(Boolean)
+    };
+    try {
+      let response;
+      if (editingDP) {
+        response = await detectionProblemsService.update(editingDP.problem_id, payload);
+      } else {
+        response = await detectionProblemsService.create(payload);
+      }
+      if (response.success) {
+        setShowDPModal(false);
+        loadDetectionProblems();
+        alert(editingDP ? 'Detection problem updated!' : 'Detection problem created!');
+      }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Save failed');
+    }
+  };
+
+  const handleDeleteDP = async (id) => {
+    if (!window.confirm('Delete this detection problem?')) return;
+    try {
+      const response = await detectionProblemsService.delete(id);
+      if (response.success) { loadDetectionProblems(); alert('Deleted successfully!'); }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const handleToggleDP = async (id) => {
+    try {
+      const response = await detectionProblemsService.toggle(id);
+      if (response.success) loadDetectionProblems();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Toggle failed');
+    }
+  };
+
+  const handleSeedDP = async () => {
+    if (!window.confirm('Seed default detection problems?')) return;
+    try {
+      const response = await detectionProblemsService.seed();
+      if (response.success) { loadDetectionProblems(); alert(`Seeded ${response.count} problems!`); }
+    } catch (e) {
+      alert(e.response?.data?.message || e.response?.data?.error || 'Seed failed');
+    }
+  };
+
+  // ============= EXERCISE RECOMMENDATIONS CRUD =============
+
+  const loadExerciseRecs = async () => {
+    setLoadingExerciseRecs(true);
+    try {
+      const response = await exerciseRecommendationsService.getAll();
+      if (response.success) setExerciseRecs(response.exercises || []);
+    } catch (e) {
+      console.error('Failed to load exercise recommendations', e);
+      setExerciseRecs([]);
+    } finally {
+      setLoadingExerciseRecs(false);
+    }
+  };
+
+  const resetERForm = () => setNewER({
+    name: '', category: '', description: '', target_problems: '',
+    difficulty_level: 'beginner', duration_minutes: 15, repetitions: 10,
+    sets: 3, instructions: '', precautions: '', equipment_needed: '', is_active: true
+  });
+
+  const handleOpenERCreate = () => {
+    setEditingER(null);
+    resetERForm();
+    setShowERModal(true);
+  };
+
+  const handleOpenEREdit = (item) => {
+    setEditingER(item);
+    setNewER({
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      target_problems: (item.target_problems || []).join(', '),
+      difficulty_level: item.difficulty_level,
+      duration_minutes: item.duration_minutes,
+      repetitions: item.repetitions,
+      sets: item.sets,
+      instructions: (item.instructions || []).join('\n'),
+      precautions: item.precautions,
+      equipment_needed: (item.equipment_needed || []).join(', '),
+      is_active: item.is_active
+    });
+    setShowERModal(true);
+  };
+
+  const handleSaveER = async () => {
+    if (!newER.name.trim()) { alert('Name is required'); return; }
+    const payload = {
+      ...newER,
+      target_problems: newER.target_problems.split(',').map(s => s.trim()).filter(Boolean),
+      instructions: newER.instructions.split('\n').map(s => s.trim()).filter(Boolean),
+      equipment_needed: newER.equipment_needed.split(',').map(s => s.trim()).filter(Boolean),
+      duration_minutes: Number(newER.duration_minutes),
+      repetitions: Number(newER.repetitions),
+      sets: Number(newER.sets)
+    };
+    try {
+      let response;
+      if (editingER) {
+        response = await exerciseRecommendationsService.update(editingER.exercise_id, payload);
+      } else {
+        response = await exerciseRecommendationsService.create(payload);
+      }
+      if (response.success) {
+        setShowERModal(false);
+        loadExerciseRecs();
+        alert(editingER ? 'Exercise updated!' : 'Exercise created!');
+      }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Save failed');
+    }
+  };
+
+  const handleDeleteER = async (id) => {
+    if (!window.confirm('Delete this exercise recommendation?')) return;
+    try {
+      const response = await exerciseRecommendationsService.delete(id);
+      if (response.success) { loadExerciseRecs(); alert('Deleted successfully!'); }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const handleToggleER = async (id) => {
+    try {
+      const response = await exerciseRecommendationsService.toggle(id);
+      if (response.success) loadExerciseRecs();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Toggle failed');
+    }
+  };
+
+  const handleSeedER = async () => {
+    if (!window.confirm('Seed default exercise recommendations?')) return;
+    try {
+      const response = await exerciseRecommendationsService.seed();
+      if (response.success) { loadExerciseRecs(); alert(`Seeded ${response.count} exercises!`); }
+    } catch (e) {
+      alert(e.response?.data?.message || e.response?.data?.error || 'Seed failed');
+    }
+  };
+
   const loadSuccessStories = async () => {
-    console.log('🔍 Loading success stories...');
+    let cancelled = false;
+    console.log('✨ Loading success stories...');
     setLoadingStories(true);
     try {
       const response = await successStoryService.getAll();
-      console.log('📦 Success stories response:', response);
-      if (response.success) {
+      console.log('Success stories response:', response);
+      if (!cancelled && response.success) {
         setSuccessStories(response.data || []);
-        console.log('✅ Success stories loaded:', response.data?.length || 0);
+        console.log('Success stories loaded:', response.data?.length || 0);
       }
     } catch (e) {
-      console.error('❌ Failed to load success stories', e);
+      console.error('Failed to load success stories', e);
       setSuccessStories([]);
     } finally {
-      setLoadingStories(false);
+      if (!cancelled) setLoadingStories(false);
     }
   };
 
   // Diagnostic Comparison Functions
-  const searchDiagPatients = async (query) => {
-    if (!query || query.length < 2) {
+  useEffect(() => {
+    if (!diagSearchQuery || diagSearchQuery.trim().length < 2) {
       setDiagSearchResults([]);
+      setDiagSearchError(null);
       setShowDiagPatientDropdown(false);
       return;
     }
-    setSearchingDiagPatients(true);
-    try {
-      const response = await appointmentService.therapist.searchPatients(query);
-      if (response.success) {
-        setDiagSearchResults(response.patients || []);
+
+    const query = diagSearchQuery.trim();
+
+    const runSearch = async () => {
+      diagSearchAbortRef.current?.abort();
+      diagSearchAbortRef.current = new AbortController();
+      const { signal } = diagSearchAbortRef.current;
+
+      setSearchingDiagPatients(true);
+      setDiagSearchError(null);
+      try {
+        const response = await appointmentService.therapist.searchPatients(query, 10, signal);
+        if (signal.aborted) return;
+        if (response.success) {
+          setDiagSearchResults(response.patients || []);
+          setShowDiagPatientDropdown(true);
+        }
+      } catch (error) {
+        if (error.name === 'AbortError' || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return;
+        console.error('Error searching patients:', error);
+        setDiagSearchError('Failed to search patients. Please try again.');
+        setDiagSearchResults([]);
         setShowDiagPatientDropdown(true);
+      } finally {
+        if (!signal.aborted) setSearchingDiagPatients(false);
       }
-    } catch (error) {
-      console.error('Error searching patients:', error);
-    } finally {
-      setSearchingDiagPatients(false);
-    }
-  };
+    };
+
+    const timeoutId = setTimeout(runSearch, 400);
+    return () => {
+      clearTimeout(timeoutId);
+      diagSearchAbortRef.current?.abort();
+    };
+  }, [diagSearchQuery]);
 
   const selectDiagPatient = async (patient) => {
     setSelectedDiagPatient(patient);
@@ -865,20 +1504,28 @@ function TherapistDashboard({ onLogout }) {
 
   const loadDiagComparison = async (userId, diagnosticId = null) => {
     setLoadingDiagComparison(true);
+    setPatientSelfReport(null);
     try {
-      const [comparisonRes, diagnosticsRes, historyRes] = await Promise.all([
+      const [comparisonRes, diagnosticsRes, historyRes, selfReportRes] = await Promise.all([
         diagnosticComparisonService.getComparison(userId, diagnosticId),
         diagnosticComparisonService.getDiagnostics(userId),
-        diagnosticComparisonService.getComparisonHistory(userId)
+        diagnosticComparisonService.getComparisonHistory(userId),
+        diagnosticComparisonService.getPatientSelfReport(userId).catch(() => null)
       ]);
+      console.log('📊 Diagnostic Comparison Response:', comparisonRes);
+      console.log('📊 Facility Scores:', comparisonRes?.facility_scores);
+      console.log('📊 Home Scores:', comparisonRes?.home_scores);
+      console.log('📊 Deltas:', comparisonRes?.deltas);
       setDiagComparisonData(comparisonRes);
       setDiagPatientDiagnostics(diagnosticsRes.diagnostics || []);
       setDiagComparisonHistory(historyRes.history || []);
+      setPatientSelfReport(selfReportRes?.selfReport ?? null);
     } catch (error) {
       console.error('Error loading diagnostic comparison:', error);
       setDiagComparisonData(null);
       setDiagPatientDiagnostics([]);
       setDiagComparisonHistory([]);
+      setPatientSelfReport(null);
     } finally {
       setLoadingDiagComparison(false);
     }
@@ -978,8 +1625,11 @@ function TherapistDashboard({ onLogout }) {
     return { label: 'Severe', className: 'band-severe' };
   };
 
-  const getAlertBadge = (delta) => {
-    if (delta === null || delta === undefined) return { text: 'No Data', className: 'alert-nodata', icon: '📋' };
+  const getAlertBadge = (delta, homeVal) => {
+    if (delta === null || delta === undefined) {
+      if (homeVal != null) return { text: 'At-Home Only', className: 'alert-home-only', icon: '🏠' };
+      return { text: 'No Data', className: 'alert-nodata', icon: '📋' };
+    }
     if (delta >= 20) return { text: 'Significant Progress', className: 'alert-great', icon: '🎉' };
     if (delta >= 5) return { text: 'Improving', className: 'alert-good', icon: '📈' };
     if (delta >= -3) return { text: 'Stable', className: 'alert-stable', icon: '➡️' };
@@ -998,47 +1648,61 @@ function TherapistDashboard({ onLogout }) {
 
   // Reports Functions
   const loadReports = async () => {
+    let cancelled = false;
     setLoadingReports(true);
     try {
       const response = await therapistService.getReports();
-      if (response.success) {
+      if (!cancelled && response.success) {
         setReportsData(response.data || null);
       }
     } catch (e) {
       console.error('Failed to load reports', e);
       setReportsData(null);
     } finally {
-      setLoadingReports(false);
+      if (!cancelled) setLoadingReports(false);
     }
   };
 
   // Appointments Functions
   const loadAppointments = async () => {
+    let cancelled = false;
     setLoadingAppointments(true);
     try {
       const response = await appointmentService.therapist.getAppointments(appointmentFilters);
-      if (response.success) {
-        setAppointments(response.appointments || []);
+      if (!cancelled && response.success) {
+        // Sort appointments: Cancelled and No Show at the bottom
+        const sortedAppointments = (response.appointments || []).sort((a, b) => {
+          const isABottom = a.status === 'cancelled' || a.status === 'no-show';
+          const isBBottom = b.status === 'cancelled' || b.status === 'no-show';
+          
+          if (isABottom && !isBBottom) return 1;
+          if (!isABottom && isBBottom) return -1;
+          
+          // If both are in the same group, sort by date (newest first)
+          return new Date(b.appointment_date) - new Date(a.appointment_date);
+        });
+        setAppointments(sortedAppointments);
       }
     } catch (e) {
       console.error('Failed to load appointments', e);
       setAppointments([]);
     } finally {
-      setLoadingAppointments(false);
+      if (!cancelled) setLoadingAppointments(false);
     }
   };
 
   const loadUnassignedAppointments = async () => {
+    let cancelled = false;
     setLoadingUnassigned(true);
     try {
       const response = await appointmentService.therapist.getUnassignedAppointments();
-      if (response.success) {
+      if (!cancelled && response.success) {
         setUnassignedAppointments(response.appointments || []);
       }
     } catch (error) {
       console.error('Error loading unassigned appointments:', error);
     } finally {
-      setLoadingUnassigned(false);
+      if (!cancelled) setLoadingUnassigned(false);
     }
   };
 
@@ -1098,6 +1762,25 @@ function TherapistDashboard({ onLogout }) {
         return;
       }
 
+      // Validate date and time
+      const selectedDate = new Date(newAppointment.appointment_date);
+      const dayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      
+      // Check if day is Monday (1), Wednesday (3), or Friday (5)
+      if (dayOfWeek !== 1 && dayOfWeek !== 3 && dayOfWeek !== 5) {
+        alert('Appointments can only be scheduled on Monday, Wednesday, or Friday.');
+        return;
+      }
+
+      // Check if time is between 8:00 AM and 5:00 PM
+      const hours = selectedDate.getHours();
+      const minutes = selectedDate.getMinutes();
+      
+      if (hours < 8 || hours > 17 || (hours === 17 && minutes > 0)) {
+        alert('Appointments can only be scheduled between 8:00 AM and 5:00 PM.');
+        return;
+      }
+
       if (editingAppointment) {
         // Update existing appointment
         const response = await appointmentService.therapist.updateAppointment(
@@ -1125,6 +1808,12 @@ function TherapistDashboard({ onLogout }) {
   };
 
   const handleEditAppointment = (appointment) => {
+    // Prevent editing cancelled or no-show appointments
+    if (appointment.status === 'cancelled' || appointment.status === 'no-show') {
+      alert('Cannot edit cancelled or no-show appointments. Please view details instead.');
+      return;
+    }
+    
     setEditingAppointment(appointment);
     setNewAppointment({
       patient_id: appointment.patient_id,
@@ -1264,7 +1953,6 @@ function TherapistDashboard({ onLogout }) {
   const handleAddStory = () => {
     setEditingStory(null);
     setNewStory({
-      patientName: '',
       story: ''
     });
     setSelectedImages([]);
@@ -1275,10 +1963,6 @@ function TherapistDashboard({ onLogout }) {
   const handleSaveStory = async () => {
     try {
       // Validation
-      if (!newStory.patientName.trim()) {
-        alert('Patient name is required');
-        return;
-      }
       if (!newStory.story.trim()) {
         alert('Success story content is required');
         return;
@@ -1286,7 +1970,6 @@ function TherapistDashboard({ onLogout }) {
 
       // Create FormData
       const formData = new FormData();
-      formData.append('patientName', newStory.patientName);
       formData.append('story', newStory.story);
       
       // Append images
@@ -1301,7 +1984,7 @@ function TherapistDashboard({ onLogout }) {
         setSelectedImages([]);
         setImagePreviewUrls([]);
         loadSuccessStories();
-        alert('Success story added successfully!');
+        alert(response.warnings ? `Success story added with warnings. ${response.warnings}` : 'Success story added successfully!');
       }
     } catch (error) {
       console.error('Failed to add success story:', error);
@@ -1312,7 +1995,6 @@ function TherapistDashboard({ onLogout }) {
   const handleEditStory = (story) => {
     setEditingStory(story);
     setNewStory({
-      patientName: story.patientName,
       story: story.story
     });
     setSelectedImages([]);
@@ -1323,10 +2005,6 @@ function TherapistDashboard({ onLogout }) {
   const handleUpdateStory = async () => {
     try {
       // Validation
-      if (!newStory.patientName.trim()) {
-        alert('Patient name is required');
-        return;
-      }
       if (!newStory.story.trim()) {
         alert('Success story content is required');
         return;
@@ -1334,7 +2012,6 @@ function TherapistDashboard({ onLogout }) {
 
       // Create FormData
       const formData = new FormData();
-      formData.append('patientName', newStory.patientName);
       formData.append('story', newStory.story);
       
       // Append new images
@@ -1350,7 +2027,7 @@ function TherapistDashboard({ onLogout }) {
         setSelectedImages([]);
         setImagePreviewUrls([]);
         loadSuccessStories();
-        alert('Success story updated successfully!');
+        alert(response.warnings ? `Success story updated with warnings. ${response.warnings}` : 'Success story updated successfully!');
       }
     } catch (error) {
       console.error('Failed to update success story:', error);
@@ -1395,566 +2072,195 @@ function TherapistDashboard({ onLogout }) {
            (item.user_email && item.user_email.toLowerCase().includes(term));
   });
 
+  const mostCommonProblemStats = useMemo(() => {
+    const problemMap = new Map();
+
+    gaitAnalyses.forEach((analysis) => {
+      const problems = Array.isArray(analysis.problems) ? analysis.problems : [];
+
+      problems.forEach((rawProblem) => {
+        const normalized = String(rawProblem || '').trim().toLowerCase();
+        if (!normalized) return;
+
+        const existing = problemMap.get(normalized) || {
+          key: normalized,
+          label: normalized.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()),
+          count: 0,
+          patientKeys: new Set(),
+        };
+
+        existing.count += 1;
+        const patientKey = analysis.user_email || analysis.user_name || analysis.id;
+        if (patientKey) existing.patientKeys.add(patientKey);
+
+        problemMap.set(normalized, existing);
+      });
+    });
+
+    const ranked = Array.from(problemMap.values())
+      .map(item => ({ ...item, patientCount: item.patientKeys.size }))
+      .sort((a, b) => b.count - a.count || b.patientCount - a.patientCount || a.label.localeCompare(b.label));
+
+    const totalMentions = ranked.reduce((sum, item) => sum + item.count, 0);
+
+    return {
+      ranked,
+      totalMentions,
+      uniqueProblems: ranked.length,
+    };
+  }, [gaitAnalyses]);
+
+  const activeReportData = reportsData?.categories?.[activeReportCategory] || null;
+  const reportTherapyPanels = useMemo(() => {
+    if (!activeReportData?.byTherapy) return [];
+    return ['speech', 'physical']
+      .map((therapyKey) => activeReportData.byTherapy[therapyKey])
+      .filter(Boolean);
+  }, [activeReportData]);
+
+  const getReportItemLabel = (item) => item.label || item.range || item.gender || item.key || 'Unknown';
+
+  const overallReportItems = useMemo(() => {
+    if (activeReportCategory === 'age') {
+      return reportsData?.ageBrackets || [];
+    }
+
+    if (activeReportCategory === 'gender') {
+      return reportsData?.genderDistribution || [];
+    }
+
+    if (!activeReportData?.byTherapy) return [];
+
+    const aggregateMap = new Map();
+
+    Object.values(activeReportData.byTherapy).forEach((panel) => {
+      (panel?.items || []).forEach((item) => {
+        const existing = aggregateMap.get(item.key) || {
+          key: item.key,
+          label: getReportItemLabel(item),
+          count: 0,
+        };
+
+        existing.count += item.count || 0;
+        aggregateMap.set(item.key, existing);
+      });
+    });
+
+    const total = Array.from(aggregateMap.values()).reduce((sum, item) => sum + item.count, 0);
+
+    return Array.from(aggregateMap.values())
+      .map((item) => ({
+        ...item,
+        percentage: total > 0 ? Number(((item.count / total) * 100).toFixed(1)) : 0,
+      }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [activeReportCategory, activeReportData, reportsData]);
+
+  const getReportItemsForDisplay = (items = []) => {
+    if (activeReportCategory === 'age') return items;
+    return items.filter(item => item.count > 0);
+  };
+
+  const getProblemGenderMeta = (genderKey) => REPORT_GENDER_META[genderKey] || { label: genderKey, icon: '❓' };
+
+  const handleExportReportsPdf = useCallback(async () => {
+    if (!reportsData || !activeReportData) return;
+
+    setExportingReports(true);
+    try {
+      await generateTherapistReportsPdf({
+        reportTitle: `${activeReportData.title || 'Therapist'} Reports`,
+        reportDescription: activeReportData.description || 'Therapist demographic report.',
+        categoryLabel: activeReportData.title || 'Report',
+        summaryStats: [
+          { label: 'Total Patients', value: reportsData.totalPatients || 0 },
+          { label: 'Speech Therapy', value: reportsData.therapyTotals?.speech?.totalPatients || 0 },
+          { label: 'Physical Therapy', value: reportsData.therapyTotals?.physical?.totalPatients || 0 },
+        ],
+        overallItems: overallReportItems,
+        therapyPanels: reportTherapyPanels.map((panel) => ({
+          ...panel,
+          items: getReportItemsForDisplay(panel.items || []),
+        })),
+        detectedProblems: activeReportCategory === 'gender' ? (activeReportData.detectedProblems || []) : [],
+        generatedBy: user?.firstName ? `${user.firstName} ${user.lastName}` : 'Therapist',
+        filename: `CVAPed_${(activeReportData.title || 'Report').replace(/\s+/g, '_')}_Report_${new Date().toISOString().split('T')[0]}`,
+      });
+      toast.success(`${activeReportData.title || 'Report'} PDF exported successfully.`);
+    } catch (error) {
+      console.error('Reports PDF export failed:', error);
+      toast.error('Failed to export report PDF. Please try again.');
+    } finally {
+      setExportingReports(false);
+    }
+  }, [activeReportCategory, activeReportData, overallReportItems, reportTherapyPanels, reportsData, toast, user]);
+
   return (
     <div className="admin-dashboard">
-      <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header">
-          <div 
-            className="sidebar-logo" 
-            onClick={sidebarCollapsed ? () => setSidebarCollapsed(false) : undefined}
-            style={sidebarCollapsed ? { cursor: 'pointer' } : {}}
-          >
-            <img src={images.logo} alt="CVAPed Logo" className="logo-img" />
-            {!sidebarCollapsed && (
-              <div className="logo-text">
-                <h2>CVAPed</h2>
-                <span className="admin-badge">Therapist</span>
+      <div className="dashboard-wrapper">
+        <header className="admin-navbar">
+          <div className="navbar-left">
+            <div className="navbar-brand">
+              <img src={images.logo} alt="CVAPed" className="navbar-logo" />
+              <div className="brand-content">
+                <span className="brand-name">CVAPed</span>
+                <span className="brand-subtitle">Therapist Dashboard</span>
               </div>
-            )}
+            </div>
           </div>
-          {!sidebarCollapsed && (
-            <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-              ←
+          
+          <div className="navbar-right">
+            <button className="navbar-btn facility-btn" onClick={() => {
+              localStorage.setItem('therapistToken', localStorage.getItem('token') || '');
+              localStorage.setItem('therapistUser', localStorage.getItem('user') || '');
+              localStorage.setItem('facilityMode', 'true');
+              navigate('/facility-login');
+            }}>
+              <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span>Facility Mode</span>
             </button>
-          )}
-        </div>
-
-        <nav className="sidebar-nav">
-          <button className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => { setActiveTab('overview'); setTherapyData([]); }}>
-            <span className="nav-icon">📊</span>
-            {!sidebarCollapsed && <span className="nav-label">Overview</span>}
-          </button>
-
-          <div className="dropdown-container">
-            <button 
-              className={`nav-item ${activeTab === 'articulation' || activeTab === 'language' || activeTab === 'fluency' ? 'active' : ''}`} 
-              onClick={() => setSpeechDropdownOpen(!speechDropdownOpen)}
-            >
-              <span className="nav-icon">🎤</span>
-              {!sidebarCollapsed && (
-                <>
-                  <span className="nav-label">Speech Therapy</span>
-                  <span className={`dropdown-arrow ${speechDropdownOpen ? 'open' : ''}`}>▼</span>
-                </>
-              )}
+            <button className="navbar-btn logout-btn" onClick={onLogout}>
+              <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+              </svg>
+              <span>Logout</span>
             </button>
-            {!sidebarCollapsed && speechDropdownOpen && (
-              <div className="dropdown-menu">
-                <button className={`nav-item sub-item ${activeTab === 'articulation' ? 'active' : ''}`} onClick={() => { setActiveTab('articulation'); setTherapyData([]); }}>
-                  <span className="nav-label">Articulation</span>
-                </button>
-                <div>
-                  <button className={`nav-item sub-item ${activeTab === 'language' ? 'active' : ''}`} onClick={() => { setActiveTab('language'); setActiveSub('receptive'); setTherapyData([]); }}>
-                    <span className="nav-label">Language</span>
-                  </button>
-                  {activeTab === 'language' && (
-                    <div className="sub-sub-nav">
-                      <button className={`nav-item sub-sub-item ${activeSub === 'receptive' ? 'active' : ''}`} onClick={() => { setActiveSub('receptive'); }}>
-                        Receptive
-                      </button>
-                      <button className={`nav-item sub-sub-item ${activeSub === 'expressive' ? 'active' : ''}`} onClick={() => { setActiveSub('expressive'); }}>
-                        Expressive
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <button className={`nav-item sub-item ${activeTab === 'fluency' ? 'active' : ''}`} onClick={() => { setActiveTab('fluency'); setTherapyData([]); }}>
-                  <span className="nav-label">Fluency</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <button className={`nav-item ${activeTab === 'physical' ? 'active' : ''}`} onClick={() => { setActiveTab('physical'); setTherapyData([]); }}>
-            <span className="nav-icon">🏃</span>
-            {!sidebarCollapsed && <span className="nav-label">Physical Therapy</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => { setActiveTab('appointments'); setTherapyData([]); }}>
-            <span className="nav-icon">📅</span>
-            {!sidebarCollapsed && <span className="nav-label">Appointments</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'success-stories' ? 'active' : ''}`} onClick={() => { setActiveTab('success-stories'); setTherapyData([]); }}>
-            <span className="nav-icon">⭐</span>
-            {!sidebarCollapsed && <span className="nav-label">Success Stories</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`} onClick={() => { setActiveTab('reports'); setTherapyData([]); }}>
-            <span className="nav-icon">📊</span>
-            {!sidebarCollapsed && <span className="nav-label">Reports</span>}
-          </button>
-
-          <button className={`nav-item ${activeTab === 'diagnostics' ? 'active' : ''}`} onClick={() => { setActiveTab('diagnostics'); setTherapyData([]); }}>
-            <span className="nav-icon">🔬</span>
-            {!sidebarCollapsed && <span className="nav-label">Diagnostic Comparison</span>}
-          </button>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="admin-profile">
-            <div className="profile-avatar">{user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}</div>
-            {!sidebarCollapsed && (
-              <div className="profile-info">
-                <p className="profile-name">{user?.firstName} {user?.lastName}</p>
-                <p className="profile-role">Therapist</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </aside>
-
-      <main className="admin-main">
-        <header className="admin-header">
-          <div className="header-left">
-            <h1 className="page-title">{activeTab === 'overview' ? 'Overview' : activeTab === 'physical' ? 'Physical Therapy' : activeTab === 'articulation' ? 'Articulation' : activeTab === 'language' ? `Language - ${activeSub}` : activeTab === 'fluency' ? 'Fluency' : activeTab === 'appointments' ? 'Appointments' : activeTab === 'success-stories' ? 'Success Stories' : activeTab === 'reports' ? 'Reports' : activeTab === 'diagnostics' ? 'Diagnostic Comparison' : 'Therapist'}</h1>
-            <p className="page-subtitle">Welcome, {user?.firstName}</p>
-          </div>
-          <div className="header-right">
-            <button className="header-btn logout-btn" onClick={onLogout}>🚪 Logout</button>
           </div>
         </header>
 
-        <div className="admin-content">
+        <div className="dashboard-main">
+          <SidebarDrawer
+            isOpen={sidebarDrawerOpen}
+            onClose={closeSidebarDrawer}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            activeReportCategory={activeReportCategory}
+            onReportCategoryChange={setActiveReportCategory}
+            speechDropdownOpen={speechDropdownOpen}
+            onSpeechDropdownToggle={() => setSpeechDropdownOpen(prev => !prev)}
+            physicalDropdownOpen={physicalDropdownOpen}
+            onPhysicalDropdownToggle={() => setPhysicalDropdownOpen(prev => !prev)}
+            reportsDropdownOpen={reportsDropdownOpen}
+            onReportsDropdownToggle={() => setReportsDropdownOpen(prev => !prev)}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
+            isMobile={isMobile}
+          />
+
+          <main className="admin-main">
+            <div className="admin-content">
           {activeTab === 'overview' && (
-            <div className="overview-section">
-              {loadingStats ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading statistics...</p>
-                </div>
-              ) : overviewStats ? (
-                <>
-                  {/* Primary Stats Row */}
-                  <div className="overview-stats-row">
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                        <span className="stat-icon-emoji">👥</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.total_patients || 0}</h3>
-                        <p className="stat-label">Total Patients</p>
-                        <span className="stat-badge">Registered</span>
-                      </div>
-                    </div>
-
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-                        <span className="stat-icon-emoji">📋</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.total_sessions || 0}</h3>
-                        <p className="stat-label">Total Sessions</p>
-                        <div className="stat-filter-inline">
-                          <select
-                            className="stat-filter-dropdown"
-                            value={selectedDays}
-                            onChange={(e) => setSelectedDays(e.target.value)}
-                          >
-                            <option value="30">Last 30 Days</option>
-                            <option value="90">Last 90 Days</option>
-                            <option value="180">Last 6 Months</option>
-                            <option value="365">Last Year</option>
-                            <option value="all">All Time</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
-                        <span className="stat-icon-emoji">✅</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.active_patients || 0}</h3>
-                        <p className="stat-label">Active Patients</p>
-                        <span className="stat-badge">Last 30 Days</span>
-                      </div>
-                    </div>
-
-                    <div className="stat-card">
-                      <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>
-                        <span className="stat-icon-emoji">🎯</span>
-                      </div>
-                      <div className="stat-details">
-                        <h3 className="stat-value">{overviewStats.total_exercises || 0}</h3>
-                        <p className="stat-label">Total Exercises</p>
-                        <span className="stat-badge">Available</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Appointments Stats Row */}
-                  {overviewStats.appointments && (
-                    <div className="overview-stats-row">
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' }}>
-                          <span className="stat-icon-emoji">📅</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.today || 0}</h3>
-                          <p className="stat-label">Today's Appointments</p>
-                          <span className="stat-badge">Scheduled</span>
-                        </div>
-                      </div>
-
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' }}>
-                          <span className="stat-icon-emoji">📆</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.upcoming || 0}</h3>
-                          <p className="stat-label">Upcoming</p>
-                          <span className="stat-badge">Next 7 Days</span>
-                        </div>
-                      </div>
-
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' }}>
-                          <span className="stat-icon-emoji">✔️</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.completed || 0}</h3>
-                          <p className="stat-label">Completed</p>
-                          <span className="stat-badge">{overviewStats.appointments.completion_rate || 0}% Rate</span>
-                        </div>
-                      </div>
-
-                      <div className="stat-card">
-                        <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' }}>
-                          <span className="stat-icon-emoji">📊</span>
-                        </div>
-                        <div className="stat-details">
-                          <h3 className="stat-value">{overviewStats.appointments.total || 0}</h3>
-                          <p className="stat-label">Total Appointments</p>
-                          <span className="stat-badge">All Time</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Unified Dashboard Grid */}
-                  <div className="overview-unified-grid">
-                    {/* 1 - Therapy Sessions Distribution */}
-                    <div className="overview-card overview-chart-card" style={{ gridArea: 'sessions' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">📊</span>
-                          Therapy Sessions Distribution
-                        </h3>
-                      </div>
-                      <div className="overview-chart-body">
-                        {/* Donut Chart */}
-                        <div className="overview-donut-wrapper">
-                          <svg className="donut-chart" viewBox="0 0 200 200">
-                            <defs>
-                              <linearGradient id="articulation-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style={{ stopColor: '#f59e0b', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: '#d97706', stopOpacity: 1 }} />
-                              </linearGradient>
-                              <linearGradient id="language-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style={{ stopColor: '#8b5cf6', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: '#7c3aed', stopOpacity: 1 }} />
-                              </linearGradient>
-                              <linearGradient id="fluency-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style={{ stopColor: '#10b981', stopOpacity: 1 }} />
-                                <stop offset="100%" style={{ stopColor: '#059669', stopOpacity: 1 }} />
-                              </linearGradient>
-                              <filter id="shadow">
-                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15"/>
-                              </filter>
-                              <filter id="shadow-hover">
-                                <feDropShadow dx="0" dy="8" stdDeviation="12" floodOpacity="0.3"/>
-                              </filter>
-                            </defs>
-                            {(() => {
-                              const total = overviewStats.total_sessions || 1;
-                              const articulationCount = overviewStats.articulation_sessions || 0;
-                              const languageCount = overviewStats.language_sessions || 0;
-                              const fluencyCount = overviewStats.fluency_sessions || 0;
-                              
-                              const therapyData = [];
-                              
-                              if (articulationCount > 0) {
-                                therapyData.push({
-                                  name: 'Articulation', count: articulationCount,
-                                  percentage: (articulationCount / total) * 100,
-                                  color: 'url(#articulation-gradient)', className: 'articulation-slice'
-                                });
-                              }
-                              if (languageCount > 0) {
-                                therapyData.push({
-                                  name: 'Language', count: languageCount,
-                                  percentage: (languageCount / total) * 100,
-                                  color: 'url(#language-gradient)', className: 'language-slice'
-                                });
-                              }
-                              if (fluencyCount > 0) {
-                                therapyData.push({
-                                  name: 'Fluency', count: fluencyCount,
-                                  percentage: (fluencyCount / total) * 100,
-                                  color: 'url(#fluency-gradient)', className: 'fluency-slice'
-                                });
-                              }
-                              
-                              const createPieSlice = (startAngle, endAngle, radius = 85) => {
-                                const start = (startAngle - 90) * Math.PI / 180;
-                                const end = (endAngle - 90) * Math.PI / 180;
-                                const x1 = 100 + radius * Math.cos(start);
-                                const y1 = 100 + radius * Math.sin(start);
-                                const x2 = 100 + radius * Math.cos(end);
-                                const y2 = 100 + radius * Math.sin(end);
-                                const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-                                return `M 100 100 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-                              };
-                              
-                              let currentAngle = 0;
-                              
-                              return (
-                                <g className="pie-chart-group">
-                                  {therapyData.length === 0 ? (
-                                    <>
-                                      <circle cx="100" cy="100" r="85" fill="#f1f5f9" opacity="0.5" />
-                                      <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      <text x="100" y="100" textAnchor="middle" fontSize="14" fontWeight="600" fill="#94a3b8">No Data</text>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {therapyData.map((therapy) => {
-                                        const angle = (therapy.percentage / 100) * 360;
-                                        const sliceStartAngle = currentAngle;
-                                        const sliceEndAngle = currentAngle + angle;
-                                        currentAngle += angle;
-                                        return (
-                                          <path
-                                            key={therapy.name}
-                                            className={`pie-slice ${therapy.className}`}
-                                            d={createPieSlice(sliceStartAngle, sliceEndAngle)}
-                                            fill={therapy.color}
-                                            filter="url(#shadow)"
-                                            style={{ transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'pointer', transformOrigin: '100px 100px' }}
-                                            onMouseEnter={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow-hover)'); e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                            onMouseLeave={(e) => { e.currentTarget.setAttribute('filter', 'url(#shadow)'); e.currentTarget.style.transform = 'scale(1)'; }}
-                                          >
-                                            <title>{therapy.name}: {therapy.count} sessions ({therapy.percentage.toFixed(1)}%)</title>
-                                          </path>
-                                        );
-                                      })}
-                                      {therapyData.map((therapy, index) => {
-                                        let cumulativeAngle = 0;
-                                        for (let i = 0; i < index; i++) {
-                                          cumulativeAngle += (therapyData[i].percentage / 100) * 360;
-                                        }
-                                        const angle = (cumulativeAngle - 90) * Math.PI / 180;
-                                        return (
-                                          <line key={`sep-${index}`} x1="100" y1="100"
-                                            x2={index === 0 ? 100 : 100 + 85 * Math.cos(angle)}
-                                            y2={index === 0 ? 15 : 100 + 85 * Math.sin(angle)}
-                                            stroke="white" strokeWidth="2" opacity="0.8" />
-                                        );
-                                      })}
-                                      <circle cx="100" cy="100" r="45" fill="white" filter="url(#shadow)" />
-                                      <text x="100" y="90" textAnchor="middle" fontSize="32" fontWeight="800" fill="#1a202c">{total}</text>
-                                      <text x="100" y="108" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">TOTAL</text>
-                                      <text x="100" y="122" textAnchor="middle" fontSize="11" fontWeight="600" fill="#64748b" letterSpacing="0.5">SESSIONS</text>
-                                    </>
-                                  )}
-                                </g>
-                              );
-                            })()}
-                          </svg>
-                        </div>
-
-                        {/* Legend */}
-                        <div className="overview-chart-legend">
-                          {[
-                            { key: 'articulation', label: 'Articulation', icon: '🗣️', desc: 'Sound pronunciation', sessions: overviewStats.articulation_sessions || 0, gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', sliceClass: 'articulation-slice', fillClass: 'articulation-fill' },
-                            { key: 'language', label: 'Language', icon: '💬', desc: 'Receptive & expressive', sessions: overviewStats.language_sessions || 0, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', sliceClass: 'language-slice', fillClass: 'language-fill' },
-                            { key: 'fluency', label: 'Fluency', icon: '⚡', desc: 'Speech flow & rhythm', sessions: overviewStats.fluency_sessions || 0, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', sliceClass: 'fluency-slice', fillClass: 'fluency-fill' },
-                          ].filter(t => t.sessions > 0).map(t => (
-                            <div key={t.key} className="overview-legend-item"
-                              onMouseEnter={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow-hover)'); s.style.transform = 'scale(1.05)'; } }}
-                              onMouseLeave={() => { const s = document.querySelector(`.${t.sliceClass}`); if (s) { s.setAttribute('filter', 'url(#shadow)'); s.style.transform = 'scale(1)'; } }}
-                            >
-                              <div className="overview-legend-left">
-                                <div className="overview-legend-color" style={{ background: t.gradient }}>
-                                  <span>{t.icon}</span>
-                                </div>
-                                <div className="overview-legend-info">
-                                  <span className="overview-legend-label">{t.label}</span>
-                                  <span className="overview-legend-desc">{t.desc}</span>
-                                </div>
-                              </div>
-                              <div className="overview-legend-right">
-                                <span className="overview-legend-count">{t.sessions}</span>
-                                <div className="overview-legend-bar">
-                                  <div className={`overview-legend-bar-fill ${t.fillClass}`}
-                                    style={{ width: `${overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%` }}
-                                  ></div>
-                                </div>
-                                <span className="overview-legend-pct">
-                                  {overviewStats.total_sessions > 0 ? ((t.sessions / overviewStats.total_sessions) * 100).toFixed(1) : 0}%
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                          {(overviewStats.articulation_sessions || 0) === 0 && (overviewStats.language_sessions || 0) === 0 && (overviewStats.fluency_sessions || 0) === 0 && (
-                            <div className="overview-legend-empty">
-                              <span>📭</span>
-                              <p>No session data available</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 2 - Average Scores */}
-                    <div className="overview-card overview-avg-scores-card" style={{ gridArea: 'scores' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">📈</span>
-                          Average Scores
-                        </h3>
-                      </div>
-                      <div className="overview-avg-scores-body">
-                        {[
-                          { key: 'articulation', label: 'Articulation', icon: '🗣️', color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', score: overviewStats.average_scores?.articulation || 0 },
-                          { key: 'language', label: 'Language', icon: '💬', color: '#8b5cf6', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', score: overviewStats.average_scores?.language || 0 },
-                          { key: 'fluency', label: 'Fluency', icon: '⚡', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', score: overviewStats.average_scores?.fluency || 0 },
-                        ].map(t => (
-                          <div key={t.key} className="avg-score-row">
-                            <div className="avg-score-label">
-                              <span className="avg-score-icon">{t.icon}</span>
-                              <span className="avg-score-name">{t.label}</span>
-                            </div>
-                            <div className="avg-score-bar-wrapper">
-                              <div className="avg-score-bar-track">
-                                <div
-                                  className="avg-score-bar-fill"
-                                  style={{ width: `${t.score}%`, background: t.gradient }}
-                                ></div>
-                              </div>
-                              <span className={`avg-score-value ${t.score >= 80 ? 'score-high' : t.score >= 50 ? 'score-mid' : 'score-low'}`}>
-                                {t.score}%
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                        {(!overviewStats.average_scores || (overviewStats.average_scores.articulation === 0 && overviewStats.average_scores.language === 0 && overviewStats.average_scores.fluency === 0)) && (
-                          <div className="avg-scores-empty">
-                            <span>📭</span>
-                            <p>No score data available</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 3 - Patient Engagement */}
-                    <div className="overview-card overview-engagement-card" style={{ gridArea: 'engage' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">💡</span>
-                          Patient Engagement
-                        </h3>
-                      </div>
-                      <div className="overview-engagement-body">
-                        {(() => {
-                          const active = overviewStats.active_patients || 0;
-                          const total = overviewStats.total_patients || 0;
-                          const rate = total > 0 ? Math.round((active / total) * 100) : 0;
-                          const circumference = 2 * Math.PI * 54;
-                          const offset = circumference - (rate / 100) * circumference;
-                          const rateColor = rate >= 70 ? '#10b981' : rate >= 40 ? '#f59e0b' : '#ef4444';
-                          return (
-                            <div className="engagement-ring-container">
-                              <div className="engagement-ring-wrapper">
-                                <svg className="engagement-ring-svg" viewBox="0 0 128 128">
-                                  <circle cx="64" cy="64" r="54" fill="none" stroke="#f1f5f9" strokeWidth="10" />
-                                  <circle cx="64" cy="64" r="54" fill="none" stroke={rateColor} strokeWidth="10"
-                                    strokeDasharray={circumference} strokeDashoffset={offset}
-                                    strokeLinecap="round" transform="rotate(-90 64 64)"
-                                    style={{ transition: 'stroke-dashoffset 1s ease-out' }}
-                                  />
-                                </svg>
-                                <div className="engagement-ring-center">
-                                  <span className="engagement-ring-pct" style={{ color: rateColor }}>{rate}%</span>
-                                </div>
-                              </div>
-                              <div className="engagement-ring-details">
-                                <div className="engagement-detail-row">
-                                  <span className="engagement-detail-dot" style={{ background: rateColor }}></span>
-                                  <span className="engagement-detail-label">Active</span>
-                                  <span className="engagement-detail-value">{active}</span>
-                                </div>
-                                <div className="engagement-detail-row">
-                                  <span className="engagement-detail-dot" style={{ background: '#e2e8f0' }}></span>
-                                  <span className="engagement-detail-label">Inactive</span>
-                                  <span className="engagement-detail-value">{total - active}</span>
-                                </div>
-                                <div className="engagement-detail-row engagement-detail-total">
-                                  <span className="engagement-detail-label">Total</span>
-                                  <span className="engagement-detail-value">{total}</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* 4 - Recent Activities (spans 2 rows on right) */}
-                    <div className="overview-card overview-activities-card" style={{ gridArea: 'activity' }}>
-                      <div className="overview-card-header">
-                        <h3 className="overview-card-title">
-                          <span className="overview-card-icon">🕑</span>
-                          Recent Activities
-                        </h3>
-                      </div>
-                      <div className="overview-activities-body">
-                        {overviewStats.recent_activities && overviewStats.recent_activities.length > 0 ? (
-                          <div className="overview-activities-list">
-                            {overviewStats.recent_activities.map((activity, index) => (
-                              <div className="overview-activity-item" key={index}>
-                                <div className="overview-activity-icon">
-                                  {activity.therapy_type === 'Articulation' && '🗣️'}
-                                  {activity.therapy_type === 'Language' && '📖'}
-                                  {activity.therapy_type === 'Fluency' && '💬'}
-                                </div>
-                                <div className="overview-activity-info">
-                                  <span className="overview-activity-patient">{activity.patient_name}</span>
-                                  <span className="overview-activity-detail">
-                                    {activity.therapy_type}{activity.detail ? ` — ${activity.detail}` : ''}
-                                  </span>
-                                </div>
-                                <div className="overview-activity-meta">
-                                  <span className={`overview-activity-score ${activity.score >= 80 ? 'score-high' : activity.score >= 50 ? 'score-mid' : 'score-low'}`}>
-                                    {activity.score != null ? `${activity.score}%` : '—'}
-                                  </span>
-                                  <span className="overview-activity-time">
-                                    {activity.timestamp ? new Date(activity.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="overview-activities-empty">
-                            <span>📭</span>
-                            <p>No recent activities yet</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="no-data-message">
-                  <span className="no-data-icon">📊</span>
-                  <h3>No Statistics Available</h3>
-                  <p>Unable to load dashboard statistics. Please try again later.</p>
-                </div>
-              )}
-            </div>
+            <DashboardOverview
+              overviewStats={overviewStats}
+              reportsData={reportsData}
+              selectedDays={selectedDays}
+              setSelectedDays={setSelectedDays}
+              loadingStats={loadingStats}
+              loadingReports={loadingReports}
+              user={user}
+            />
           )}
 
           {activeTab === 'articulation' && (
@@ -1966,6 +2272,13 @@ function TherapistDashboard({ onLogout }) {
                     </button>
                     <button className="btn-primary" onClick={() => setShowArticulationModal(true)}>
                       ➕ New Exercise
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={handleExportArticulationPdf}
+                      disabled={exportingArticulation}
+                    >
+                      {exportingArticulation ? '⏳ Generating...' : '📄 Export PDF'}
                     </button>
                   </div>
                 </div>
@@ -2077,6 +2390,20 @@ function TherapistDashboard({ onLogout }) {
                   <h2>Physical Therapy</h2>
                   <p>Monitor and review patient gait analyses</p>
                 </div>
+                <div className="header-right">
+                  <button
+                    className={`btn-export-pdf${selectedAnalysisIds.size === 0 ? ' disabled' : ''}`}
+                    onClick={handleExportPhysicalPdf}
+                    disabled={selectedAnalysisIds.size === 0}
+                    title={selectedAnalysisIds.size === 0 ? 'Select at least one record to export' : `Export ${selectedAnalysisIds.size} selected record${selectedAnalysisIds.size > 1 ? 's' : ''} to PDF`}
+                  >
+                    <span className="btn-export-icon">⬇</span>
+                    Export to PDF
+                    {selectedAnalysisIds.size > 0 && (
+                      <span className="btn-export-count">{selectedAnalysisIds.size}</span>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {loadingPhysical ? (
@@ -2136,6 +2463,29 @@ function TherapistDashboard({ onLogout }) {
                     <table className="logs-table gait-table">
                       <thead>
                         <tr>
+                          <th className="gait-col-checkbox">
+                            {(() => {
+                              const filteredIds = gaitAnalyses
+                                .filter(a =>
+                                  !searchTerm ||
+                                  a.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                  a.user_email.toLowerCase().includes(searchTerm.toLowerCase())
+                                )
+                                .map(a => a.id);
+                              const pageStart = (currentGaitPage - 1) * gaitEntriesPerPage;
+                              const pageIds = filteredIds.slice(pageStart, pageStart + gaitEntriesPerPage);
+                              const allChecked = pageIds.length > 0 && pageIds.every(id => selectedAnalysisIds.has(id));
+                              return (
+                                <input
+                                  type="checkbox"
+                                  className="gait-checkbox"
+                                  checked={allChecked}
+                                  onChange={() => toggleSelectAllOnPage(pageIds)}
+                                  title={allChecked ? 'Deselect all on this page' : 'Select all on this page'}
+                                />
+                              );
+                            })()}
+                          </th>
                           <th>Patient</th>
                           <th>Email</th>
                           <th>Problems</th>
@@ -2154,9 +2504,17 @@ function TherapistDashboard({ onLogout }) {
                           const indexOfLastEntry = currentGaitPage * gaitEntriesPerPage;
                           const indexOfFirstEntry = indexOfLastEntry - gaitEntriesPerPage;
                           const currentEntries = filteredAnalyses.slice(indexOfFirstEntry, indexOfLastEntry);
-                          return currentEntries.map(analysis => (
+                           return currentEntries.map(analysis => (
                             <React.Fragment key={analysis.id}>
-                              <tr className="gait-row">
+                              <tr className={`gait-row${selectedAnalysisIds.has(analysis.id) ? ' gait-row-selected' : ''}`}>
+                                <td className="gait-col-checkbox">
+                                  <input
+                                    type="checkbox"
+                                    className="gait-checkbox"
+                                    checked={selectedAnalysisIds.has(analysis.id)}
+                                    onChange={() => toggleSelectAnalysis(analysis.id)}
+                                  />
+                                </td>
                                 <td>
                                   <div className="patient-cell">
                                     <div className="patient-avatar-small">
@@ -2211,7 +2569,7 @@ function TherapistDashboard({ onLogout }) {
                               {/* Expandable Gait Details Row */}
                               {expandedGaitRows[analysis.id] && (
                                 <tr className="gait-details-row">
-                                  <td colSpan="6">
+                                  <td colSpan="7">
                                     <div className="gait-details-container">
                                       <div className="gait-metrics-grid">
                                         <div className="gait-metric-item">
@@ -2377,6 +2735,518 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
+          {activeTab === 'most-common-problem' && (
+            <div className="physical-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Most Common Problem</h2>
+                  <p>Top detected gait problems ranked by how often they were recommended from patient analyses.</p>
+                </div>
+              </div>
+
+              {loadingPhysical ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading common problem rankings...</p>
+                </div>
+              ) : mostCommonProblemStats.ranked.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">📌</span>
+                    <h3>No Ranked Problems Yet</h3>
+                    <p>Rankings will appear after gait analyses detect patient problems.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group common-problem-summary">
+                      <span className="stat-item">
+                        <strong>{gaitAnalyses.length}</strong> Total Analyses
+                      </span>
+                      <span className="stat-item">
+                        <strong>{mostCommonProblemStats.uniqueProblems}</strong> Unique Problems
+                      </span>
+                      <span className="stat-item">
+                        <strong>{mostCommonProblemStats.totalMentions}</strong> Total Recommendations
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="datatable-container">
+                    <table className="logs-table common-problem-table">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Detected Problem</th>
+                          <th>Times Recommended</th>
+                          <th>Patients Affected</th>
+                          <th>Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mostCommonProblemStats.ranked.map((problem, index) => {
+                          const share = mostCommonProblemStats.totalMentions
+                            ? ((problem.count / mostCommonProblemStats.totalMentions) * 100).toFixed(1)
+                            : '0.0';
+
+                          return (
+                            <tr key={problem.key}>
+                              <td>
+                                <span className={`common-rank-badge rank-${index + 1}`}>
+                                  #{index + 1}
+                                </span>
+                              </td>
+                              <td>
+                                <strong>{problem.label}</strong>
+                              </td>
+                              <td>{problem.count}</td>
+                              <td>{problem.patientCount}</td>
+                              <td>{share}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'speech-entries' && (
+            <div className="physical-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Speech Entries</h2>
+                  <p>View all patient speech trial records across articulation, language, and fluency.</p>
+                </div>
+              </div>
+
+              {loadingSpeechEntries ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading speech entries...</p>
+                </div>
+              ) : speechEntries.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🎤</span>
+                    <h3>No Speech Entries Found</h3>
+                    <p>Speech entries will appear here once patients complete speech exercises.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group">
+                      <div className="search-container">
+                        <input
+                          type="text"
+                          placeholder="Search by patient name, email, or therapy type..."
+                          value={speechSearchTerm}
+                          onChange={(e) => {
+                            setSpeechSearchTerm(e.target.value);
+                            setCurrentSpeechPage(1);
+                          }}
+                          className="search-input"
+                        />
+                      </div>
+                      <div className="pagination-controls">
+                        <label className="entries-label">
+                          Show:
+                          <select
+                            value={speechEntriesPerPage}
+                            onChange={(e) => {
+                              setSpeechEntriesPerPage(Number(e.target.value));
+                              setCurrentSpeechPage(1);
+                            }}
+                            className="entries-select"
+                          >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                          entries
+                        </label>
+                      </div>
+                      <div className="stats-summary">
+                        <span className="stat-item">
+                          <strong>{speechEntries.length}</strong> Total Speech Entries
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="datatable-container">
+                    <table className="logs-table gait-table">
+                      <thead>
+                        <tr>
+                          <th>Patient</th>
+                          <th>Email</th>
+                          <th>Therapy Type</th>
+                          <th>Level</th>
+                          <th>Score</th>
+                          <th>Date & Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const term = speechSearchTerm.trim().toLowerCase();
+                          const filteredEntries = speechEntries.filter((entry) => {
+                            if (!term) return true;
+                            return (
+                              (entry.user_name || '').toLowerCase().includes(term) ||
+                              (entry.user_email || '').toLowerCase().includes(term) ||
+                              formatSpeechTherapyType(entry.therapy_type).toLowerCase().includes(term)
+                            );
+                          });
+
+                          const indexOfLastEntry = currentSpeechPage * speechEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - speechEntriesPerPage;
+                          const currentEntries = filteredEntries.slice(indexOfFirstEntry, indexOfLastEntry);
+
+                          return currentEntries.map((entry) => (
+                            <React.Fragment key={entry.id}>
+                              <tr>
+                                <td>
+                                  <div className="patient-cell">
+                                    <div className="patient-avatar-small">
+                                      {(entry.user_name || 'P').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </div>
+                                    <span className="patient-name-text">{entry.user_name || 'Unknown Patient'}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="email-text">{entry.user_email || 'N/A'}</span>
+                                </td>
+                                <td>
+                                  <span className="therapy-type-badge" data-type={entry.therapy_type === 'receptive' || entry.therapy_type === 'expressive' ? 'language' : entry.therapy_type}>
+                                    {formatSpeechTherapyType(entry.therapy_type)}
+                                  </span>
+                                </td>
+                                <td>{entry.level || 'N/A'}</td>
+                                <td>
+                                  <span className="score-number">{typeof entry.score === 'number' ? `${entry.score}%` : 'N/A'}</span>
+                                </td>
+                                <td>
+                                  <div className="date-cell-container">
+                                    <span className="date-cell">{entry.entry_at ? formatDate(entry.entry_at) : 'N/A'}</span>
+                                    <button
+                                      className={`gait-dropdown-btn ${expandedSpeechRows[entry.id] ? 'expanded' : ''}`}
+                                      onClick={() => toggleSpeechDetails(entry.id)}
+                                      title={expandedSpeechRows[entry.id] ? 'Hide details' : 'Show details'}
+                                    >
+                                      ▼
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {expandedSpeechRows[entry.id] && (
+                                <tr className="gait-details-row">
+                                  <td colSpan="6">
+                                    <div className="gait-details-container">
+                                      <h4 className="problems-title">Entry Details</h4>
+                                      <p className="speech-entry-details-text">{getSpeechDetailsText(entry)}</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+
+                    {(() => {
+                      const term = speechSearchTerm.trim().toLowerCase();
+                      const filteredEntries = speechEntries.filter((entry) => {
+                        if (!term) return true;
+                        return (
+                          (entry.user_name || '').toLowerCase().includes(term) ||
+                          (entry.user_email || '').toLowerCase().includes(term) ||
+                          formatSpeechTherapyType(entry.therapy_type).toLowerCase().includes(term)
+                        );
+                      });
+
+                      const totalPages = Math.ceil(filteredEntries.length / speechEntriesPerPage);
+                      if (totalPages <= 1) return null;
+
+                      const indexOfLastEntry = currentSpeechPage * speechEntriesPerPage;
+                      const indexOfFirstEntry = indexOfLastEntry - speechEntriesPerPage + 1;
+                      const actualLastEntry = Math.min(indexOfLastEntry, filteredEntries.length);
+
+                      return (
+                        <div className="pagination-footer">
+                          <div className="pagination-info">
+                            Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredEntries.length} entries
+                          </div>
+                          <div className="pagination-buttons">
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(1)}
+                              disabled={currentSpeechPage === 1}
+                            >
+                              «
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentSpeechPage === 1}
+                            >
+                              ‹
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentSpeechPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentSpeechPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentSpeechPage - 2 + i;
+                              }
+                              return (
+                                <button
+                                  key={pageNum}
+                                  className={`pagination-btn ${currentSpeechPage === pageNum ? 'active' : ''}`}
+                                  onClick={() => setCurrentSpeechPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentSpeechPage === totalPages}
+                            >
+                              ›
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentSpeechPage(totalPages)}
+                              disabled={currentSpeechPage === totalPages}
+                            >
+                              »
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'recommended-exercises' && (
+            <div className="physical-section recommended-exercises-section">
+              {loadingRecommended ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading recommended exercises...</p>
+                </div>
+              ) : recommendedExercises.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🧩</span>
+                    <h3>No Recommended Exercises Yet</h3>
+                    <p>Recommended exercises will appear after gait analyses create exercise plans.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="gait-analyses-container">
+                  <div className="controls-section">
+                    <div className="control-group">
+                      <div className="search-container">
+                        <input
+                          type="text"
+                          placeholder="Search by patient name or email..."
+                          value={recommendedSearchTerm}
+                          onChange={(e) => {
+                            setRecommendedSearchTerm(e.target.value);
+                            setCurrentRecommendedPage(1);
+                          }}
+                          className="search-input"
+                        />
+                      </div>
+                      <div className="pagination-controls">
+                        <label className="entries-label">
+                          Show:
+                          <select
+                            value={recommendedEntriesPerPage}
+                            onChange={(e) => {
+                              setRecommendedEntriesPerPage(Number(e.target.value));
+                              setCurrentRecommendedPage(1);
+                            }}
+                            className="entries-select"
+                          >
+                            <option value={5}>5</option>
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                          entries
+                        </label>
+                      </div>
+                      <div className="stats-summary">
+                        <span className="stat-item">
+                          <strong>{recommendedExercises.length}</strong> Total Plans
+                        </span>
+                      </div>
+                      <div className="recommended-status-toggle-bar" title="Status controls visibility">
+                        <span className="recommended-status-toggle-label">Status Mode</span>
+                        <label className="recommended-toggle-switch">
+                          <input
+                            type="checkbox"
+                            checked={showRecommendedStatusControls}
+                            disabled={bulkUpdatingRecommendedVisibility}
+                            onChange={(e) => handleToggleRecommendedStatusControls(e.target.checked)}
+                          />
+                          <span className="recommended-toggle-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="datatable-container">
+                    <table className={`logs-table gait-table recommended-table ${showRecommendedStatusControls ? 'status-visible' : ''}`}>
+                      <thead>
+                        <tr>
+                          <th>Patient</th>
+                          <th>Session</th>
+                          <th>Recommended</th>
+                          {showRecommendedStatusControls && <th>Status</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const filteredPlans = recommendedExercises.filter(plan =>
+                            !recommendedSearchTerm ||
+                            plan.user_name.toLowerCase().includes(recommendedSearchTerm.toLowerCase()) ||
+                            plan.user_email.toLowerCase().includes(recommendedSearchTerm.toLowerCase())
+                          );
+
+                          const indexOfLastEntry = currentRecommendedPage * recommendedEntriesPerPage;
+                          const indexOfFirstEntry = indexOfLastEntry - recommendedEntriesPerPage;
+                          const currentEntries = filteredPlans.slice(indexOfFirstEntry, indexOfLastEntry);
+
+                          return currentEntries.map((plan) => {
+                            const isUpdating = updatingRecommendedIds.has(plan.id);
+                            const exercises = Array.isArray(plan.exercises) ? plan.exercises : [];
+                            const primaryExercise = exercises[0]?.exercise_name || 'No exercise';
+                            return (
+                              <tr key={plan.id}>
+                                <td>
+                                  <span className="recommended-patient-name">{plan.user_name}</span>
+                                </td>
+                                <td><span className="date-cell">{formatDate(plan.session_created_at)}</span></td>
+                                <td>
+                                  <div className="recommended-main-cell">
+                                    <span className="recommended-main-title">{primaryExercise}</span>
+                                    <span className="recommended-main-meta">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</span>
+                                  </div>
+                                </td>
+                                {showRecommendedStatusControls && (
+                                <td>
+                                  <select
+                                    className="recommended-select"
+                                    value={plan.status || 'ongoing'}
+                                    disabled={isUpdating}
+                                    onChange={(e) => handleUpdateRecommendedField(plan.id, 'status', e.target.value)}
+                                  >
+                                    <option value="ongoing">Ongoing</option>
+                                    <option value="done">Done</option>
+                                  </select>
+                                </td>
+                                )}
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+
+                    {(() => {
+                      const filteredPlans = recommendedExercises.filter(plan =>
+                        !recommendedSearchTerm ||
+                        plan.user_name.toLowerCase().includes(recommendedSearchTerm.toLowerCase()) ||
+                        plan.user_email.toLowerCase().includes(recommendedSearchTerm.toLowerCase())
+                      );
+                      const totalPages = Math.ceil(filteredPlans.length / recommendedEntriesPerPage);
+                      if (totalPages <= 1) return null;
+
+                      const indexOfLastEntry = currentRecommendedPage * recommendedEntriesPerPage;
+                      const indexOfFirstEntry = indexOfLastEntry - recommendedEntriesPerPage + 1;
+                      const actualLastEntry = Math.min(indexOfLastEntry, filteredPlans.length);
+
+                      return (
+                        <div className="pagination-footer">
+                          <div className="pagination-info">
+                            Showing {indexOfFirstEntry} to {actualLastEntry} of {filteredPlans.length} entries
+                          </div>
+                          <div className="pagination-buttons">
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(1)}
+                              disabled={currentRecommendedPage === 1}
+                            >
+                              «
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentRecommendedPage === 1}
+                            >
+                              ‹
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentRecommendedPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentRecommendedPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentRecommendedPage - 2 + i;
+                              }
+                              return (
+                                <button
+                                  key={pageNum}
+                                  className={`pagination-btn ${currentRecommendedPage === pageNum ? 'active' : ''}`}
+                                  onClick={() => setCurrentRecommendedPage(pageNum)}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentRecommendedPage === totalPages}
+                            >
+                              ›
+                            </button>
+                            <button
+                              className="pagination-btn"
+                              onClick={() => setCurrentRecommendedPage(totalPages)}
+                              disabled={currentRecommendedPage === totalPages}
+                            >
+                              »
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'language' && (
             <div className="language-section">
               <div className="controls-section">
@@ -2389,6 +3259,13 @@ function TherapistDashboard({ onLogout }) {
                     setShowLanguageModal(true);
                   }}>
                     ➕ New Exercise
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleExportLanguagePdf}
+                    disabled={exportingLanguage}
+                  >
+                    {exportingLanguage ? '⏳ Generating...' : '📄 Export PDF'}
                   </button>
                 </div>
               </div>
@@ -2512,6 +3389,450 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
+          {activeTab === 'detection-problems' && (
+            <div className="success-stories-section physical-therapy-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Detection Problems</h2>
+                  <p>Manage physical problems commonly detected in CVA patients</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button className="btn-primary" style={{ background: '#6b7280' }} onClick={handleSeedDP}>
+                    🌱 Seed Defaults
+                  </button>
+                  <button className="btn-primary" onClick={handleOpenDPCreate}>
+                    ➕ Add Problem
+                  </button>
+                </div>
+              </div>
+
+              <div className="stories-toolbar">
+                <div className="toolbar-left">
+                  <div className="search-container">
+                    <input
+                      type="text"
+                      placeholder="Search by name or category..."
+                      value={dpSearchTerm}
+                      onChange={(e) => { setDPSearchTerm(e.target.value); setCurrentDPPage(1); }}
+                      className="search-input"
+                    />
+                  </div>
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select
+                        value={dpEntriesPerPage}
+                        onChange={(e) => { setDPEntriesPerPage(Number(e.target.value)); setCurrentDPPage(1); }}
+                        className="entries-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+                <div className="toolbar-right">
+                  <div className="stats-summary">
+                    <span className="stat-item"><strong>{detectionProblems.filter(d => d.is_active).length}</strong> Active</span>
+                    <span className="stat-item"><strong>{detectionProblems.length}</strong> Total</span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingDetectionProblems ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading detection problems...</p>
+                </div>
+              ) : detectionProblems.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">🔍</span>
+                    <h3>No Detection Problems Yet</h3>
+                    <p>Click "Seed Defaults" to populate or "Add Problem" to create one.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="datatable-container">
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Severity</th>
+                        <th>Affected Area</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filtered = detectionProblems.filter(d =>
+                          !dpSearchTerm ||
+                          d.name?.toLowerCase().includes(dpSearchTerm.toLowerCase()) ||
+                          d.category?.toLowerCase().includes(dpSearchTerm.toLowerCase())
+                        );
+                        const last = currentDPPage * dpEntriesPerPage;
+                        const first = last - dpEntriesPerPage;
+                        return filtered.slice(first, last).map(item => (
+                          <tr key={item.problem_id} style={{ opacity: item.is_active ? 1 : 0.55 }}>
+                            <td><code style={{ fontSize: '0.8rem' }}>{item.problem_id}</code></td>
+                            <td><strong>{item.name}</strong></td>
+                            <td>{item.category}</td>
+                            <td>
+                              <span className={`status-badge ${
+                                item.severity_level === 'severe' ? 'status-critical' :
+                                item.severity_level === 'moderate' ? 'status-warning' : 'status-active'
+                              }`}>
+                                {item.severity_level}
+                              </span>
+                            </td>
+                            <td>{item.affected_area}</td>
+                            <td>
+                              <label className="fluency-active-switch">
+                                <input
+                                  type="checkbox"
+                                  checked={item.is_active}
+                                  onChange={() => handleToggleDP(item.problem_id)}
+                                />
+                                <span>{item.is_active ? 'Active' : 'Inactive'}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <div className="exercise-actions">
+                                <button className="btn-edit" onClick={() => handleOpenDPEdit(item)}>Edit</button>
+                                <button className="btn-delete" onClick={() => handleDeleteDP(item.problem_id)}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                  {(() => {
+                    const filtered = detectionProblems.filter(d =>
+                      !dpSearchTerm ||
+                      d.name?.toLowerCase().includes(dpSearchTerm.toLowerCase()) ||
+                      d.category?.toLowerCase().includes(dpSearchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filtered.length / dpEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    const last = currentDPPage * dpEntriesPerPage;
+                    const first = last - dpEntriesPerPage;
+                    return (
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {first + 1} to {Math.min(last, filtered.length)} of {filtered.length} entries
+                        </span>
+                        <div className="pagination-buttons">
+                          <button onClick={() => setCurrentDPPage(1)} disabled={currentDPPage === 1} className="pagination-btn">«</button>
+                          <button onClick={() => setCurrentDPPage(p => Math.max(1, p - 1))} disabled={currentDPPage === 1} className="pagination-btn">‹</button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let p = totalPages <= 5 ? i + 1 : currentDPPage <= 3 ? i + 1 : currentDPPage >= totalPages - 2 ? totalPages - 4 + i : currentDPPage - 2 + i;
+                            return <button key={p} onClick={() => setCurrentDPPage(p)} className={`pagination-btn ${currentDPPage === p ? 'active' : ''}`}>{p}</button>;
+                          })}
+                          <button onClick={() => setCurrentDPPage(p => Math.min(totalPages, p + 1))} disabled={currentDPPage === totalPages} className="pagination-btn">›</button>
+                          <button onClick={() => setCurrentDPPage(totalPages)} disabled={currentDPPage === totalPages} className="pagination-btn">»</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showDPModal && (
+            <div className="modal-overlay" onClick={() => setShowDPModal(false)}>
+              <div className="modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingDP ? 'Edit Detection Problem' : 'Add Detection Problem'}</h3>
+                  <button className="modal-close" onClick={() => setShowDPModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label htmlFor="dp-name">Name *</label>
+                    <input id="dp-name" type="text" value={newDP.name} onChange={e => setNewDP({ ...newDP, name: e.target.value })} placeholder="e.g. Foot Drop" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-category">Category</label>
+                    <input id="dp-category" type="text" value={newDP.category} onChange={e => setNewDP({ ...newDP, category: e.target.value })} placeholder="e.g. Gait, Balance" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-description">Description</label>
+                    <textarea id="dp-description" rows="3" value={newDP.description} onChange={e => setNewDP({ ...newDP, description: e.target.value })} placeholder="Describe the problem..." />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-severity">Severity Level</label>
+                    <select id="dp-severity" value={newDP.severity_level} onChange={e => setNewDP({ ...newDP, severity_level: e.target.value })}>
+                      <option value="mild">Mild</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="severe">Severe</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-indicators">Indicators (comma-separated)</label>
+                    <input id="dp-indicators" type="text" value={newDP.indicators} onChange={e => setNewDP({ ...newDP, indicators: e.target.value })} placeholder="e.g. Dragging foot, Toe clearance issues" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-affected">Affected Area</label>
+                    <input id="dp-affected" type="text" value={newDP.affected_area} onChange={e => setNewDP({ ...newDP, affected_area: e.target.value })} placeholder="e.g. Lower limb, Ankle" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-normal">Normal Range</label>
+                    <input id="dp-normal" type="text" value={newDP.normal_range} onChange={e => setNewDP({ ...newDP, normal_range: e.target.value })} placeholder="e.g. Dorsiflexion 0-20°" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="dp-active">
+                      <input id="dp-active" type="checkbox" checked={newDP.is_active} onChange={e => setNewDP({ ...newDP, is_active: e.target.checked })} style={{ marginRight: '0.5rem' }} />
+                      Active (visible to patients)
+                    </label>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="secondary-btn" onClick={() => setShowDPModal(false)}>Cancel</button>
+                  <button className="primary-btn" onClick={handleSaveDP}>{editingDP ? 'Update' : 'Create'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'exercise-recommendations' && (
+            <div className="success-stories-section physical-therapy-section">
+              <div className="section-header">
+                <div className="header-left">
+                  <h2>Exercise Recommendations</h2>
+                  <p>Manage therapist-curated exercises for CVA patients</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button className="btn-primary" style={{ background: '#6b7280' }} onClick={handleSeedER}>
+                    🌱 Seed Defaults
+                  </button>
+                  <button className="btn-primary" onClick={handleOpenERCreate}>
+                    ➕ Add Exercise
+                  </button>
+                </div>
+              </div>
+
+              <div className="stories-toolbar">
+                <div className="toolbar-left">
+                  <div className="search-container">
+                    <input
+                      type="text"
+                      placeholder="Search by name or category..."
+                      value={erSearchTerm}
+                      onChange={(e) => { setERSearchTerm(e.target.value); setCurrentERPage(1); }}
+                      className="search-input"
+                    />
+                  </div>
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select
+                        value={erEntriesPerPage}
+                        onChange={(e) => { setEREntriesPerPage(Number(e.target.value)); setCurrentERPage(1); }}
+                        className="entries-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+                <div className="toolbar-right">
+                  <div className="stats-summary">
+                    <span className="stat-item"><strong>{exerciseRecs.filter(e => e.is_active).length}</strong> Active</span>
+                    <span className="stat-item"><strong>{exerciseRecs.length}</strong> Total</span>
+                  </div>
+                </div>
+              </div>
+
+              {loadingExerciseRecs ? (
+                <div className="loading-overlay">
+                  <div className="loading-spinner"></div>
+                  <p>Loading exercise recommendations...</p>
+                </div>
+              ) : exerciseRecs.length === 0 ? (
+                <div className="datatable-container">
+                  <div className="no-data-message">
+                    <span className="no-data-icon">💪</span>
+                    <h3>No Exercise Recommendations Yet</h3>
+                    <p>Click "Seed Defaults" to populate or "Add Exercise" to create one.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="datatable-container">
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Difficulty</th>
+                        <th>Duration</th>
+                        <th>Sets × Reps</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filtered = exerciseRecs.filter(e =>
+                          !erSearchTerm ||
+                          e.name?.toLowerCase().includes(erSearchTerm.toLowerCase()) ||
+                          e.category?.toLowerCase().includes(erSearchTerm.toLowerCase())
+                        );
+                        const last = currentERPage * erEntriesPerPage;
+                        const first = last - erEntriesPerPage;
+                        return filtered.slice(first, last).map(item => (
+                          <tr key={item.exercise_id} style={{ opacity: item.is_active ? 1 : 0.55 }}>
+                            <td><code style={{ fontSize: '0.8rem' }}>{item.exercise_id}</code></td>
+                            <td><strong>{item.name}</strong></td>
+                            <td>{item.category}</td>
+                            <td>
+                              <span className={`status-badge ${
+                                item.difficulty_level === 'advanced' ? 'status-critical' :
+                                item.difficulty_level === 'intermediate' ? 'status-warning' : 'status-active'
+                              }`}>
+                                {item.difficulty_level}
+                              </span>
+                            </td>
+                            <td>{item.duration_minutes} min</td>
+                            <td>{item.sets} × {item.repetitions}</td>
+                            <td>
+                              <label className="fluency-active-switch">
+                                <input
+                                  type="checkbox"
+                                  checked={item.is_active}
+                                  onChange={() => handleToggleER(item.exercise_id)}
+                                />
+                                <span>{item.is_active ? 'Active' : 'Inactive'}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <div className="exercise-actions">
+                                <button className="btn-edit" onClick={() => handleOpenEREdit(item)}>Edit</button>
+                                <button className="btn-delete" onClick={() => handleDeleteER(item.exercise_id)}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                  {(() => {
+                    const filtered = exerciseRecs.filter(e =>
+                      !erSearchTerm ||
+                      e.name?.toLowerCase().includes(erSearchTerm.toLowerCase()) ||
+                      e.category?.toLowerCase().includes(erSearchTerm.toLowerCase())
+                    );
+                    const totalPages = Math.ceil(filtered.length / erEntriesPerPage);
+                    if (totalPages <= 1) return null;
+                    const last = currentERPage * erEntriesPerPage;
+                    const first = last - erEntriesPerPage;
+                    return (
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {first + 1} to {Math.min(last, filtered.length)} of {filtered.length} entries
+                        </span>
+                        <div className="pagination-buttons">
+                          <button onClick={() => setCurrentERPage(1)} disabled={currentERPage === 1} className="pagination-btn">«</button>
+                          <button onClick={() => setCurrentERPage(p => Math.max(1, p - 1))} disabled={currentERPage === 1} className="pagination-btn">‹</button>
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let p = totalPages <= 5 ? i + 1 : currentERPage <= 3 ? i + 1 : currentERPage >= totalPages - 2 ? totalPages - 4 + i : currentERPage - 2 + i;
+                            return <button key={p} onClick={() => setCurrentERPage(p)} className={`pagination-btn ${currentERPage === p ? 'active' : ''}`}>{p}</button>;
+                          })}
+                          <button onClick={() => setCurrentERPage(p => Math.min(totalPages, p + 1))} disabled={currentERPage === totalPages} className="pagination-btn">›</button>
+                          <button onClick={() => setCurrentERPage(totalPages)} disabled={currentERPage === totalPages} className="pagination-btn">»</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showERModal && (
+            <div className="modal-overlay" onClick={() => setShowERModal(false)}>
+              <div className="modal-content" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingER ? 'Edit Exercise' : 'Add Exercise Recommendation'}</h3>
+                  <button className="modal-close" onClick={() => setShowERModal(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label htmlFor="er-name">Name *</label>
+                    <input id="er-name" type="text" value={newER.name} onChange={e => setNewER({ ...newER, name: e.target.value })} placeholder="e.g. Ankle Dorsiflexion Stretch" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-category">Category</label>
+                    <input id="er-category" type="text" value={newER.category} onChange={e => setNewER({ ...newER, category: e.target.value })} placeholder="e.g. Stretching, Balance" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-description">Description</label>
+                    <textarea id="er-description" rows="2" value={newER.description} onChange={e => setNewER({ ...newER, description: e.target.value })} placeholder="Brief overview of the exercise..." />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-target">Target Problems (comma-separated)</label>
+                    <input id="er-target" type="text" value={newER.target_problems} onChange={e => setNewER({ ...newER, target_problems: e.target.value })} placeholder="e.g. Foot Drop, Gait Asymmetry" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-difficulty">Difficulty Level</label>
+                    <select id="er-difficulty" value={newER.difficulty_level} onChange={e => setNewER({ ...newER, difficulty_level: e.target.value })}>
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label htmlFor="er-duration">Duration (min)</label>
+                      <input id="er-duration" type="number" min="1" value={newER.duration_minutes} onChange={e => setNewER({ ...newER, duration_minutes: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="er-sets">Sets</label>
+                      <input id="er-sets" type="number" min="1" value={newER.sets} onChange={e => setNewER({ ...newER, sets: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="er-reps">Repetitions</label>
+                      <input id="er-reps" type="number" min="1" value={newER.repetitions} onChange={e => setNewER({ ...newER, repetitions: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-instructions">Instructions (one per line)</label>
+                    <textarea id="er-instructions" rows="4" value={newER.instructions} onChange={e => setNewER({ ...newER, instructions: e.target.value })} placeholder="Step 1&#10;Step 2&#10;Step 3" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-precautions">Precautions</label>
+                    <input id="er-precautions" type="text" value={newER.precautions} onChange={e => setNewER({ ...newER, precautions: e.target.value })} placeholder="e.g. Stop if pain increases" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-equipment">Equipment Needed (comma-separated)</label>
+                    <input id="er-equipment" type="text" value={newER.equipment_needed} onChange={e => setNewER({ ...newER, equipment_needed: e.target.value })} placeholder="e.g. Resistance band, Chair" />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="er-active">
+                      <input id="er-active" type="checkbox" checked={newER.is_active} onChange={e => setNewER({ ...newER, is_active: e.target.checked })} style={{ marginRight: '0.5rem' }} />
+                      Active (visible to patients)
+                    </label>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="secondary-btn" onClick={() => setShowERModal(false)}>Cancel</button>
+                  <button className="primary-btn" onClick={handleSaveER}>{editingER ? 'Update' : 'Create'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'success-stories' && (
             <div className="success-stories-section">
               <div className="section-header">
@@ -2529,7 +3850,7 @@ function TherapistDashboard({ onLogout }) {
                   <div className="search-container">
                     <input
                       type="text"
-                      placeholder="Search by patient name..."
+                      placeholder="Search by story content..."
                       value={storySearchTerm}
                       onChange={(e) => setStorySearchTerm(e.target.value)}
                       className="search-input"
@@ -2586,10 +3907,8 @@ function TherapistDashboard({ onLogout }) {
                     <table className="logs-table stories-table">
                       <thead>
                         <tr>
-                          <th>Patient Name</th>
                           <th>Story Preview</th>
                           <th>Images</th>
-                          <th>Date Added</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
@@ -2597,21 +3916,13 @@ function TherapistDashboard({ onLogout }) {
                         {(() => {
                           const filteredStories = successStories.filter(story =>
                             !storySearchTerm ||
-                            story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                            story.story.toLowerCase().includes(storySearchTerm.toLowerCase())
                           );
                           const indexOfLastEntry = currentStoryPage * storyEntriesPerPage;
                           const indexOfFirstEntry = indexOfLastEntry - storyEntriesPerPage;
                           const currentEntries = filteredStories.slice(indexOfFirstEntry, indexOfLastEntry);
                           return currentEntries.map(story => (
                             <tr key={story.id}>
-                              <td>
-                                <div className="patient-cell">
-                                  <div className="patient-avatar-small">
-                                    {story.patientName.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                  </div>
-                                  <span className="patient-name-text">{story.patientName}</span>
-                                </div>
-                              </td>
                               <td>
                                 <div className="story-preview">
                                   {story.story.length > 100 
@@ -2626,8 +3937,8 @@ function TherapistDashboard({ onLogout }) {
                                       {story.images.slice(0, 3).map((imagePath, idx) => (
                                         <img 
                                           key={idx}
-                                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`}
-                                          alt={`${story.patientName} - Image ${idx + 1}`}
+                                          src={imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}/${imagePath}`}
+                                          alt={`Story ${idx + 1}`}
                                           className="story-thumbnail"
                                           title={`Image ${idx + 1} of ${story.images.length}`}
                                         />
@@ -2642,9 +3953,6 @@ function TherapistDashboard({ onLogout }) {
                                     <span className="no-images-text">No images</span>
                                   )}
                                 </div>
-                              </td>
-                              <td>
-                                <span className="date-cell">{formatDate(story.createdAt)}</span>
                               </td>
                               <td>
                                 <div className="exercise-actions">
@@ -2672,7 +3980,7 @@ function TherapistDashboard({ onLogout }) {
                   {(() => {
                     const filteredStories = successStories.filter(story =>
                       !storySearchTerm ||
-                      story.patientName.toLowerCase().includes(storySearchTerm.toLowerCase())
+                      story.story.toLowerCase().includes(storySearchTerm.toLowerCase())
                     );
                     const totalPages = Math.ceil(filteredStories.length / storyEntriesPerPage);
                     if (totalPages <= 1) return null;
@@ -2755,6 +4063,13 @@ function TherapistDashboard({ onLogout }) {
                   </button>
                   <button className="btn-primary" onClick={() => setShowExerciseModal(true)}>
                     ➕ New Exercise
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={handleExportFluencyPdf}
+                    disabled={exportingFluency}
+                  >
+                    {exportingFluency ? '⏳ Generating...' : '📄 Export PDF'}
                   </button>
                 </div>
               </div>
@@ -3088,13 +4403,15 @@ function TherapistDashboard({ onLogout }) {
                               >
                                 View
                               </button>
-                              <button 
-                                className="btn-icon-small btn-edit"
-                                onClick={() => handleEditAppointment(appointment)}
-                                title="Edit Appointment"
-                              >
-                                Edit
-                              </button>
+                              {appointment.status !== 'cancelled' && appointment.status !== 'no-show' && (
+                                <button 
+                                  className="btn-icon-small btn-edit"
+                                  onClick={() => handleEditAppointment(appointment)}
+                                  title="Edit Appointment"
+                                >
+                                  Edit
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -3439,12 +4756,14 @@ function TherapistDashboard({ onLogout }) {
                       <button className="btn-secondary" onClick={() => setShowAppointmentDetails(false)}>
                         Close
                       </button>
-                      <button className="btn-primary" onClick={() => {
-                        setShowAppointmentDetails(false);
-                        handleEditAppointment(selectedAppointment);
-                      }}>
-                        Edit Appointment
-                      </button>
+                      {selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'no-show' && (
+                        <button className="btn-primary" onClick={() => {
+                          setShowAppointmentDetails(false);
+                          handleEditAppointment(selectedAppointment);
+                        }}>
+                          Edit Appointment
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3459,121 +4778,241 @@ function TherapistDashboard({ onLogout }) {
                   <div className="loading-spinner"></div>
                   <p>Loading reports...</p>
                 </div>
-              ) : reportsData ? (
+              ) : reportsData && (reportsData.totalPatients || 0) > 0 ? (
                 <div className="reports-container">
-                  {/* Age Bracket Analysis */}
-                  <div className="report-card">
-                    <div className="report-card-header">
-                      <h3 className="report-card-title">
-                        <span className="report-icon">👥</span>
-                        Age Distribution
-                      </h3>
-                      <p className="report-card-subtitle">Patient distribution across age brackets</p>
+                  <div className="reports-main reports-main-full">
+                    <div className="report-card report-overview-card">
+                      <div className="report-card-header">
+                        <div>
+                          <h3 className="report-card-title">
+                            <span className="report-icon">
+                              {REPORT_CATEGORY_OPTIONS.find(option => option.key === activeReportCategory)?.icon || '📈'}
+                            </span>
+                            {activeReportData?.title || 'Reports Overview'}
+                          </h3>
+                          <p className="report-card-subtitle">{activeReportData?.description || 'Demographic reporting by therapy type.'}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-export-pdf report-export-btn"
+                          onClick={handleExportReportsPdf}
+                          disabled={exportingReports}
+                        >
+                          {exportingReports ? '⏳ Generating...' : '📄 Export PDF'}
+                        </button>
+                      </div>
+                      <div className="report-card-body">
+                        <div className="report-summary">
+                          <div className="summary-stats-row">
+                            <div className="summary-stat">
+                              <span className="stat-label">Total Patients</span>
+                              <span className="stat-value">{reportsData.totalPatients || 0}</span>
+                            </div>
+                            <div className="summary-stat">
+                              <span className="stat-label">Speech Therapy</span>
+                              <span className="stat-value">{reportsData.therapyTotals?.speech?.totalPatients || 0}</span>
+                            </div>
+                            <div className="summary-stat">
+                              <span className="stat-label">Physical Therapy</span>
+                              <span className="stat-value">{reportsData.therapyTotals?.physical?.totalPatients || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="report-card-body">
-                      {reportsData.ageBrackets && reportsData.ageBrackets.length > 0 ? (
-                        <>
+
+                    {activeReportCategory === 'age' && overallReportItems.length > 0 && (
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">👥</span>
+                            Age Distribution Overview
+                          </h3>
+                          <p className="report-card-subtitle">Patient distribution across age brackets, matching the previous dashboard summary.</p>
+                        </div>
+                        <div className="report-card-body">
                           <div className="age-brackets-grid">
-                            {reportsData.ageBrackets.map((bracket, index) => (
-                              <div 
-                                key={index} 
-                                className={`age-bracket-item ${bracket.isHighest ? 'highest' : ''}`}
-                              >
+                            {overallReportItems.map((bracket) => (
+                              <div key={bracket.range} className={`age-bracket-item ${bracket.isHighest ? 'highest' : ''}`}>
                                 <div className="bracket-label">{bracket.range}</div>
                                 <div className="bracket-count">{bracket.count}</div>
                                 <div className="bracket-percentage">{bracket.percentage}%</div>
-                                {bracket.isHighest && (
-                                  <div className="highest-badge">Highest</div>
-                                )}
+                                {bracket.isHighest && <div className="highest-badge">Highest</div>}
                                 <div className="bracket-bar">
-                                  <div 
-                                    className="bracket-bar-fill" 
-                                    style={{ width: `${bracket.percentage}%` }}
-                                  ></div>
+                                  <div className="bracket-bar-fill" style={{ width: `${bracket.percentage}%` }}></div>
                                 </div>
                               </div>
                             ))}
                           </div>
+
                           <div className="report-summary">
                             <div className="summary-item highlight">
                               <span className="summary-icon">🎯</span>
                               <div className="summary-content">
-                                <span className="summary-label">Highest Age Bracket:</span>
-                                <span className="summary-value">{reportsData.highestAgeBracket?.range || 'N/A'}</span>
+                                <span className="summary-label">Highest Age Bracket</span>
+                                <span className="summary-value">{reportsData?.highestAgeBracket?.range || 'N/A'}</span>
                               </div>
-                              <div className="summary-count">{reportsData.highestAgeBracket?.count || 0} patients</div>
+                              <div className="summary-count">{reportsData?.highestAgeBracket?.count || 0} patients</div>
                             </div>
                           </div>
-                        </>
-                      ) : (
-                        <div className="no-data">
-                          <div className="no-data-icon">📊</div>
-                          <p>No age data available</p>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    )}
 
-                  {/* Gender Distribution */}
-                  <div className="report-card">
-                    <div className="report-card-header">
-                      <h3 className="report-card-title">
-                        <span className="report-icon">⚧️</span>
-                        Gender Distribution
-                      </h3>
-                      <p className="report-card-subtitle">Patient distribution by gender</p>
-                    </div>
-                    <div className="report-card-body">
-                      {reportsData.genderDistribution && reportsData.genderDistribution.length > 0 ? (
-                        <>
+                    {activeReportCategory === 'gender' && overallReportItems.length > 0 && (
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">⚧️</span>
+                            Gender Distribution Overview
+                          </h3>
+                          <p className="report-card-subtitle">Overall gender distribution before the therapy-specific breakdown below.</p>
+                        </div>
+                        <div className="report-card-body">
                           <div className="gender-distribution-grid">
-                            {reportsData.genderDistribution.map((gender, index) => (
-                              <div key={index} className="gender-item">
-                                <div className="gender-icon-wrapper">
-                                  <span className="gender-emoji">
-                                    {gender.gender === 'male' ? '👨' : 
-                                     gender.gender === 'female' ? '👩' : 
-                                     gender.gender === 'other' ? '🧑' : '❓'}
-                                  </span>
+                            {overallReportItems.map((gender) => {
+                              const meta = getProblemGenderMeta(gender.gender || gender.key);
+                              const barKey = gender.gender || gender.key;
+
+                              return (
+                                <div key={gender.key || gender.gender} className="gender-item">
+                                  <div className="gender-icon-wrapper">
+                                    <span className="gender-emoji">{meta.icon}</span>
+                                  </div>
+                                  <div className="gender-info">
+                                    <div className="gender-label">{meta.label}</div>
+                                    <div className="gender-stats">
+                                      <span className="gender-count">{gender.count} patients</span>
+                                      <span className="gender-percentage">{gender.percentage}%</span>
+                                    </div>
+                                    <div className="gender-bar">
+                                      <div className={`gender-bar-fill ${barKey}`} style={{ width: `${gender.percentage}%` }}></div>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="gender-info">
-                                  <div className="gender-label">
-                                    {gender.gender.charAt(0).toUpperCase() + gender.gender.slice(1)}
-                                  </div>
-                                  <div className="gender-stats">
-                                    <span className="gender-count">{gender.count} patients</span>
-                                    <span className="gender-percentage">{gender.percentage}%</span>
-                                  </div>
-                                  <div className="gender-bar">
-                                    <div 
-                                      className={`gender-bar-fill ${gender.gender}`}
-                                      style={{ width: `${gender.percentage}%` }}
-                                    ></div>
-                                  </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeReportCategory === 'work' && overallReportItems.length > 0 && (
+                      <div className="report-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">💼</span>
+                            Work Distribution Overview
+                          </h3>
+                          <p className="report-card-subtitle">Overall occupation and employment status before the therapy-specific breakdown below.</p>
+                        </div>
+                        <div className="report-card-body">
+                          <div className="report-breakdown-list report-breakdown-list-overview">
+                            {overallReportItems.map((item) => (
+                              <div key={item.key} className="report-breakdown-item overview">
+                                <div className="report-breakdown-header">
+                                  <span className="report-breakdown-label">{item.label}</span>
+                                  <span className="report-breakdown-meta">{item.count} patients • {item.percentage}%</span>
+                                </div>
+                                <div className="report-breakdown-track">
+                                  <div className="report-breakdown-fill" style={{ width: `${item.percentage}%` }}></div>
                                 </div>
                               </div>
                             ))}
                           </div>
-                          <div className="report-summary">
-                            <div className="summary-stats-row">
-                              <div className="summary-stat">
-                                <span className="stat-label">Total Patients</span>
-                                <span className="stat-value">{reportsData.totalPatients || 0}</span>
-                              </div>
-                              <div className="summary-stat">
-                                <span className="stat-label">Gender Categories</span>
-                                <span className="stat-value">{reportsData.genderDistribution.length}</span>
-                              </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="reports-therapy-grid">
+                      {reportTherapyPanels.map((panel) => {
+                        const displayItems = getReportItemsForDisplay(panel.items || []);
+                        const maxCount = displayItems.reduce((highest, item) => Math.max(highest, item.count || 0), 0);
+
+                        return (
+                          <div key={panel.therapyType} className="report-card report-therapy-card">
+                            <div className="report-card-header">
+                              <h3 className="report-card-title">
+                                <span className="report-icon">{panel.therapyType === 'speech' ? '🎤' : '🏃'}</span>
+                                {panel.therapyLabel}
+                              </h3>
+                              <p className="report-card-subtitle">{panel.totalPatients || 0} patients in this therapy group</p>
+                            </div>
+                            <div className="report-card-body">
+                              {displayItems.length > 0 ? (
+                                <div className="report-breakdown-list">
+                                  {displayItems.map((item) => (
+                                    <div key={`${panel.therapyType}-${item.key}`} className="report-breakdown-item">
+                                      <div className="report-breakdown-header">
+                                        <span className="report-breakdown-label">{getReportItemLabel(item)}</span>
+                                        <span className="report-breakdown-meta">{item.count} patients • {item.percentage}%</span>
+                                      </div>
+                                      <div className="report-breakdown-track">
+                                        <div
+                                          className="report-breakdown-fill"
+                                          style={{ width: `${maxCount > 0 ? ((item.count / maxCount) * 100).toFixed(1) : 0}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="no-data">
+                                  <div className="no-data-icon">📂</div>
+                                  <p>No {activeReportCategory} data available for this therapy type</p>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </>
-                      ) : (
-                        <div className="no-data">
-                          <div className="no-data-icon">⚧️</div>
-                          <p>No gender data available</p>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
+
+                    {activeReportCategory === 'gender' && (
+                      <div className="report-card report-problems-card">
+                        <div className="report-card-header">
+                          <h3 className="report-card-title">
+                            <span className="report-icon">🦿</span>
+                            Detected Physical Problems by Gender
+                          </h3>
+                          <p className="report-card-subtitle">Physical gait problems detected from therapist-viewable analyses and the gender most commonly affected.</p>
+                        </div>
+                        <div className="report-card-body">
+                          {activeReportData?.detectedProblems?.length > 0 ? (
+                            <div className="report-problem-list">
+                              {activeReportData.detectedProblems.map((problem) => (
+                                <div key={problem.key} className="report-problem-item">
+                                  <div className="report-problem-top">
+                                    <div>
+                                      <h4 className="report-problem-title">{problem.label}</h4>
+                                      <p className="report-problem-subtitle">{problem.totalPatients} patients affected</p>
+                                    </div>
+                                    <span className="problem-dominant-badge">Most common: {problem.dominantGenderLabel}</span>
+                                  </div>
+                                  <div className="problem-gender-grid">
+                                    {Object.entries(problem.countsByGender || {}).map(([genderKey, count]) => {
+                                      const meta = getProblemGenderMeta(genderKey);
+                                      return (
+                                        <div key={`${problem.key}-${genderKey}`} className="problem-gender-card">
+                                          <span className="problem-gender-icon">{meta.icon}</span>
+                                          <span className="problem-gender-name">{meta.label}</span>
+                                          <span className="problem-gender-count">{count}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="no-data">
+                              <div className="no-data-icon">🦿</div>
+                              <p>No detected physical problems available yet</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -3597,25 +5036,30 @@ function TherapistDashboard({ onLogout }) {
                     className="diag-search-input"
                     placeholder="Search patient by name..."
                     value={diagSearchQuery}
-                    onChange={(e) => {
-                      setDiagSearchQuery(e.target.value);
-                      searchDiagPatients(e.target.value);
+                    onChange={(e) => setDiagSearchQuery(e.target.value)}
+                    onFocus={() => {
+                      if (diagSearchResults.length > 0 || diagSearchError) setShowDiagPatientDropdown(true);
                     }}
-                    onFocus={() => { if (diagSearchResults.length > 0) setShowDiagPatientDropdown(true); }}
                   />
                   {searchingDiagPatients && <span className="diag-search-spinner">⏳</span>}
-                  {showDiagPatientDropdown && diagSearchResults.length > 0 && (
+                  {showDiagPatientDropdown && (
                     <div className="diag-patient-dropdown">
-                      {diagSearchResults.map((p) => (
-                        <button
-                          key={p._id || p.id}
-                          className="diag-patient-option"
-                          onClick={() => selectDiagPatient(p)}
-                        >
-                          <span className="diag-patient-name">{p.firstName} {p.lastName}</span>
-                          <span className="diag-patient-email">{p.email}</span>
-                        </button>
-                      ))}
+                      {diagSearchError ? (
+                        <p className="diag-search-message diag-search-error-msg">{diagSearchError}</p>
+                      ) : diagSearchResults.length > 0 ? (
+                        diagSearchResults.map((p) => (
+                          <button
+                            key={p._id || p.id}
+                            className="diag-patient-option"
+                            onClick={() => selectDiagPatient(p)}
+                          >
+                            <span className="diag-patient-name">{p.firstName} {p.lastName}</span>
+                            <span className="diag-patient-email">{p.email}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="diag-search-message diag-search-no-results">No patients found for &ldquo;{diagSearchQuery}&rdquo;</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3624,8 +5068,8 @@ function TherapistDashboard({ onLogout }) {
                     <button className="diag-add-btn" onClick={() => setShowDiagModal(true)}>
                       + Add Facility Diagnostic
                     </button>
-                    <button className="diag-print-btn" onClick={handlePrintReport} title="Print Report">
-                      🖨️ Print
+                    <button className="diag-print-btn" onClick={handleExportDiagnosticPdf} title="Export to PDF">
+                      📄 Export PDF
                     </button>
                   </div>
                 )}
@@ -3670,21 +5114,8 @@ function TherapistDashboard({ onLogout }) {
                       {diagComparisonData.has_facility_data && (
                         <div className="diag-meta">
                           <span className="diag-meta-item">
-                            📅 Assessment: {new Date(diagComparisonData.assessment_date).toLocaleDateString()}
+                            📊 Auto-aggregated from facility sessions
                           </span>
-                          <span className="diag-meta-item">
-                            📋 Type: {diagComparisonData.assessment_type?.charAt(0).toUpperCase() + diagComparisonData.assessment_type?.slice(1)}
-                          </span>
-                          {diagComparisonData.assessor_name && (
-                            <span className="diag-meta-item">
-                              👤 Assessed by: {diagComparisonData.assessor_name}
-                            </span>
-                          )}
-                          {diagComparisonData.severity_level && (
-                            <span className={`diag-severity diag-severity-${diagComparisonData.severity_level}`}>
-                              {diagComparisonData.severity_level.toUpperCase()}
-                            </span>
-                          )}
                         </div>
                       )}
                     </div>
@@ -3708,16 +5139,179 @@ function TherapistDashboard({ onLogout }) {
                     )}
                   </div>
 
-                  {!diagComparisonData.has_facility_data ? (
-                    <div className="no-data-large">
-                      <div className="no-data-icon">📋</div>
-                      <p className="no-data-text">No facility diagnostic found for this patient</p>
-                      <p className="no-data-hint">Click "Add Facility Diagnostic" above to enter assessment results</p>
+                  {/* Patient Self-Report Panel */}
+                  {patientSelfReport?.completedWizard && (
+                    <div className="diag-self-report-panel">
+                      <div className="diag-self-report-header">
+                        <span className="diag-self-report-icon">📝</span>
+                        <h4 className="diag-self-report-title">Patient Self-Report (Intake Wizard)</h4>
+                        <span className="diag-self-report-badge">Self-Reported</span>
+                      </div>
+                      <div className="diag-self-report-grid">
+                        {patientSelfReport.therapyFocus && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Therapy Focus</span>
+                            <span className="diag-sr-value">{patientSelfReport.therapyFocus === 'both' ? 'Speech + Physical' : patientSelfReport.therapyFocus.charAt(0).toUpperCase() + patientSelfReport.therapyFocus.slice(1)}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.strokeTimeframe && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Stroke Timeframe</span>
+                            <span className="diag-sr-value">{{
+                              less_than_1_month: '< 1 Month',
+                              '1_to_6_months': '1–6 Months',
+                              '6_to_12_months': '6–12 Months',
+                              over_1_year: 'Over 1 Year',
+                            }[patientSelfReport.strokeTimeframe] ?? patientSelfReport.strokeTimeframe}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.affectedSide && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Affected Side</span>
+                            <span className="diag-sr-value">{patientSelfReport.affectedSide.charAt(0).toUpperCase() + patientSelfReport.affectedSide.slice(1).replace('_', ' ')}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.childAgeGroup && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Age Group</span>
+                            <span className="diag-sr-value">{{
+                              toddler: '1–2 Years (Toddler)',
+                              preschool: '3–4 Years (Preschool)',
+                              school_age: '5–8 Years (School-Age)',
+                              older: '9+ Years',
+                            }[patientSelfReport.childAgeGroup] ?? patientSelfReport.childAgeGroup}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.childCommunicationMode && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Communication Mode</span>
+                            <span className="diag-sr-value">{{
+                              preverbal: 'Pre-verbal / Non-verbal',
+                              single_words: 'Single Words',
+                              short_phrases: 'Short Phrases',
+                              sentences: 'Full Sentences',
+                            }[patientSelfReport.childCommunicationMode] ?? patientSelfReport.childCommunicationMode}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.speechIntelligibility && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Intelligibility</span>
+                            <span className="diag-sr-value">{{
+                              easily: 'Easily Understood',
+                              mostly_family: 'Mostly by Family',
+                              difficult: 'Difficult to Understand',
+                              not_speaking: 'Not Yet Speaking',
+                            }[patientSelfReport.speechIntelligibility] ?? patientSelfReport.speechIntelligibility}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.mainSpeechConcern && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Speech Concern</span>
+                            <span className="diag-sr-value">{{
+                              articulation: 'Pronunciation',
+                              language: 'Language',
+                              fluency: 'Fluency',
+                              multiple: 'Multiple Areas',
+                            }[patientSelfReport.mainSpeechConcern] ?? patientSelfReport.mainSpeechConcern}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.followsInstructions && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Follows Instructions</span>
+                            <span className="diag-sr-value">{{
+                              yes_consistently: 'Yes, Consistently',
+                              sometimes: 'Sometimes',
+                              rarely: 'Rarely',
+                              no: 'No / Not Yet',
+                            }[patientSelfReport.followsInstructions] ?? patientSelfReport.followsInstructions}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.respondsToName && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Responds to Name</span>
+                            <span className="diag-sr-value">{{
+                              always: 'Always',
+                              usually: 'Usually',
+                              inconsistently: 'Inconsistently',
+                              rarely_no: 'Rarely / No',
+                            }[patientSelfReport.respondsToName] ?? patientSelfReport.respondsToName}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.priorSpeechEval && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Prior Speech Eval</span>
+                            <span className="diag-sr-value">{{
+                              formal_eval: 'Formal Evaluation',
+                              informal: 'Informal Screening',
+                              no: 'None',
+                            }[patientSelfReport.priorSpeechEval] ?? patientSelfReport.priorSpeechEval}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.mobilityStatus && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Mobility</span>
+                            <span className="diag-sr-value">{{
+                              independent: 'Walks Independently',
+                              assisted: 'With Assistance',
+                              wheelchair: 'Wheelchair User',
+                              bed_bound: 'Bed-bound',
+                            }[patientSelfReport.mobilityStatus] ?? patientSelfReport.mobilityStatus}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.armMotorFunction && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Arm Motor</span>
+                            <span className="diag-sr-value">{{
+                              normal: 'Normal',
+                              mild_weakness: 'Mild Weakness',
+                              moderate_weakness: 'Moderate Weakness',
+                              severe_weakness: 'Severe / No Movement',
+                            }[patientSelfReport.armMotorFunction] ?? patientSelfReport.armMotorFunction}</span>
+                          </div>
+                        )}
+                        {patientSelfReport.legMotorFunction && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Leg Motor</span>
+                            <span className="diag-sr-value">{{
+                              normal: 'Normal',
+                              mild_weakness: 'Mild Weakness',
+                              moderate_weakness: 'Moderate Weakness',
+                              severe_weakness: 'Severe / No Movement',
+                            }[patientSelfReport.legMotorFunction] ?? patientSelfReport.legMotorFunction}</span>
+                          </div>
+                        )}
+
+                        {patientSelfReport.priorPhysicalTherapy && (
+                          <div className="diag-sr-item">
+                            <span className="diag-sr-label">Prior Physical Therapy</span>
+                            <span className="diag-sr-value">{patientSelfReport.priorPhysicalTherapy === 'facility' ? 'At a Facility' : patientSelfReport.priorPhysicalTherapy === 'self_guided' ? 'Self-Guided' : 'No'}</span>
+                          </div>
+                        )}
+                      </div>
+                      {patientSelfReport.recommendedFocus && (
+                        <div className="diag-sr-rec">
+                          <span className="diag-sr-rec-label">Patient-Reported Recommendation:</span>
+                          <span className="diag-sr-rec-therapy">{patientSelfReport.recommendedTherapy === 'speech' ? 'Speech Therapy' : patientSelfReport.recommendedTherapy === 'physical' ? 'Physical Therapy' : 'Therapy'}</span>
+                          <span className="diag-sr-rec-level">{patientSelfReport.recommendedLevelName ?? (patientSelfReport.recommendedLevel?.charAt(0).toUpperCase() + patientSelfReport.recommendedLevel?.slice(1) + ' Level')}</span>
+                          <span className="diag-sr-rec-focus">{patientSelfReport.recommendedFocus}</span>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <>
+                  )}
+
+                  <>
+                    {!diagComparisonData.has_facility_data && (
+                      <div className="diag-no-facility-notice">
+                        <span className="diag-no-facility-icon">📋</span>
+                        <div>
+                          <p className="diag-no-facility-text">No facility diagnostic on file</p>
+                          <p className="diag-no-facility-hint">Click "Add Facility Diagnostic" above to add a formal assessment. At-home progress is shown below.</p>
+                        </div>
+                      </div>
+                    )}
+
                       {/* Summary Insights Card */}
-                      {diagComparisonData.summary_insights && Object.keys(diagComparisonData.summary_insights).length > 0 && (
+                      {diagComparisonData.has_facility_data && diagComparisonData.summary_insights && Object.keys(diagComparisonData.summary_insights).length > 0 && (
                         <div className="diag-insights-card">
                           <div className="diag-insights-header">
                             <h3 className="diag-insights-title">
@@ -3753,10 +5347,10 @@ function TherapistDashboard({ onLogout }) {
                               </div>
                             </div>
                             <div className="diag-insights-highlights">
-                              {diagComparisonData.summary_insights.strongest_area && (
+                              {diagComparisonData.summary_insights.strongest_area && diagComparisonData.summary_insights.strongest_area.delta > 0 && (
                                 <div className="diag-highlight diag-highlight-best">
                                   <span className="diag-highlight-icon">🌟</span>
-                                  <span>Most Improved: <strong>{diagComparisonData.summary_insights.strongest_area.metric}</strong> ({diagComparisonData.summary_insights.strongest_area.delta >= 0 ? '+' : ''}{diagComparisonData.summary_insights.strongest_area.delta}%)</span>
+                                  <span>Most Improved: <strong>{diagComparisonData.summary_insights.strongest_area.metric}</strong> (+{diagComparisonData.summary_insights.strongest_area.delta}%)</span>
                                 </div>
                               )}
                               {diagComparisonData.summary_insights.weakest_area && diagComparisonData.summary_insights.weakest_area.delta < 0 && (
@@ -3789,233 +5383,384 @@ function TherapistDashboard({ onLogout }) {
                         </div>
                       )}
 
-                      {/* Comparison Table */}
-                      <div className="report-card">
-                        <div className="report-card-header">
-                          <h3 className="report-card-title">
-                            <span className="report-icon">📊</span>
-                            Facility vs. At-Home Comparison
-                          </h3>
-                          <p className="report-card-subtitle">Side-by-side view of diagnostic results and current home performance</p>
-                        </div>
-                        <div className="report-card-body">
-                          <div className="diag-table-wrapper">
-                          <table className="diag-comparison-table">
-                            <thead>
-                              <tr>
-                                <th>Metric</th>
-                                <th>Facility Score</th>
-                                <th>Level</th>
-                                <th>At-Home Score</th>
-                                <th>Level</th>
-                                <th>Δ Change</th>
-                                <th>Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {/* Articulation Sounds */}
-                              {['r', 's', 'l', 'th', 'k'].map(sound => {
-                                const facilityVal = diagComparisonData.facility_scores?.articulation?.[sound];
-                                const homeVal = diagComparisonData.home_scores?.articulation?.[sound];
-                                const delta = diagComparisonData.deltas?.articulation?.[sound];
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(facilityVal);
-                                const hBand = getScoreBand(homeVal);
-                                const alert = getAlertBadge(delta);
-                                if (facilityVal == null && homeVal == null) return null;
-                                return (
-                                  <tr key={`art-${sound}`}>
-                                    <td className="metric-name" title={`Measures the patient's ability to correctly produce the /${sound.toUpperCase()}/ phoneme in various word positions`}>
-                                      <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
-                                      Articulation /{sound.toUpperCase()}/
-                                    </td>
-                                    <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{homeVal != null ? `${homeVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                      {/* Speech Therapy Section */}
+                      {(() => {
+                        const hasSpeechFacility =
+                          ['r', 's', 'l', 'th', 'k'].some(s => diagComparisonData.facility_scores?.articulation?.[s] != null) ||
+                          diagComparisonData.facility_scores?.fluency != null ||
+                          diagComparisonData.facility_scores?.receptive != null ||
+                          diagComparisonData.facility_scores?.expressive != null;
+                        const hasSpeechHome =
+                          ['r', 's', 'l', 'th', 'k'].some(s => diagComparisonData.home_scores?.articulation?.[s] != null) ||
+                          diagComparisonData.home_scores?.fluency != null ||
+                          diagComparisonData.home_scores?.receptive != null ||
+                          diagComparisonData.home_scores?.expressive != null;
+                        const hasSpeechData = hasSpeechFacility || hasSpeechHome;
 
-                              {/* Fluency */}
-                              {(diagComparisonData.facility_scores?.fluency != null || diagComparisonData.home_scores?.fluency != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.fluency;
-                                const hVal = diagComparisonData.home_scores?.fluency;
-                                const delta = diagComparisonData.deltas?.fluency;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr>
-                                    <td className="metric-name" title="Measures speech smoothness, rate, and rhythm without interruptions">
-                                      <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
-                                      Fluency
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
+                        const speechBarItems = [
+                          { label: 'Fluency', facility: diagComparisonData.facility_scores?.fluency, home: diagComparisonData.home_scores?.fluency },
+                          { label: 'Receptive', facility: diagComparisonData.facility_scores?.receptive, home: diagComparisonData.home_scores?.receptive },
+                          { label: 'Expressive', facility: diagComparisonData.facility_scores?.expressive, home: diagComparisonData.home_scores?.expressive },
+                          ...['r', 's', 'l', 'th', 'k']
+                            .filter(s => diagComparisonData.facility_scores?.articulation?.[s] != null || diagComparisonData.home_scores?.articulation?.[s] != null)
+                            .map(s => ({
+                              label: `/${s.toUpperCase()}/`,
+                              facility: diagComparisonData.facility_scores?.articulation?.[s],
+                              home: diagComparisonData.home_scores?.articulation?.[s]
+                            }))
+                        ].filter(item => item.facility != null || item.home != null);
 
-                              {/* Receptive */}
-                              {(diagComparisonData.facility_scores?.receptive != null || diagComparisonData.home_scores?.receptive != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.receptive;
-                                const hVal = diagComparisonData.home_scores?.receptive;
-                                const delta = diagComparisonData.deltas?.receptive;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr>
-                                    <td className="metric-name" title="Measures comprehension of spoken language, following directions, and understanding concepts">
-                                      <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
-                                      Receptive Language
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
+                        return (
+                          <div className="diag-therapy-section diag-therapy-speech">
+                            <div className="diag-therapy-section-header">
+                              <span className="diag-therapy-section-icon">🗣️</span>
+                              <div>
+                                <h3 className="diag-therapy-section-title">Speech Therapy</h3>
+                                <p className="diag-therapy-section-subtitle">Articulation, fluency, and language metrics</p>
+                              </div>
+                            </div>
 
-                              {/* Expressive */}
-                              {(diagComparisonData.facility_scores?.expressive != null || diagComparisonData.home_scores?.expressive != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.expressive;
-                                const hVal = diagComparisonData.home_scores?.expressive;
-                                const delta = diagComparisonData.deltas?.expressive;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr>
-                                    <td className="metric-name" title="Measures ability to express thoughts, use vocabulary, and form sentences">
-                                      <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
-                                      Expressive Language
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
-
-                              {/* Gait */}
-                              {(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null) && (() => {
-                                const fVal = diagComparisonData.facility_scores?.gait?.overall_gait;
-                                const hVal = diagComparisonData.home_scores?.gait?.overall_gait;
-                                const delta = diagComparisonData.deltas?.gait;
-                                const d = getDeltaDisplay(delta);
-                                const fBand = getScoreBand(fVal);
-                                const hBand = getScoreBand(hVal);
-                                const alert = getAlertBadge(delta);
-                                return (
-                                  <tr>
-                                    <td className="metric-name" title="Measures overall walking pattern including stability, symmetry, and step regularity">
-                                      <span className="metric-icon" style={{ backgroundColor: '#4CAF50' }}>🚶</span>
-                                      Gait (Overall)
-                                    </td>
-                                    <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
-                                    <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
-                                    <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
-                                    <td className={`delta-cell ${d.className}`}>
-                                      <span className="delta-icon">{d.icon}</span> {d.text}
-                                    </td>
-                                    <td className="status-cell">
-                                      <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
-                                    </td>
-                                  </tr>
-                                );
-                              })()}
-                            </tbody>
-                          </table>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Visual Bar Chart */}
-                      <div className="report-card">
-                        <div className="report-card-header">
-                          <h3 className="report-card-title">
-                            <span className="report-icon">📈</span>
-                            Visual Comparison
-                          </h3>
-                          <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
-                        </div>
-                        <div className="report-card-body">
-                          <div className="diag-bar-chart">
-                            {[
-                              { label: 'Fluency', facility: diagComparisonData.facility_scores?.fluency, home: diagComparisonData.home_scores?.fluency },
-                              { label: 'Receptive', facility: diagComparisonData.facility_scores?.receptive, home: diagComparisonData.home_scores?.receptive },
-                              { label: 'Expressive', facility: diagComparisonData.facility_scores?.expressive, home: diagComparisonData.home_scores?.expressive },
-                              ...(diagComparisonData.facility_scores?.gait?.overall_gait != null || diagComparisonData.home_scores?.gait?.overall_gait != null
-                                ? [{ label: 'Gait', facility: diagComparisonData.facility_scores?.gait?.overall_gait, home: diagComparisonData.home_scores?.gait?.overall_gait }]
-                                : []),
-                              ...['r', 's', 'l', 'th', 'k']
-                                .filter(s => diagComparisonData.facility_scores?.articulation?.[s] != null || diagComparisonData.home_scores?.articulation?.[s] != null)
-                                .map(s => ({
-                                  label: `/${s.toUpperCase()}/`,
-                                  facility: diagComparisonData.facility_scores?.articulation?.[s],
-                                  home: diagComparisonData.home_scores?.articulation?.[s]
-                                }))
-                            ].filter(item => item.facility != null || item.home != null).map((item, idx) => (
-                              <div key={idx} className="diag-bar-row">
-                                <span className="diag-bar-label">{item.label}</span>
-                                <div className="diag-bar-tracks">
-                                  <div className="diag-bar-track">
-                                    <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
-                                      {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
-                                    </div>
+                            {!hasSpeechData ? (
+                              <div className="diag-therapy-empty">
+                                <span className="diag-therapy-empty-icon">🗣️</span>
+                                <p>No speech therapy data available for this assessment</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="report-card">
+                                  <div className="report-card-header">
+                                    <h3 className="report-card-title">
+                                      <span className="report-icon">📊</span>
+                                      Facility vs. At-Home Comparison
+                                    </h3>
+                                    <p className="report-card-subtitle">Side-by-side view of speech diagnostic results and current home performance</p>
                                   </div>
-                                  <div className="diag-bar-track">
-                                    <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
-                                      {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                  <div className="report-card-body">
+                                    <div className="diag-table-wrapper">
+                                      <table className="diag-comparison-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Metric</th>
+                                            <th>Facility Score</th>
+                                            <th>Level</th>
+                                            <th>At-Home Score</th>
+                                            <th>Level</th>
+                                            <th>Δ Change</th>
+                                            <th>Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {['r', 's', 'l', 'th', 'k'].map(sound => {
+                                            const facilityVal = diagComparisonData.facility_scores?.articulation?.[sound];
+                                            const homeVal = diagComparisonData.home_scores?.articulation?.[sound];
+                                            const delta = diagComparisonData.deltas?.articulation?.[sound];
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(facilityVal);
+                                            const hBand = getScoreBand(homeVal);
+                                            const alert = getAlertBadge(delta, homeVal);
+                                            if (facilityVal == null && homeVal == null) return null;
+                                            return (
+                                              <tr key={`art-${sound}`}>
+                                                <td className="metric-name" title={`Measures the patient's ability to correctly produce the /${sound.toUpperCase()}/ phoneme in various word positions`}>
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#9C27B0' }}>🗣️</span>
+                                                    Articulation /{sound.toUpperCase()}/
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{facilityVal != null ? `${facilityVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{homeVal != null ? `${homeVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+
+                                          {(diagComparisonData.facility_scores?.fluency != null || diagComparisonData.home_scores?.fluency != null) && (() => {
+                                            const fVal = diagComparisonData.facility_scores?.fluency;
+                                            const hVal = diagComparisonData.home_scores?.fluency;
+                                            const delta = diagComparisonData.deltas?.fluency;
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            return (
+                                              <tr key="fluency">
+                                                <td className="metric-name" title="Measures speech smoothness, rate, and rhythm without interruptions">
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#FF9800' }}>💬</span>
+                                                    Fluency
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })()}
+
+                                          {(diagComparisonData.facility_scores?.receptive != null || diagComparisonData.home_scores?.receptive != null) && (() => {
+                                            const fVal = diagComparisonData.facility_scores?.receptive;
+                                            const hVal = diagComparisonData.home_scores?.receptive;
+                                            const delta = diagComparisonData.deltas?.receptive;
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            return (
+                                              <tr key="receptive">
+                                                <td className="metric-name" title="Measures comprehension of spoken language, following directions, and understanding concepts">
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>👂</span>
+                                                    Receptive Language
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })()}
+
+                                          {(diagComparisonData.facility_scores?.expressive != null || diagComparisonData.home_scores?.expressive != null) && (() => {
+                                            const fVal = diagComparisonData.facility_scores?.expressive;
+                                            const hVal = diagComparisonData.home_scores?.expressive;
+                                            const delta = diagComparisonData.deltas?.expressive;
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            return (
+                                              <tr key="expressive">
+                                                <td className="metric-name" title="Measures ability to express thoughts, use vocabulary, and form sentences">
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: '#2196F3' }}>🗣️</span>
+                                                    Expressive Language
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })()}
+                                        </tbody>
+                                      </table>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                            <div className="diag-bar-legend">
-                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
-                              <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
-                            </div>
+
+                                {speechBarItems.length > 0 && (
+                                  <div className="report-card">
+                                    <div className="report-card-header">
+                                      <h3 className="report-card-title">
+                                        <span className="report-icon">📈</span>
+                                        Visual Comparison — Speech
+                                      </h3>
+                                      <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
+                                    </div>
+                                    <div className="report-card-body">
+                                      <div className="diag-bar-chart">
+                                        {speechBarItems.map((item, idx) => (
+                                          <div key={idx} className="diag-bar-row">
+                                            <span className="diag-bar-label">{item.label}</span>
+                                            <div className="diag-bar-tracks">
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
+                                                  {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
+                                                </div>
+                                              </div>
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
+                                                  {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                        <div className="diag-bar-legend">
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
+
+                      {/* Physical Therapy Section */}
+                      {(() => {
+                        const hasGaitFacility = diagComparisonData.facility_scores?.gait?.overall_gait != null;
+                        const hasGaitHome = diagComparisonData.home_scores?.gait?.overall_gait != null;
+                        const hasGaitData = hasGaitFacility || hasGaitHome;
+
+                        const gaitMetrics = [
+                          { key: 'stability_score', label: 'Stability', icon: '🦿', color: '#4CAF50', title: 'Measures postural stability and balance during walking' },
+                          { key: 'gait_symmetry', label: 'Gait Symmetry', icon: '⚖️', color: '#009688', title: 'Measures the evenness of left/right stride patterns' },
+                          { key: 'step_regularity', label: 'Step Regularity', icon: '👣', color: '#03A9F4', title: 'Measures consistency and rhythm of step timing' },
+                          { key: 'overall_gait', label: 'Gait (Overall)', icon: '🚶', color: '#4CAF50', title: 'Measures overall walking pattern including stability, symmetry, and step regularity' },
+                        ];
+
+                        const ptBarItems = gaitMetrics
+                          .filter(m => diagComparisonData.facility_scores?.gait?.[m.key] != null || diagComparisonData.home_scores?.gait?.[m.key] != null)
+                          .map(m => ({
+                            label: m.label,
+                            facility: diagComparisonData.facility_scores?.gait?.[m.key],
+                            home: diagComparisonData.home_scores?.gait?.[m.key]
+                          }));
+
+                        return (
+                          <div className="diag-therapy-section diag-therapy-physical">
+                            <div className="diag-therapy-section-header">
+                              <span className="diag-therapy-section-icon">🦵</span>
+                              <div>
+                                <h3 className="diag-therapy-section-title">Physical Therapy</h3>
+                                <p className="diag-therapy-section-subtitle">Gait and mobility metrics</p>
+                              </div>
+                            </div>
+
+                            {!hasGaitData ? (
+                              <div className="diag-therapy-empty">
+                                <span className="diag-therapy-empty-icon">🦵</span>
+                                <p>No physical therapy data available for this assessment</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="report-card">
+                                  <div className="report-card-header">
+                                    <h3 className="report-card-title">
+                                      <span className="report-icon">📊</span>
+                                      Facility vs. At-Home Comparison
+                                    </h3>
+                                    <p className="report-card-subtitle">Side-by-side view of physical therapy diagnostic results and current home performance</p>
+                                  </div>
+                                  <div className="report-card-body">
+                                    <div className="diag-table-wrapper">
+                                      <table className="diag-comparison-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Metric</th>
+                                            <th>Facility Score</th>
+                                            <th>Level</th>
+                                            <th>At-Home Score</th>
+                                            <th>Level</th>
+                                            <th>Δ Change</th>
+                                            <th>Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {gaitMetrics.map(m => {
+                                            const fVal = diagComparisonData.facility_scores?.gait?.[m.key];
+                                            const hVal = diagComparisonData.home_scores?.gait?.[m.key];
+                                            const delta = m.key === 'overall_gait'
+                                              ? diagComparisonData.deltas?.gait
+                                              : (hVal != null && fVal != null ? parseFloat((hVal - fVal).toFixed(1)) : null);
+                                            const d = getDeltaDisplay(delta);
+                                            const fBand = getScoreBand(fVal);
+                                            const hBand = getScoreBand(hVal);
+                                            const alert = getAlertBadge(delta, hVal);
+                                            if (fVal == null && hVal == null) return null;
+                                            return (
+                                              <tr key={m.key}>
+                                                <td className="metric-name" title={m.title}>
+                                                  <span className="metric-content">
+                                                    <span className="metric-icon" style={{ backgroundColor: m.color }}>{m.icon}</span>
+                                                    {m.label}
+                                                  </span>
+                                                </td>
+                                                <td className="score-cell">{fVal != null ? `${fVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${fBand.className}`}>{fBand.label}</span></td>
+                                                <td className="score-cell">{hVal != null ? `${hVal}%` : '—'}</td>
+                                                <td className="score-cell"><span className={`score-band ${hBand.className}`}>{hBand.label}</span></td>
+                                                <td className={`delta-cell ${d.className}`}>
+                                                  <span className="delta-icon">{d.icon}</span> {d.text}
+                                                </td>
+                                                <td className="status-cell">
+                                                  <span className={`alert-badge ${alert.className}`}>{alert.icon} {alert.text}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {ptBarItems.length > 0 && (
+                                  <div className="report-card">
+                                    <div className="report-card-header">
+                                      <h3 className="report-card-title">
+                                        <span className="report-icon">📈</span>
+                                        Visual Comparison — Physical
+                                      </h3>
+                                      <p className="report-card-subtitle">Facility (blue) vs. At-Home (green) performance</p>
+                                    </div>
+                                    <div className="report-card-body">
+                                      <div className="diag-bar-chart">
+                                        {ptBarItems.map((item, idx) => (
+                                          <div key={idx} className="diag-bar-row">
+                                            <span className="diag-bar-label">{item.label}</span>
+                                            <div className="diag-bar-tracks">
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-facility" style={{ width: `${item.facility || 0}%` }}>
+                                                  {item.facility != null && <span className="diag-bar-value">{item.facility}%</span>}
+                                                </div>
+                                              </div>
+                                              <div className="diag-bar-track">
+                                                <div className="diag-bar-fill diag-bar-home" style={{ width: `${item.home || 0}%` }}>
+                                                  {item.home != null && <span className="diag-bar-value">{item.home}%</span>}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                        <div className="diag-bar-legend">
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-facility"></span> Facility</span>
+                                          <span className="diag-legend-item"><span className="diag-legend-dot diag-legend-home"></span> At-Home</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Trend Chart (if multiple assessments) */}
-                      {diagComparisonHistory.length > 1 && (
+                      {diagComparisonData.has_facility_data && diagComparisonHistory.length > 1 && (
                         <div className="report-card">
                           <div className="report-card-header">
                             <h3 className="report-card-title">
@@ -4117,7 +5862,7 @@ function TherapistDashboard({ onLogout }) {
                       )}
 
                       {/* Recommended Focus Areas */}
-                      {diagComparisonData.recommended_focus && diagComparisonData.recommended_focus.length > 0 && (
+                      {diagComparisonData.has_facility_data && diagComparisonData.recommended_focus && diagComparisonData.recommended_focus.length > 0 && (
                         <div className="report-card diag-focus-card">
                           <div className="report-card-header">
                             <h3 className="report-card-title">
@@ -4139,7 +5884,7 @@ function TherapistDashboard({ onLogout }) {
                       )}
 
                       {/* Therapist Notes */}
-                      {diagComparisonData.notes && (
+                      {diagComparisonData.has_facility_data && diagComparisonData.notes && (
                         <div className="report-card">
                           <div className="report-card-header">
                             <h3 className="report-card-title">
@@ -4192,8 +5937,7 @@ function TherapistDashboard({ onLogout }) {
                           </div>
                         </div>
                       )}
-                    </>
-                  )}
+                  </>
                 </>
               )}
 
@@ -4234,8 +5978,308 @@ function TherapistDashboard({ onLogout }) {
             </div>
           )}
 
+          {activeTab === 'pre-evaluation' && (
+            <div className="preval-therapist-section">
+              <div className="preval-center-wrapper">
+
+                {/* Header */}
+                <div className="preval-dt-header">
+                  <div>
+                    <h2 className="preval-dt-title">🩺 Pre-Evaluation / Initial Diagnostic</h2>
+                    <p className="preval-dt-subtitle">Patients who completed the self-reported intake wizard</p>
+                  </div>
+                  <div className="preval-dt-count">
+                    <span className="preval-count-badge">{preEvalPatientList.length}</span>
+                    <span>patients</span>
+                  </div>
+                </div>
+
+                {/* Controls row */}
+                <div className="preval-controls-row">
+                  <input
+                    type="text"
+                    className="preval-filter-input"
+                    placeholder="🔍 Filter by name or email..."
+                    value={preEvalTableFilter}
+                    onChange={(e) => { setPreEvalTableFilter(e.target.value); setPreEvalCurrentPage(1); }}
+                  />
+                  <div className="pagination-controls">
+                    <label className="entries-label">
+                      Show:
+                      <select
+                        className="entries-select"
+                        value={preEvalEntriesPerPage}
+                        onChange={(e) => { setPreEvalEntriesPerPage(Number(e.target.value)); setPreEvalCurrentPage(1); }}
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                      </select>
+                      entries
+                    </label>
+                  </div>
+                </div>
+
+                {/* Datatable */}
+                {preEvalLoading ? (
+                  <div className="no-data-large">
+                    <div className="no-data-icon">⏳</div>
+                    <p className="no-data-text">Loading patients...</p>
+                  </div>
+                ) : preEvalPatientList.length === 0 ? (
+                  <div className="no-data-large">
+                    <div className="no-data-icon">🩺</div>
+                    <p className="no-data-text">No completed evaluations yet</p>
+                    <p className="no-data-hint">Patients who complete the self-reported intake wizard will appear here automatically</p>
+                  </div>
+                ) : (() => {
+                  const filtered = preEvalPatientList.filter(entry =>
+                    !preEvalTableFilter ||
+                    `${entry.patient.firstName} ${entry.patient.lastName}`.toLowerCase().includes(preEvalTableFilter.toLowerCase()) ||
+                    entry.patient.email?.toLowerCase().includes(preEvalTableFilter.toLowerCase())
+                  );
+                  const totalPages = Math.max(1, Math.ceil(filtered.length / preEvalEntriesPerPage));
+                  const safePage = Math.min(preEvalCurrentPage, totalPages);
+                  const pageEntries = filtered.slice((safePage - 1) * preEvalEntriesPerPage, safePage * preEvalEntriesPerPage);
+
+                  return (
+                    <>
+                      <div className="datatable-container">
+                        <table className="logs-table preval-table">
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>Patient</th>
+                              <th>Email</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pageEntries.map((entry, idx) => {
+                              const { patient } = entry;
+                              const rowNum = (safePage - 1) * preEvalEntriesPerPage + idx + 1;
+                              const initials = `${patient.firstName?.[0] ?? ''}${patient.lastName?.[0] ?? ''}`.toUpperCase();
+                              return (
+                                <tr key={patient._id || patient.id} className="preval-row">
+                                  <td className="preval-num">{rowNum}</td>
+                                  <td>
+                                    <div className="patient-cell">
+                                      <div className="patient-avatar-small">{initials}</div>
+                                      <span className="patient-name-text">{patient.firstName} {patient.lastName}</span>
+                                    </div>
+                                  </td>
+                                  <td><span className="email-text">{patient.email}</span></td>
+                                  <td>
+                                    <button
+                                      className="preval-view-btn"
+                                      onClick={() => setPreEvalModalEntry(entry)}
+                                    >
+                                      👁️ View
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination footer */}
+                      <div className="pagination-footer">
+                        <span className="pagination-info">
+                          Showing {Math.min((safePage - 1) * preEvalEntriesPerPage + 1, filtered.length)}–{Math.min(safePage * preEvalEntriesPerPage, filtered.length)} of {filtered.length} patients
+                        </span>
+                        <div className="pagination-buttons">
+                          <button className="pagination-btn" disabled={safePage === 1} onClick={() => setPreEvalCurrentPage(1)}>«</button>
+                          <button className="pagination-btn" disabled={safePage === 1} onClick={() => setPreEvalCurrentPage(p => p - 1)}>‹</button>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                            .reduce((acc, p, i, arr) => {
+                              if (i > 0 && p - arr[i - 1] > 1) acc.push('...');
+                              acc.push(p);
+                              return acc;
+                            }, [])
+                            .map((p, i) =>
+                              p === '...' ? (
+                                <span key={`ellipsis-${i}`} className="pagination-btn" style={{ cursor: 'default', border: 'none' }}>…</span>
+                              ) : (
+                                <button key={p} className={`pagination-btn${p === safePage ? ' active' : ''}`} onClick={() => setPreEvalCurrentPage(p)}>{p}</button>
+                              )
+                            )
+                          }
+                          <button className="pagination-btn" disabled={safePage === totalPages} onClick={() => setPreEvalCurrentPage(p => p + 1)}>›</button>
+                          <button className="pagination-btn" disabled={safePage === totalPages} onClick={() => setPreEvalCurrentPage(totalPages)}>»</button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+              </div>
+            </div>
+          )}
+
+          {/* Pre-Evaluation Self-Report Modal */}
+          {preEvalModalEntry && (() => {
+            const { patient, selfReport: r } = preEvalModalEntry;
+            const modalInitials = `${patient.firstName?.[0] ?? ''}${patient.lastName?.[0] ?? ''}`.toUpperCase();
+            const focusLabel = { speech: 'Speech Therapy', physical: 'Physical Therapy', both: 'Speech + Physical' };
+
+            const physicalFields = [
+              r?.strokeTimeframe && { icon: '🕐', label: 'Stroke Timeframe', value: { less_than_1_month: '< 1 Month', '1_to_6_months': '1–6 Months', '6_to_12_months': '6–12 Months', over_1_year: 'Over 1 Year' }[r.strokeTimeframe] ?? r.strokeTimeframe },
+              r?.affectedSide && { icon: '🧠', label: 'Affected Side', value: { left: 'Left Side', right: 'Right Side', both: 'Both Sides', unknown: 'Not Sure' }[r.affectedSide] ?? r.affectedSide },
+              r?.mobilityStatus && { icon: '🚶', label: 'Mobility', value: { independent: 'Walks Independently', assisted: 'With Assistance', wheelchair: 'Wheelchair User', bed_bound: 'Bed-bound' }[r.mobilityStatus] ?? r.mobilityStatus },
+              r?.balanceIssues != null && { icon: '⚖️', label: 'Balance Issues', value: r.balanceIssues ? 'Yes' : 'No' },
+              r?.armMotorFunction && { icon: '💪', label: 'Arm Motor', value: { normal: 'Normal', mild_weakness: 'Mild Weakness', moderate_weakness: 'Moderate Weakness', severe_weakness: 'Severe / No Movement' }[r.armMotorFunction] ?? r.armMotorFunction },
+              r?.legMotorFunction && { icon: '🦵', label: 'Leg Motor', value: { normal: 'Normal', mild_weakness: 'Mild Weakness', moderate_weakness: 'Moderate Weakness', severe_weakness: 'Severe / No Movement' }[r.legMotorFunction] ?? r.legMotorFunction },
+              r?.spasticity != null && { icon: '⚡', label: 'Spasticity', value: r.spasticity ? 'Present' : 'None' },
+              r?.priorPhysicalTherapy && { icon: '📋', label: 'Prior Physical Therapy', value: r.priorPhysicalTherapy === 'facility' ? 'At a Facility' : r.priorPhysicalTherapy === 'self_guided' ? 'Self-Guided' : 'No' },
+            ].filter(Boolean);
+
+            const speechFields = [
+              r?.childAgeGroup && { icon: '🎂', label: 'Age Group', value: { toddler: '1–2 Years (Toddler)', preschool: '3–4 Years (Preschool)', school_age: '5–8 Years (School-Age)', older: '9+ Years' }[r.childAgeGroup] ?? r.childAgeGroup },
+              r?.childCommunicationMode && { icon: '💬', label: 'Communication Mode', value: { preverbal: 'Pre-verbal / Non-verbal', single_words: 'Single Words', short_phrases: 'Short Phrases', sentences: 'Full Sentences' }[r.childCommunicationMode] ?? r.childCommunicationMode },
+              r?.speechIntelligibility && { icon: '🗣️', label: 'Speech Intelligibility', value: { easily: 'Easily Understood', mostly_family: 'Mostly by Family', difficult: 'Difficult to Understand', not_speaking: 'Not Yet Speaking' }[r.speechIntelligibility] ?? r.speechIntelligibility },
+              r?.mainSpeechConcern && { icon: '🔍', label: 'Main Concern', value: { articulation: 'Pronunciation', language: 'Language', fluency: 'Fluency', multiple: 'Multiple Areas' }[r.mainSpeechConcern] ?? r.mainSpeechConcern },
+              r?.followsInstructions && { icon: '📝', label: 'Follows Instructions', value: { yes_consistently: 'Yes, Consistently', sometimes: 'Sometimes', rarely: 'Rarely', no: 'No / Not Yet' }[r.followsInstructions] ?? r.followsInstructions },
+              r?.respondsToName && { icon: '👂', label: 'Responds to Name', value: { always: 'Always', usually: 'Usually', inconsistently: 'Inconsistently', rarely_no: 'Rarely / No' }[r.respondsToName] ?? r.respondsToName },
+              r?.priorSpeechEval && { icon: '📊', label: 'Prior Speech Eval', value: { formal_eval: 'Formal Evaluation', informal: 'Informal Screening', no: 'None' }[r.priorSpeechEval] ?? r.priorSpeechEval },
+              r?.primarySpeechGoal && { icon: '🎯', label: 'Primary Goal', value: r.primarySpeechGoal },
+            ].filter(Boolean);
+
+            const hasPhysical = (r?.therapyFocus === 'physical' || r?.therapyFocus === 'both') && physicalFields.length > 0;
+            const hasSpeech = (r?.therapyFocus === 'speech' || r?.therapyFocus === 'both') && speechFields.length > 0;
+
+            return (
+              <div className="modal-overlay" onClick={() => setPreEvalModalEntry(null)}>
+                <div className="modal-content preval-modal" onClick={(e) => e.stopPropagation()}>
+
+                  {/* Hero Header */}
+                  <div className="preval-modal-hero">
+                    <div className={`preval-modal-avatar-lg preval-avatar-${r?.therapyFocus ?? 'default'}`}>{modalInitials}</div>
+                    <div className="preval-modal-hero-info">
+                      <h2 className="preval-modal-hero-name">{patient.firstName} {patient.lastName}</h2>
+                      <p className="preval-modal-hero-email">{patient.email}</p>
+                      <div className="preval-modal-hero-badges">
+                        <span className="preval-hero-badge preval-hero-badge--self">🩺 Self-Reported</span>
+                        {r?.therapyFocus && <span className={`preval-hero-badge preval-hero-badge--focus preval-focus-${r.therapyFocus}`}>{focusLabel[r.therapyFocus] ?? r.therapyFocus}</span>}
+                        {r?.recommendedLevel && <span className={`preval-hero-badge preval-hero-badge--level preval-level-${r.recommendedLevel}`}>{r.recommendedLevel.charAt(0).toUpperCase() + r.recommendedLevel.slice(1)} Level</span>}
+                      </div>
+                    </div>
+                    <div className="preval-modal-hero-actions">
+                      <button
+                        className="btn-export-pdf preval-hero-export-btn"
+                        onClick={() => handleExportPreEvalPdf(preEvalModalEntry)}
+                        title="Export patient pre-evaluation to PDF"
+                      >
+                        📄 Export PDF
+                      </button>
+                      <button className="modal-close preval-modal-close-btn" onClick={() => setPreEvalModalEntry(null)}>×</button>
+                    </div>
+                  </div>
+
+                  <div className="modal-body preval-modal-body">
+                    {r?.completedWizard ? (
+                      <>
+                        {/* General Section */}
+                        <div className="preval-section">
+                          <div className="preval-section-header preval-section-general">
+                            <span>📋</span>
+                            <h3>General Information</h3>
+                          </div>
+                          <div className="preval-section-grid">
+                            {r.hasInitialDiagnostic != null && (
+                              <div className="preval-field-card">
+                                <span className="preval-field-icon">🏥</span>
+                                <span className="preval-field-label">Facility Visit</span>
+                                <span className="preval-field-value">{r.hasInitialDiagnostic ? 'Yes — Visited Facility' : 'No — Not Yet'}</span>
+                              </div>
+                            )}
+                            {r.therapyFocus && (
+                              <div className="preval-field-card">
+                                <span className="preval-field-icon">🎯</span>
+                                <span className="preval-field-label">Therapy Focus</span>
+                                <span className="preval-field-value">{focusLabel[r.therapyFocus] ?? r.therapyFocus}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Physical Section */}
+                        {hasPhysical && (
+                          <div className="preval-section">
+                            <div className="preval-section-header preval-section-physical">
+                              <span>🏃</span>
+                              <h3>Physical Therapy Assessment</h3>
+                            </div>
+                            <div className="preval-section-grid">
+                              {physicalFields.map((f, i) => (
+                                <div key={i} className="preval-field-card">
+                                  <span className="preval-field-icon">{f.icon}</span>
+                                  <span className="preval-field-label">{f.label}</span>
+                                  <span className="preval-field-value">{f.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Speech Section */}
+                        {hasSpeech && (
+                          <div className="preval-section">
+                            <div className="preval-section-header preval-section-speech">
+                              <span>🗣️</span>
+                              <h3>Speech Therapy Assessment</h3>
+                            </div>
+                            <div className="preval-section-grid">
+                              {speechFields.map((f, i) => (
+                                <div key={i} className="preval-field-card">
+                                  <span className="preval-field-icon">{f.icon}</span>
+                                  <span className="preval-field-label">{f.label}</span>
+                                  <span className="preval-field-value">{f.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Recommendation Banner */}
+                        {r.recommendedFocus && (
+                          <div className={`preval-rec-banner preval-rec-banner--${r.therapyFocus ?? 'default'}`}>
+                            <div className="preval-rec-banner-icon">⭐</div>
+                            <div className="preval-rec-banner-body">
+                              <span className="preval-rec-banner-title">Recommended Starting Point</span>
+                              <div className="preval-rec-banner-tags">
+                                <span className="preval-rec-tag preval-rec-tag--therapy">{ { speech: 'Speech Therapy', physical: 'Physical Therapy', both: 'Both Therapies' }[r.recommendedTherapy] ?? 'Therapy' }</span>
+                                {r.recommendedLevel && <span className="preval-rec-tag preval-rec-tag--level">{r.recommendedLevel.charAt(0).toUpperCase() + r.recommendedLevel.slice(1)} Level</span>}
+                                {r.recommendedLevelName && <span className="preval-rec-tag preval-rec-tag--sublevel">{r.recommendedLevelName}</span>}
+                              </div>
+                              <span className="preval-rec-banner-focus">{r.recommendedFocus}</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="no-data-large" style={{ padding: '3rem 1rem' }}>
+                        <div className="no-data-icon">📋</div>
+                        <p className="no-data-text">No self-diagnostic data found</p>
+                        <p className="no-data-hint">This patient has not yet completed the initial self-assessment wizard</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="modal-footer" style={{ justifyContent: 'center' }}>
+                    <button className="secondary-btn" onClick={() => setPreEvalModalEntry(null)}>Close</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
         </div>
       </main>
+        </div>
+      </div>
 
       {/* Create Exercise Modal */}
       {showExerciseModal && (
@@ -5087,17 +7131,6 @@ function TherapistDashboard({ onLogout }) {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label>Patient Name *</label>
-                <input 
-                  type="text" 
-                  value={newStory.patientName}
-                  onChange={(e) => setNewStory({ ...newStory, patientName: e.target.value })}
-                  placeholder="Enter patient's name"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
                 <label>Success Story *</label>
                 <textarea 
                   value={newStory.story}
@@ -5120,6 +7153,7 @@ function TherapistDashboard({ onLogout }) {
                 />
                 <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '8px', display: 'block' }}>
                   Supported formats: PNG, JPG, JPEG, GIF, WebP. Max size: 5MB per image.
+                  If multiple images are uploaded, they appear one at a time in the landing carousel with the same story description.
                 </small>
               </div>
 
@@ -5172,8 +7206,8 @@ function TherapistDashboard({ onLogout }) {
                     {editingStory.images.map((imagePath, index) => (
                       <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
                         <img 
-                          src={imagePath.startsWith('http') ? imagePath : `http://localhost:5000/${imagePath}`} 
-                          alt={`Existing ${index + 1}`} 
+                          src={imagePath.startsWith('http') ? imagePath : `${API_BASE_URL}/${imagePath}`} 
+                          alt={`Existing ${index + 1}`}
                           style={{ width: '100%', height: '120px', objectFit: 'cover' }}
                         />
                         <button

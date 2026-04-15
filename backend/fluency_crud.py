@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 Fluency Exercise CRUD Operations
 Separate module for managing fluency therapy exercises in the database
@@ -8,7 +10,6 @@ from functools import wraps
 from bson import ObjectId
 import datetime
 import jwt
-import os
 
 # Create Blueprint
 fluency_bp = Blueprint('fluency_crud', __name__)
@@ -17,13 +18,17 @@ fluency_bp = Blueprint('fluency_crud', __name__)
 db = None
 users_collection = None
 fluency_exercises_collection = None
+SECRET_KEY = None
 
-def init_fluency_crud(database):
+def init_fluency_crud(database, secret_key):
     """Initialize database collections"""
-    global db, users_collection, fluency_exercises_collection
+    global db, users_collection, fluency_exercises_collection, SECRET_KEY
+    if not secret_key:
+        raise RuntimeError('SECRET_KEY is required to initialize fluency CRUD')
     db = database
     users_collection = db['users']
     fluency_exercises_collection = db['fluency_exercises']
+    SECRET_KEY = secret_key
 
 # Token required decorator
 def token_required(f):
@@ -37,12 +42,12 @@ def token_required(f):
         try:
             if token.startswith('Bearer '):
                 token = token[7:]
-            data = jwt.decode(token, os.getenv('SECRET_KEY', 'your-secret-key-here'), algorithms=["HS256"])
+            data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             current_user = users_collection.find_one({'_id': ObjectId(data['user_id'])})
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 401
         except Exception as e:
-            return jsonify({'message': 'Token is invalid!', 'error': str(e)}), 401
+            return jsonify({'message': 'Token is invalid!'}), 401
         
         return f(current_user, *args, **kwargs)
     
@@ -119,8 +124,7 @@ def get_available_orders_endpoint(current_user):
     except Exception as e:
         return jsonify({
             'success': False,
-            'message': 'Failed to get available orders',
-            'error': str(e)
+            'message': 'Failed to get available orders'
         }), 500
 
 @fluency_bp.route('/api/fluency-exercises/seed', methods=['POST'])
@@ -477,9 +481,9 @@ def seed_default_exercises(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error seeding exercises: {str(e)}")
+        logger.error(f"Error seeding exercises: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to seed exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to seed exercises'}), 500
 
 
 @fluency_bp.route('/api/fluency-exercises', methods=['GET'])
@@ -505,9 +509,9 @@ def get_all_exercises(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error fetching exercises: {str(e)}")
+        logger.error(f"Error fetching exercises: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch exercises'}), 500
 
 
 @fluency_bp.route('/api/fluency-exercises/active', methods=['GET'])
@@ -552,9 +556,9 @@ def get_active_exercises(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error fetching active exercises: {str(e)}")
+        logger.error(f"Error fetching active exercises: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to fetch exercises', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to fetch exercises'}), 500
 
 
 @fluency_bp.route('/api/fluency-exercises', methods=['POST'])
@@ -615,9 +619,9 @@ def create_exercise(current_user):
         
     except Exception as e:
         import traceback
-        print(f"Error creating exercise: {str(e)}")
+        logger.error(f"Error creating exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to create exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to create exercise'}), 500
 
 
 @fluency_bp.route('/api/fluency-exercises/<exercise_id>', methods=['PUT'])
@@ -658,9 +662,9 @@ def update_exercise(current_user, exercise_id):
         
     except Exception as e:
         import traceback
-        print(f"Error updating exercise: {str(e)}")
+        logger.error(f"Error updating exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to update exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to update exercise'}), 500
 
 
 @fluency_bp.route('/api/fluency-exercises/<exercise_id>', methods=['DELETE'])
@@ -681,9 +685,9 @@ def delete_exercise(current_user, exercise_id):
         
     except Exception as e:
         import traceback
-        print(f"Error deleting exercise: {str(e)}")
+        logger.error(f"Error deleting exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to delete exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to delete exercise'}), 500
 
 
 @fluency_bp.route('/api/fluency-exercises/<exercise_id>/toggle-active', methods=['PATCH'])
@@ -717,6 +721,6 @@ def toggle_active(current_user, exercise_id):
         
     except Exception as e:
         import traceback
-        print(f"Error toggling exercise: {str(e)}")
+        logger.error(f"Error toggling exercise: {{e}}", exc_info=True)
         print(traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Failed to toggle exercise', 'error': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Failed to toggle exercise'}), 500

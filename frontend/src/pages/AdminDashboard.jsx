@@ -27,10 +27,13 @@ function AdminDashboard({ onLogout }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     checkAuth();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     console.log('Effect triggered - user:', user, 'activeTab:', activeTab);
     if (user) {
       if (activeTab === 'overview') {
@@ -41,6 +44,7 @@ function AdminDashboard({ onLogout }) {
         loadUsers();
       }
     }
+    return () => { cancelled = true; };
   }, [activeTab, user, currentPage, perPage]);
 
   const checkAuth = async () => {
@@ -62,35 +66,41 @@ function AdminDashboard({ onLogout }) {
   };
 
   const loadStats = async () => {
+    let cancelled = false;
     try {
       setLoading(true);
       console.log('Calling adminService.getStats()...');
       const response = await adminService.getStats();
-      console.log('Stats response:', response);
-      setStats(response.stats || response.data?.stats || response);
+      if (!cancelled) {
+        console.log('Stats response:', response);
+        setStats(response.stats || response.data?.stats || response);
+      }
     } catch (error) {
       console.error('Error loading stats:', error);
       console.error('Error details:', error.response?.data);
     } finally {
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
   };
 
   const loadUsers = async () => {
+    let cancelled = false;
     try {
       setLoading(true);
       console.log('Calling adminService.getAllUsers()...');
       const response = await adminService.getAllUsers(currentPage, perPage, searchTerm);
-      console.log('Users response:', response);
-      console.log('Pagination object:', response.pagination);
-      setUsers(response.users || []);
-      setTotalPages(response.pagination?.total_pages || 1);
-      console.log('Set totalPages to:', response.pagination?.total_pages || 1);
+      if (!cancelled) {
+        console.log('Users response:', response);
+        console.log('Pagination object:', response.pagination);
+        setUsers(response.users || []);
+        setTotalPages(response.pagination?.total_pages || 1);
+        console.log('Set totalPages to:', response.pagination?.total_pages || 1);
+      }
     } catch (error) {
       console.error('Error loading users:', error);
       console.error('Error details:', error.response?.data);
     } finally {
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
   };
 
@@ -508,29 +518,29 @@ function AdminDashboard({ onLogout }) {
   return (
     <>
       {/* Header */}
-      <header className="admin-header">
-        <div className="admin-header-container">
-          <div className="admin-logo-group">
-            <img src={images.logo} alt="CVAPed Logo" className="admin-header-logo" />
-            <img src={images.cvacareText} alt="CVAPed" className="admin-header-text" />
-            <span className="admin-badge">Admin Panel</span>
+      <header className="sys-admin-header">
+        <div className="sys-admin-header-container">
+          <div className="sys-admin-logo-group">
+            <img src={images.logo} alt="CVAPed Logo" className="sys-admin-header-logo" />
+            <img src={images.cvacareText} alt="CVAPed" className="sys-admin-header-text" />
+            <span className="sys-admin-badge">Admin Panel</span>
           </div>
-          <div className="admin-header-actions">
-            <span className="admin-user-name">
+          <div className="sys-admin-header-actions">
+            <span className="sys-admin-user-name">
               {user.firstName} {user.lastName}
             </span>
-            <button onClick={onLogout} className="logout-btn">
+            <button onClick={onLogout} className="sys-admin-logout-btn">
               Logout
             </button>
           </div>
         </div>
       </header>
 
-      <div className="admin-dashboard">
+      <div className="sys-admin-dashboard">
         {/* Main Content */}
-        <div className="admin-content">
+        <div className="sys-admin-content">
           {/* Sidebar */}
-          <aside className="admin-sidebar">
+          <aside className="sys-admin-sidebar">
             <nav className="sidebar-nav">
               <button
                 className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
@@ -555,7 +565,7 @@ function AdminDashboard({ onLogout }) {
           </aside>
 
           {/* Main Section */}
-          <main className="admin-main">
+          <main className="sys-admin-main">
             {activeTab === 'overview' && renderOverview()}
             {activeTab === 'users' && renderUserManagement()}
           </main>

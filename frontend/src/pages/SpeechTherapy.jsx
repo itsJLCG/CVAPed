@@ -4,7 +4,7 @@ import Header from '../components/Header';
 import { useTherapyCategory } from '../components/TherapyCategoryContext';
 import './SpeechTherapyTypes.css';
 
-function SpeechTherapy({ onLogout }) {
+function SpeechTherapy({ onLogout, onFacilityExit }) {
   const [selectedType, setSelectedType] = useState(null);
   const navigate = useNavigate();
   const { selectCategory } = useTherapyCategory();
@@ -63,7 +63,7 @@ function SpeechTherapy({ onLogout }) {
   return (
     <div className="speech-therapy-types-page">
       {/* Header */}
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
 
       {/* Main Content */}
       <main className="speech-types-main">

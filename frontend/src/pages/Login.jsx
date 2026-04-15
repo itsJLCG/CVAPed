@@ -79,7 +79,15 @@ function Login({ onLogin }) {
               navigate('/complete-profile');
             } else {
               toast.success('Successfully signed in with Google!');
-              navigate('/therapy-selection');
+              // Role-based routing
+              const userRole = response.user.role;
+              if (userRole === 'admin') {
+                navigate('/admin');
+              } else if (userRole === 'therapist') {
+                navigate('/therapist');
+              } else {
+                navigate('/therapy-selection');
+              }
             }
           } else {
             setError(response.message || 'Authentication failed');
@@ -145,7 +153,15 @@ function Login({ onLogin }) {
               navigate('/complete-profile');
             } else {
               toast.success('Successfully signed in with Facebook!');
-              navigate('/therapy-selection');
+              // Role-based routing
+              const userRole = response.user.role;
+              if (userRole === 'admin') {
+                navigate('/admin');
+              } else if (userRole === 'therapist') {
+                navigate('/therapist');
+              } else {
+                navigate('/therapy-selection');
+              }
             }
           } else {
             setError(response.message || 'Authentication failed');

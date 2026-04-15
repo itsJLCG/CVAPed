@@ -3,7 +3,7 @@ import { appointmentService } from '../services/api';
 import Header from '../components/Header';
 import './Appointments.css';
 
-function Appointments({ onLogout }) {
+function Appointments({ onLogout, onFacilityExit }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showBookModal, setShowBookModal] = useState(false);
@@ -16,10 +16,6 @@ function Appointments({ onLogout }) {
     notes: ''
   });
   const [filter, setFilter] = useState('all'); // all, upcoming, past
-
-  useEffect(() => {
-    loadAppointments();
-  }, []);
 
   const loadAppointments = async () => {
     setLoading(true);
@@ -35,8 +31,58 @@ function Appointments({ onLogout }) {
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true);
+      try {
+        const response = await appointmentService.patient.getAppointments();
+        if (!cancelled && response.success) {
+          setAppointments(response.appointments || []);
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Error loading appointments:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    run();
+    
+    // Auto-refresh appointments every 30 seconds
+    const intervalId = setInterval(() => {
+      if (!cancelled) {
+        loadAppointments();
+      }
+    }, 30000);
+
+    return () => { 
+      cancelled = true; 
+      clearInterval(intervalId);
+    };
+  }, []);
+
   const handleBookAppointment = async () => {
     try {
+      // Validate date and time
+      const selectedDate = new Date(newAppointment.preferred_date);
+      const dayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      
+      // Check if day is Monday (1), Wednesday (3), or Friday (5)
+      if (dayOfWeek !== 1 && dayOfWeek !== 3 && dayOfWeek !== 5) {
+        alert('Appointments can only be scheduled on Monday, Wednesday, or Friday.');
+        return;
+      }
+
+      // Check if time is between 8:00 AM and 5:00 PM
+      const timeParts = newAppointment.preferred_time.split(':');
+      const hours = parseInt(timeParts[0], 10);
+      const minutes = parseInt(timeParts[1], 10);
+      
+      if (hours < 8 || hours > 17 || (hours === 17 && minutes > 0)) {
+        alert('Appointments can only be scheduled between 8:00 AM and 5:00 PM.');
+        return;
+      }
+
       // Combine date and time
       const appointmentDateTime = `${newAppointment.preferred_date}T${newAppointment.preferred_time}`;
       
@@ -88,20 +134,34 @@ function Appointments({ onLogout }) {
   const getFilteredAppointments = () => {
     const now = new Date();
     
+    let filtered = appointments;
     if (filter === 'upcoming') {
-      return appointments.filter(apt => 
+      filtered = appointments.filter(apt => 
         new Date(apt.appointment_date) >= now && 
         apt.status !== 'cancelled' && 
-        apt.status !== 'completed'
+        apt.status !== 'completed' &&
+        apt.status !== 'no-show'
       );
     } else if (filter === 'past') {
-      return appointments.filter(apt => 
+      filtered = appointments.filter(apt => 
         new Date(apt.appointment_date) < now || 
         apt.status === 'cancelled' || 
-        apt.status === 'completed'
+        apt.status === 'completed' ||
+        apt.status === 'no-show'
       );
     }
-    return appointments;
+
+    // Sort appointments: Cancelled and No Show at the bottom
+    return filtered.sort((a, b) => {
+      const isABottom = a.status === 'cancelled' || a.status === 'no-show';
+      const isBBottom = b.status === 'cancelled' || b.status === 'no-show';
+      
+      if (isABottom && !isBBottom) return 1;
+      if (!isABottom && isBBottom) return -1;
+      
+      // If both are in the same group, sort by date (newest first)
+      return new Date(b.appointment_date) - new Date(a.appointment_date);
+    });
   };
 
   const filteredAppointments = getFilteredAppointments();
@@ -130,7 +190,7 @@ function Appointments({ onLogout }) {
 
   return (
     <>
-      <Header onLogout={onLogout} />
+      <Header onLogout={onLogout} onFacilityExit={onFacilityExit} />
       <div className="appointments-page">
         <div className="appointments-container">
           {/* Header */}
@@ -159,7 +219,8 @@ function Appointments({ onLogout }) {
             Upcoming ({appointments.filter(apt => 
               new Date(apt.appointment_date) >= new Date() && 
               apt.status !== 'cancelled' && 
-              apt.status !== 'completed'
+              apt.status !== 'completed' &&
+              apt.status !== 'no-show'
             ).length})
           </button>
           <button 
@@ -169,7 +230,8 @@ function Appointments({ onLogout }) {
             Past ({appointments.filter(apt => 
               new Date(apt.appointment_date) < new Date() || 
               apt.status === 'cancelled' || 
-              apt.status === 'completed'
+              apt.status === 'completed' ||
+              apt.status === 'no-show'
             ).length})
           </button>
         </div>
@@ -471,7 +533,7 @@ function Appointments({ onLogout }) {
                 <button className="btn-secondary" onClick={() => setShowDetailsModal(false)}>
                   Close
                 </button>
-                {selectedAppointment.status !== 'completed' && selectedAppointment.status !== 'cancelled' && (
+                {selectedAppointment.status !== 'completed' && selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'no-show' && (
                   <button 
                     className="btn-danger" 
                     onClick={() => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { appointmentService } from '../services/api';
 import Header from '../components/Header';
+import { MedicalSpinner, SkeletonTable, LoadingOverlay } from '../components/MedicalLoading';
 import './Appointments.css';
 
 function Appointments({ onLogout, onFacilityExit }) {
@@ -238,9 +239,8 @@ function Appointments({ onLogout, onFacilityExit }) {
 
         {/* Appointments List */}
         {loading ? (
-          <div className="loading-container">
-            <div className="loading-spinner"></div>
-            <p>Loading appointments...</p>
+          <div className="medical-loading-overlay">
+            <MedicalSpinner message="Loading appointments..." />
           </div>
         ) : filteredAppointments.length > 0 ? (
           <div className="appointments-table-container">

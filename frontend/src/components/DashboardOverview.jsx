@@ -7,6 +7,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid,
   RadialBarChart, RadialBar, PolarAngleAxis
 } from 'recharts';
+import { MedicalSpinner, SkeletonCard } from './MedicalLoading';
 import './DashboardOverview.css';
 
 const SCORE_RANGE_COLORS = ['#ef4444', '#f59e0b', '#eab308', '#22c55e', '#10b981'];
@@ -679,8 +680,7 @@ function PatientDemographicsChart({ reportsData, loadingReports }) {
   if (loadingReports && !reportsData) {
     return (
       <div className="do-demographics-loading" role="status" aria-live="polite">
-        <div className="do-loading-spinner" />
-        <p>Loading demographic data...</p>
+        <MedicalSpinner size="small" message="Loading demographic data..." />
       </div>
     );
   }
@@ -813,9 +813,16 @@ function RecentActivitiesList({ activities }) {
 function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelectedDays, loadingStats, loadingReports, user }) {
   if (loadingStats) {
     return (
-      <div className="loading-overlay">
-        <div className="loading-spinner"></div>
-        <p>Loading statistics...</p>
+      <div className="loading-overlay" style={{ minHeight: '600px', display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', width: '100%' }}>
+          <SkeletonCard height="120px" />
+          <SkeletonCard height="120px" />
+          <SkeletonCard height="120px" />
+          <SkeletonCard height="120px" />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0' }}>
+          <MedicalSpinner message="Loading dashboard statistics..." />
+        </div>
       </div>
     );
   }

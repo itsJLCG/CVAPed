@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService, detectionProblemsService, exerciseRecommendationsService } from '../services/api';
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
+import { MedicalSpinner, SkeletonCard, SkeletonChart, SkeletonTable, LoadingOverlay } from '../components/MedicalLoading';
 import './TherapistDashboard.css';
 import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf, generateTherapistReportsPdf } from '../components/PdfReportTemplate';
 import DashboardOverview from '../components/DashboardOverview';
@@ -2407,9 +2408,8 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingPhysical ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading gait analyses...</p>
+                <div className="medical-loading-overlay">
+                  <MedicalSpinner message="Loading patients list..." />
                 </div>
               ) : gaitAnalyses.length === 0 ? (
                 <div className="datatable-container">
@@ -3443,10 +3443,9 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingDetectionProblems ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading detection problems...</p>
-                </div>
+                  <div className="medical-loading-overlay">
+                    <MedicalSpinner message="Loading gait detection problems..." />
+                  </div>
               ) : detectionProblems.length === 0 ? (
                 <div className="datatable-container">
                   <div className="no-data-message">
@@ -3655,10 +3654,9 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingExerciseRecs ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading exercise recommendations...</p>
-                </div>
+                  <div className="medical-loading-overlay">
+                    <MedicalSpinner message="Loading exercise recommendations..." />
+                  </div>
               ) : exerciseRecs.length === 0 ? (
                 <div className="datatable-container">
                   <div className="no-data-message">
@@ -3887,9 +3885,8 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingStories ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading success stories...</p>
+                <div className="medical-loading-overlay">
+                  <MedicalSpinner message="Loading diagnostics data..." />
                 </div>
               ) : successStories.length === 0 ? (
                 <div className="datatable-container">
@@ -4320,9 +4317,8 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingAppointments ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading appointments...</p>
+                <div className="medical-loading-overlay">
+                  <MedicalSpinner message="Loading diagnostics data..." />
                 </div>
               ) : appointments.length > 0 ? (
                 <div className="datatable-container">
@@ -4774,9 +4770,8 @@ function TherapistDashboard({ onLogout }) {
           {activeTab === 'reports' && (
             <div className="reports-section">
               {loadingReports ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading reports...</p>
+                <div className="medical-loading-overlay">
+                  <MedicalSpinner message="Generating medical reports..." />
                 </div>
               ) : reportsData && (reportsData.totalPatients || 0) > 0 ? (
                 <div className="reports-container">

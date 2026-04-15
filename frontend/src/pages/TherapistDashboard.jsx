@@ -1216,24 +1216,53 @@ function TherapistDashboard({ onLogout }) {
     return 'Language';
   };
 
-  const getSpeechDetailsText = (entry) => {
-    if (!entry || !entry.details) return 'No details provided';
+  const renderSpeechDetails = (entry) => {
+    let detailsGrid = [];
 
     if (entry.therapy_type === 'articulation') {
-      const sound = entry.details.sound_id ? `/${String(entry.details.sound_id).toUpperCase()}/` : 'N/A';
-      const target = entry.details.target_word || 'N/A';
-      return `Sound: ${sound} | Target: ${target}`;
+      detailsGrid = [
+        { label: 'Sound', value: entry.details?.sound || 'N/A', highlight: true },
+        { label: 'Target Word', value: entry.details?.target_word || 'N/A' },
+        { label: 'Position', value: entry.details?.position || 'N/A' },
+        { label: 'Score', value: typeof entry.score === 'number' ? `${entry.score}%` : 'N/A', highlight: true }
+      ];
+    } else if (entry.therapy_type === 'fluency') {
+      detailsGrid = [
+        { label: 'Exercise Type', value: entry.details?.exercise_type || 'N/A', highlight: true },
+        { label: 'Instruction', value: entry.details?.instruction || 'N/A' },
+        { label: 'Score', value: typeof entry.score === 'number' ? `${entry.score}%` : 'N/A', highlight: true }
+      ];
+    } else {
+      detailsGrid = [
+        { label: 'Exercise ID', value: entry.details?.exercise_id || 'N/A' },
+        { label: 'Prompt', value: entry.details?.prompt || 'N/A', highlight: true },
+        { label: 'Score', value: typeof entry.score === 'number' ? `${entry.score}%` : 'N/A', highlight: true }
+      ];
     }
 
-    if (entry.therapy_type === 'fluency') {
-      const exerciseType = entry.details.exercise_type || 'N/A';
-      const instruction = entry.details.instruction || 'N/A';
-      return `Type: ${exerciseType} | Instruction: ${instruction}`;
-    }
-
-    const exerciseId = entry.details.exercise_id || 'N/A';
-    const prompt = entry.details.prompt || 'N/A';
-    return `Exercise: ${exerciseId} | Prompt: ${prompt}`;
+    return (
+      <div className="speech-details-container">
+        <div className="speech-details-header">
+          <h4>
+            <span className="speech-details-icon">🎤</span>
+            Detailed Trial Information
+          </h4>
+          <span className="speech-details-score">
+            {typeof entry.score === 'number' ? `${entry.score}% Accuracy` : 'No Score'}
+          </span>
+        </div>
+        <div className="speech-details-grid">
+          {detailsGrid.map((item, i) => (
+            <div key={i} className="speech-detail-card">
+              <span className="speech-detail-label">{item.label}</span>
+              <p className={`speech-detail-value ${item.highlight ? 'highlight' : ''}`}>
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   // Success Stories Functions
@@ -2823,63 +2852,59 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               </div>
 
-              {loadingSpeechEntries ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading speech entries...</p>
-                </div>
-              ) : speechEntries.length === 0 ? (
-                <div className="datatable-container">
-                  <div className="no-data-message">
-                    <span className="no-data-icon">🎤</span>
-                    <h3>No Speech Entries Found</h3>
-                    <p>Speech entries will appear here once patients complete speech exercises.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="gait-analyses-container">
-                  <div className="controls-section">
-                    <div className="control-group">
-                      <div className="search-container">
-                        <input
-                          type="text"
-                          placeholder="Search by patient name, email, or therapy type..."
-                          value={speechSearchTerm}
+              <div className="gait-analyses-container">
+                <div className="controls-section">
+                  <div className="control-group">
+                    <div className="search-container">
+                      <input
+                        type="text"
+                        placeholder="Search by patient name, email, or therapy type..."
+                        value={speechSearchTerm}
+                        onChange={(e) => {
+                          setSpeechSearchTerm(e.target.value);
+                          setCurrentSpeechPage(1);
+                        }}
+                        className="search-input"
+                      />
+                    </div>
+                    <div className="pagination-controls">
+                      <label className="entries-label">
+                        Show:
+                        <select
+                          value={speechEntriesPerPage}
                           onChange={(e) => {
-                            setSpeechSearchTerm(e.target.value);
+                            setSpeechEntriesPerPage(Number(e.target.value));
                             setCurrentSpeechPage(1);
                           }}
-                          className="search-input"
-                        />
-                      </div>
-                      <div className="pagination-controls">
-                        <label className="entries-label">
-                          Show:
-                          <select
-                            value={speechEntriesPerPage}
-                            onChange={(e) => {
-                              setSpeechEntriesPerPage(Number(e.target.value));
-                              setCurrentSpeechPage(1);
-                            }}
-                            className="entries-select"
-                          >
-                            <option value={10}>10</option>
-                            <option value={25}>25</option>
-                            <option value={50}>50</option>
-                          </select>
-                          entries
-                        </label>
-                      </div>
-                      <div className="stats-summary">
-                        <span className="stat-item">
-                          <strong>{speechEntries.length}</strong> Total Speech Entries
-                        </span>
-                      </div>
+                          className="entries-select"
+                        >
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                        </select>
+                        entries
+                      </label>
+                    </div>
+                    <div className="stats-summary">
+                      <span className="stat-item">
+                        <strong>{speechEntries.length}</strong> Total Speech Entries
+                      </span>
                     </div>
                   </div>
+                </div>
 
-                  <div className="datatable-container">
-                    <table className="logs-table gait-table">
+                <div className="datatable-container">
+                  {loadingSpeechEntries ? (
+                    <SkeletonTable rows={5} cols={6} />
+                  ) : speechEntries.length === 0 ? (
+                    <div className="no-data-message">
+                      <span className="no-data-icon">🎤</span>
+                      <h3>No Speech Entries Found</h3>
+                      <p>Speech entries will appear here once patients complete speech exercises.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <table className="logs-table gait-table">
                       <thead>
                         <tr>
                           <th>Patient</th>
@@ -2944,11 +2969,8 @@ function TherapistDashboard({ onLogout }) {
                               </tr>
                               {expandedSpeechRows[entry.id] && (
                                 <tr className="gait-details-row">
-                                  <td colSpan="6">
-                                    <div className="gait-details-container">
-                                      <h4 className="problems-title">Entry Details</h4>
-                                      <p className="speech-entry-details-text">{getSpeechDetailsText(entry)}</p>
-                                    </div>
+                                  <td colSpan="6" style={{ padding: 0 }}>
+                                    {renderSpeechDetails(entry)}
                                   </td>
                                 </tr>
                               )}
@@ -3036,82 +3058,78 @@ function TherapistDashboard({ onLogout }) {
                       );
                     })()}
                   </div>
+                )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
-          {activeTab === 'recommended-exercises' && (
+        {activeTab === 'recommended-exercises' && (
             <div className="physical-section recommended-exercises-section">
-              {loadingRecommended ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading recommended exercises...</p>
-                </div>
-              ) : recommendedExercises.length === 0 ? (
-                <div className="datatable-container">
-                  <div className="no-data-message">
-                    <span className="no-data-icon">🧩</span>
-                    <h3>No Recommended Exercises Yet</h3>
-                    <p>Recommended exercises will appear after gait analyses create exercise plans.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="gait-analyses-container">
-                  <div className="controls-section">
-                    <div className="control-group">
-                      <div className="search-container">
-                        <input
-                          type="text"
-                          placeholder="Search by patient name or email..."
-                          value={recommendedSearchTerm}
+              <div className="gait-analyses-container">
+                <div className="controls-section">
+                  <div className="control-group">
+                    <div className="search-container">
+                      <input
+                        type="text"
+                        placeholder="Search by patient name or email..."
+                        value={recommendedSearchTerm}
+                        onChange={(e) => {
+                          setRecommendedSearchTerm(e.target.value);
+                          setCurrentRecommendedPage(1);
+                        }}
+                        className="search-input"
+                      />
+                    </div>
+                    <div className="pagination-controls">
+                      <label className="entries-label">
+                        Show:
+                        <select
+                          value={recommendedEntriesPerPage}
                           onChange={(e) => {
-                            setRecommendedSearchTerm(e.target.value);
+                            setRecommendedEntriesPerPage(Number(e.target.value));
                             setCurrentRecommendedPage(1);
                           }}
-                          className="search-input"
+                          className="entries-select"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                        </select>
+                        entries
+                      </label>
+                    </div>
+                    <div className="stats-summary">
+                      <span className="stat-item">
+                        <strong>{recommendedExercises.length}</strong> Total Plans
+                      </span>
+                    </div>
+                    <div className="recommended-status-toggle-bar" title="Status controls visibility">
+                      <span className="recommended-status-toggle-label">Status Mode</span>
+                      <label className="recommended-toggle-switch">
+                        <input
+                          type="checkbox"
+                          checked={showRecommendedStatusControls}
+                          disabled={bulkUpdatingRecommendedVisibility}
+                          onChange={(e) => handleToggleRecommendedStatusControls(e.target.checked)}
                         />
-                      </div>
-                      <div className="pagination-controls">
-                        <label className="entries-label">
-                          Show:
-                          <select
-                            value={recommendedEntriesPerPage}
-                            onChange={(e) => {
-                              setRecommendedEntriesPerPage(Number(e.target.value));
-                              setCurrentRecommendedPage(1);
-                            }}
-                            className="entries-select"
-                          >
-                            <option value={5}>5</option>
-                            <option value={10}>10</option>
-                            <option value={25}>25</option>
-                            <option value={50}>50</option>
-                          </select>
-                          entries
-                        </label>
-                      </div>
-                      <div className="stats-summary">
-                        <span className="stat-item">
-                          <strong>{recommendedExercises.length}</strong> Total Plans
-                        </span>
-                      </div>
-                      <div className="recommended-status-toggle-bar" title="Status controls visibility">
-                        <span className="recommended-status-toggle-label">Status Mode</span>
-                        <label className="recommended-toggle-switch">
-                          <input
-                            type="checkbox"
-                            checked={showRecommendedStatusControls}
-                            disabled={bulkUpdatingRecommendedVisibility}
-                            onChange={(e) => handleToggleRecommendedStatusControls(e.target.checked)}
-                          />
-                          <span className="recommended-toggle-slider"></span>
-                        </label>
-                      </div>
+                        <span className="recommended-toggle-slider"></span>
+                      </label>
                     </div>
                   </div>
+                </div>
 
-                  <div className="datatable-container">
+                <div className="datatable-container">
+                  {loadingRecommended ? (
+                    <SkeletonTable rows={5} cols={4} />
+                  ) : recommendedExercises.length === 0 ? (
+                    <div className="no-data-message">
+                      <span className="no-data-icon">🧩</span>
+                      <h3>No Recommended Exercises Yet</h3>
+                      <p>Recommended exercises will appear after gait analyses create exercise plans.</p>
+                    </div>
+                  ) : (
                     <table className={`logs-table gait-table recommended-table ${showRecommendedStatusControls ? 'status-visible' : ''}`}>
                       <thead>
                         <tr>
@@ -3168,8 +3186,9 @@ function TherapistDashboard({ onLogout }) {
                         })()}
                       </tbody>
                     </table>
+                  )}
 
-                    {(() => {
+                  {recommendedExercises.length > 0 && (() => {
                       const filteredPlans = recommendedExercises.filter(plan =>
                         !recommendedSearchTerm ||
                         plan.user_name.toLowerCase().includes(recommendedSearchTerm.toLowerCase()) ||
@@ -3240,10 +3259,9 @@ function TherapistDashboard({ onLogout }) {
                           </div>
                         </div>
                       );
-                    })()}
-                  </div>
+                      })()}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -3406,57 +3424,53 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               </div>
 
-              <div className="stories-toolbar">
-                <div className="toolbar-left">
-                  <div className="search-container">
-                    <input
-                      type="text"
-                      placeholder="Search by name or category..."
-                      value={dpSearchTerm}
-                      onChange={(e) => { setDPSearchTerm(e.target.value); setCurrentDPPage(1); }}
-                      className="search-input"
-                    />
-                  </div>
-                  <div className="pagination-controls">
-                    <label className="entries-label">
-                      Show:
-                      <select
-                        value={dpEntriesPerPage}
-                        onChange={(e) => { setDPEntriesPerPage(Number(e.target.value)); setCurrentDPPage(1); }}
-                        className="entries-select"
-                      >
-                        <option value={5}>5</option>
-                        <option value={10}>10</option>
-                        <option value={25}>25</option>
-                        <option value={50}>50</option>
-                      </select>
-                      entries
-                    </label>
+              <div className="gait-analyses-container">
+                <div className="controls-section">
+                  <div className="control-group">
+                    <div className="search-container">
+                      <input
+                        type="text"
+                        placeholder="Search by name or category..."
+                        value={dpSearchTerm}
+                        onChange={(e) => { setDPSearchTerm(e.target.value); setCurrentDPPage(1); }}
+                        className="search-input"
+                      />
+                    </div>
+                    <div className="pagination-controls">
+                      <label className="entries-label">
+                        Show:
+                        <select
+                          value={dpEntriesPerPage}
+                          onChange={(e) => { setDPEntriesPerPage(Number(e.target.value)); setCurrentDPPage(1); }}
+                          className="entries-select"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                        </select>
+                        entries
+                      </label>
+                    </div>
+                    <div className="stats-summary">
+                      <span className="stat-item"><strong>{detectionProblems.filter(d => d.is_active).length}</strong> Active</span>
+                      <span className="stat-item"><strong>{detectionProblems.length}</strong> Total</span>
+                    </div>
                   </div>
                 </div>
-                <div className="toolbar-right">
-                  <div className="stats-summary">
-                    <span className="stat-item"><strong>{detectionProblems.filter(d => d.is_active).length}</strong> Active</span>
-                    <span className="stat-item"><strong>{detectionProblems.length}</strong> Total</span>
-                  </div>
-                </div>
-              </div>
 
-              {loadingDetectionProblems ? (
-                  <div className="medical-loading-overlay">
-                    <MedicalSpinner message="Loading gait detection problems..." />
-                  </div>
-              ) : detectionProblems.length === 0 ? (
                 <div className="datatable-container">
-                  <div className="no-data-message">
-                    <span className="no-data-icon">🔍</span>
-                    <h3>No Detection Problems Yet</h3>
-                    <p>Click "Seed Defaults" to populate or "Add Problem" to create one.</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="datatable-container">
-                  <table className="logs-table">
+                  {loadingDetectionProblems ? (
+                    <SkeletonTable rows={5} cols={7} />
+                  ) : detectionProblems.length === 0 ? (
+                    <div className="no-data-message">
+                      <span className="no-data-icon">🔍</span>
+                      <h3>No Detection Problems Yet</h3>
+                      <p>Click "Seed Defaults" to populate or "Add Problem" to create one.</p>
+                    </div>
+                  ) : (
+                    <>
+                    <table className="logs-table">
                     <thead>
                       <tr>
                         <th>ID</th>
@@ -3540,8 +3554,10 @@ function TherapistDashboard({ onLogout }) {
                       </div>
                     );
                   })()}
+                  </>
+                )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 

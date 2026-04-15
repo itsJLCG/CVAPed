@@ -604,7 +604,7 @@ const GENDER_META = {
 };
 
 /* ====== CHART 9: Patient Demographics (Horizontal Bar) ====== */
-function PatientDemographicsChart({ reportsData }) {
+function PatientDemographicsChart({ reportsData, loadingReports }) {
   const ageData = useMemo(() => {
     if (reportsData?.ageBrackets?.length) {
       return reportsData.ageBrackets.map(b => ({
@@ -675,6 +675,15 @@ function PatientDemographicsChart({ reportsData }) {
       fill: b.isHighest ? 'var(--color-primary)' : 'var(--color-secondary)',
     }));
   }, [ageData]);
+
+  if (loadingReports && !reportsData) {
+    return (
+      <div className="do-demographics-loading" role="status" aria-live="polite">
+        <div className="do-loading-spinner" />
+        <p>Loading demographic data...</p>
+      </div>
+    );
+  }
 
   if (!data.length) return <EmptyState icon="\u{1F465}" message="No demographic data available" />;
   const totalGender = genderData.reduce((s, g) => s + (g.count || 0), 0);
@@ -801,7 +810,7 @@ function RecentActivitiesList({ activities }) {
 }
 
 /* ====== MAIN COMPONENT ====== */
-function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelectedDays, loadingStats, user }) {
+function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelectedDays, loadingStats, loadingReports, user }) {
   if (loadingStats) {
     return (
       <div className="loading-overlay">
@@ -889,7 +898,7 @@ function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelect
 
         {/* Patient Demographics */}
         <ChartCard title="Patient Demographics" icon={'\u{1F465}'} gridArea="demographics">
-          <PatientDemographicsChart reportsData={reportsData} />
+          <PatientDemographicsChart reportsData={reportsData} loadingReports={loadingReports} />
         </ChartCard>
 
         {/* Recent Activities */}

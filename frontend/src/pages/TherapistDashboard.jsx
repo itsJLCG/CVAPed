@@ -2258,6 +2258,7 @@ function TherapistDashboard({ onLogout }) {
               selectedDays={selectedDays}
               setSelectedDays={setSelectedDays}
               loadingStats={loadingStats}
+              loadingReports={loadingReports}
               user={user}
             />
           )}

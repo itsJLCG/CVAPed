@@ -468,7 +468,9 @@ def build_patient_report_payload(patients):
         return result
 
     detected_problem_map = {}
-    patient_gender_cache = {}
+    # Pre-populate cache from the already fetched patients list to prevent N+1 queries
+    patient_gender_cache = {str(p['_id']): normalize_gender(p.get('gender')) for p in patients if '_id' in p}
+    
     gait_records = list(db['gaitprogresses'].find({}, {'user_id': 1, 'detected_problems': 1}))
 
     for record in gait_records:
@@ -477,12 +479,11 @@ def build_patient_report_payload(patients):
             continue
 
         if user_id not in patient_gender_cache:
-            user_doc = None
             try:
                 user_doc = users_collection.find_one({'_id': ObjectId(user_id)}, {'gender': 1})
+                patient_gender_cache[user_id] = normalize_gender(user_doc.get('gender')) if user_doc else 'other'
             except Exception:
-                user_doc = users_collection.find_one({'_id': user_id}, {'gender': 1})
-            patient_gender_cache[user_id] = normalize_gender(user_doc.get('gender')) if user_doc else 'other'
+                patient_gender_cache[user_id] = 'other'
 
         gender = patient_gender_cache[user_id]
         for raw_problem in record.get('detected_problems', []):

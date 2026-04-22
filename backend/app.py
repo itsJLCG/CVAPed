@@ -555,6 +555,39 @@ def build_patient_report_payload(patients):
         }
     }
 
+
+def build_patient_demographics_payload(patients):
+    total_patients = len(patients)
+    age_counts = {bracket: 0 for bracket in AGE_BRACKET_ORDER}
+    gender_counts = {gender: 0 for gender in GENDER_ORDER}
+
+    for patient in patients:
+        bracket = get_age_bracket(patient.get('age'))
+        if bracket:
+            age_counts[bracket] += 1
+
+        gender = normalize_gender(patient.get('gender'))
+        gender_counts[gender] += 1
+
+    age_brackets = build_ranked_items(age_counts, total_patients, label_key='range', preferred_order=AGE_BRACKET_ORDER)
+    highest_age_bracket = None
+    if age_brackets:
+        highest_age_bracket = max(age_brackets, key=lambda item: item['count'])
+        for item in age_brackets:
+            item['isHighest'] = item['range'] == highest_age_bracket['range'] and highest_age_bracket['count'] > 0
+        highest_age_bracket = next((item for item in age_brackets if item.get('isHighest')), None)
+
+    gender_distribution = build_ranked_items(gender_counts, total_patients, label_key='gender', preferred_order=GENDER_ORDER)
+    gender_distribution = [item for item in gender_distribution if item['count'] > 0]
+    gender_distribution.sort(key=lambda item: item['count'], reverse=True)
+
+    return {
+        'totalPatients': total_patients,
+        'ageBrackets': age_brackets,
+        'genderDistribution': gender_distribution,
+        'highestAgeBracket': highest_age_bracket,
+    }
+
 # Helper function for timezone-aware UTC datetime
 def utc_now():
     """Returns current UTC time as timezone-aware datetime"""
@@ -2327,6 +2360,9 @@ def get_therapist_stats(current_user):
         # Get all patients (users with role 'patient')
         total_patients = users_collection.count_documents({'role': 'patient'})
         stats['total_patients'] = total_patients
+
+        patients = list(users_collection.find({'role': 'patient'}, {'age': 1, 'gender': 1}))
+        stats['demographics'] = build_patient_demographics_payload(patients)
         
         # Get therapy session counts
         # 1 session = any number of trials per therapy type per user per day

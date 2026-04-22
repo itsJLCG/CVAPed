@@ -606,9 +606,11 @@ const GENDER_META = {
 
 /* ====== CHART 9: Patient Demographics (Horizontal Bar) ====== */
 function PatientDemographicsChart({ reportsData, loadingReports }) {
+  const demographics = reportsData?.demographics ?? reportsData ?? null;
+
   const ageData = useMemo(() => {
-    if (reportsData?.ageBrackets?.length) {
-      return reportsData.ageBrackets.map(b => ({
+    if (demographics?.ageBrackets?.length) {
+      return demographics.ageBrackets.map(b => ({
         range: b.range,
         count: b.count,
         isHighest: b.isHighest,
@@ -616,7 +618,7 @@ function PatientDemographicsChart({ reportsData, loadingReports }) {
       }));
     }
 
-    const byTherapy = reportsData?.categories?.age?.byTherapy;
+    const byTherapy = demographics?.categories?.age?.byTherapy;
     if (!byTherapy) return [];
 
     const aggregated = new Map();
@@ -638,14 +640,14 @@ function PatientDemographicsChart({ reportsData, loadingReports }) {
       isHighest: maxCount > 0 && item.count === maxCount,
       fill: maxCount > 0 && item.count === maxCount ? 'var(--color-primary)' : 'var(--color-secondary)',
     }));
-  }, [reportsData]);
+  }, [demographics]);
 
   const genderData = useMemo(() => {
-    if (reportsData?.genderDistribution?.length) {
-      return reportsData.genderDistribution;
+    if (demographics?.genderDistribution?.length) {
+      return demographics.genderDistribution;
     }
 
-    const byTherapy = reportsData?.categories?.gender?.byTherapy;
+    const byTherapy = demographics?.categories?.gender?.byTherapy;
     if (!byTherapy) return [];
 
     const aggregated = new Map();
@@ -666,7 +668,7 @@ function PatientDemographicsChart({ reportsData, loadingReports }) {
         percentage: total > 0 ? Number(((item.count / total) * 100).toFixed(1)) : 0,
       }))
       .sort((a, b) => b.count - a.count);
-  }, [reportsData]);
+  }, [demographics]);
 
   const data = useMemo(() => {
     return ageData.map(b => ({

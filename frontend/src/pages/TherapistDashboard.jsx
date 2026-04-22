@@ -292,7 +292,6 @@ function TherapistDashboard({ onLogout }) {
     let cancelled = false;
     if (activeTab === 'overview' && user) {
       loadOverviewStats();
-      if (!reportsData) loadReports();
     }
     return () => { cancelled = true; };
   }, [activeTab, user, selectedDays]);
@@ -2284,7 +2283,7 @@ function TherapistDashboard({ onLogout }) {
           {activeTab === 'overview' && (
             <DashboardOverview
               overviewStats={overviewStats}
-              reportsData={reportsData}
+              reportsData={overviewStats?.demographics || reportsData}
               selectedDays={selectedDays}
               setSelectedDays={setSelectedDays}
               loadingStats={loadingStats}

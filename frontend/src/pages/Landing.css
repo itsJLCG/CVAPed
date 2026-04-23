@@ -161,7 +161,7 @@
 
 .partner-logo {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
 
@@ -188,6 +188,9 @@
   font-size: 0.9rem;
   color: var(--color-text-light);
   font-weight: 500;
+  line-height: 1.5;
+  min-width: 0;
+  flex: 1;
 }
 
 .hero-description {
@@ -195,6 +198,7 @@
   color: var(--color-text-light);
   line-height: 1.8;
   text-align: justify;
+  max-width: 100%;
 }
 
 .hero-description p {
@@ -812,6 +816,11 @@
 }
 
 @media (max-width: 768px) {
+  .landing-nav {
+    position: sticky;
+    top: 0;
+  }
+
   .nav-container {
     padding: 0 20px;
   }
@@ -826,7 +835,8 @@
   }
 
   .hero-section {
-    padding: 100px 0 60px;
+    padding: 72px 0 56px;
+    min-height: auto;
   }
 
   .hero-container {
@@ -841,6 +851,11 @@
     font-size: 1.8rem;
   }
 
+  .hero-description,
+  .hero-description p {
+    text-align: left;
+  }
+
   .hero-cta {
     flex-direction: column;
   }
@@ -851,8 +866,11 @@
 
   .device-showcase {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
-    gap: 20px;
+    grid-template-rows: auto auto auto;
+    gap: 18px;
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
   }
 
   .floating-logo {
@@ -880,10 +898,7 @@
   }
 
   .hardware-preview {
-    grid-column: 1;
-    grid-row: 4;
-    gap: 12px;
-    margin-top: 8px;
+    display: none;
   }
 
   .hardware-item {
@@ -918,7 +933,7 @@
   .nav-container {
     padding: 0 14px;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 12px;
   }
 
@@ -926,6 +941,7 @@
     gap: 10px;
     width: 100%;
     flex-wrap: wrap;
+    justify-content: center;
   }
 
   .logo-image,
@@ -939,23 +955,26 @@
   }
 
   .brand-text-image {
-    height: 28px;
+    height: 24px;
+    max-width: 180px;
   }
 
   .nav-right {
     width: 100%;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
   .nav-btn {
-    width: 100%;
-    padding: 11px 16px;
-    font-size: 0.88rem;
+    flex: 1 1 140px;
+    width: auto;
+    padding: 11px 14px;
+    font-size: 0.86rem;
   }
 
   .hero-section {
-    padding: 92px 0 48px;
+    padding: 56px 0 40px;
     min-height: auto;
   }
 
@@ -965,7 +984,29 @@
   }
 
   .hero-title {
-    font-size: 1.7rem;
+    font-size: clamp(1.6rem, 8vw, 2rem);
+  }
+
+  .hero-brand {
+    margin-bottom: 20px;
+  }
+
+  .hero-brand-image {
+    height: 64px;
+    max-width: 100%;
+  }
+
+  .partner-logos {
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .partner-logo {
+    align-items: flex-start;
+  }
+
+  .partner-logo span {
+    font-size: 0.84rem;
   }
 
   .hero-description {
@@ -982,42 +1023,41 @@
   }
 
   .cta-btn {
-    padding: 14px 20px;
-    font-size: 0.95rem;
+    padding: 14px 18px;
+    font-size: 0.94rem;
   }
 
   .hero-right {
-    height: 320px;
+    height: auto;
+    min-height: 0;
+    padding-top: 0;
   }
 
   .jelly-circle {
-    width: 260px;
-    height: 260px;
+    display: none;
+  }
+
+  .device-showcase {
+    max-width: 260px;
+    gap: 12px;
   }
 
   .floating-logo {
-    width: 96px;
-    height: 96px;
+    width: 88px;
+    height: 88px;
   }
 
   .web-device {
-    width: 170px;
-    height: 130px;
+    display: none;
   }
 
   .mobile-device {
-    width: 140px;
-    height: 280px;
+    width: 160px;
+    height: 320px;
   }
 
   .hardware-preview {
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .hardware-image {
-    width: 110px;
-    height: 66px;
+    display: none;
   }
 
   .features-section,

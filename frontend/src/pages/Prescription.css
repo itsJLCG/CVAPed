@@ -1136,3 +1136,80 @@
   margin-right: 8px;
 }
 
+@media (max-width: 480px) {
+  .prescription-container {
+    padding: 14px 12px 28px;
+  }
+
+  .prescription-header-section {
+    padding: 20px 18px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .header-left {
+    gap: 14px;
+  }
+
+  .header-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .header-icon i {
+    font-size: 22px;
+  }
+
+  .header-text h1 {
+    font-size: 22px;
+  }
+
+  .header-text p {
+    font-size: 13px;
+  }
+
+  .refresh-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .bottleneck-alert {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .alert-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .alert-icon i {
+    font-size: 20px;
+  }
+
+  .alert-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .metric-card {
+    padding: 12px;
+  }
+
+  .metric-value .current {
+    font-size: 22px;
+  }
+
+  .gait-full-width .prescription-container {
+    padding: 14px 12px;
+  }
+
+  .analysis-info {
+    padding-top: 18px;
+    margin-top: 24px;
+    font-size: 12px;
+  }
+}
+

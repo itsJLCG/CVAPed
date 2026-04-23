@@ -437,18 +437,103 @@
 }
 
 @media (max-width: 480px) {
+  .auth-nav {
+    padding: 12px 0;
+  }
+
+  .auth-nav-container {
+    padding: 0 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .auth-nav-left {
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .auth-nav-text {
+    height: 24px;
+  }
+
+  .auth-nav-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .auth-nav-right {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .auth-nav-link,
+  .auth-nav-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .auth-container {
+    padding: 92px 12px 24px;
+  }
+
+  .auth-content {
+    border-radius: 14px;
+  }
+
   .auth-right {
-    padding: 30px 20px;
+    padding: 24px 18px;
   }
 
-  .form-group input {
-    padding: 12px 14px;
+  .auth-form-wrapper {
+    max-width: 100%;
+  }
+
+  .auth-form-header h1 {
+    font-size: 1.35rem;
+  }
+
+  .auth-form-header p {
+    font-size: 0.85rem;
+  }
+
+  .form-group label {
+    font-size: 0.78rem;
+  }
+
+  .form-group input,
+  .form-group select {
+    padding: 11px 12px;
     font-size: 0.95rem;
   }
 
-  .btn {
-    padding: 14px;
-    font-size: 0.95rem;
+  .btn,
+  .oauth-btn {
+    min-height: 44px;
+  }
+
+  .auth-divider {
+    margin: 8px 0;
+  }
+
+  .auth-footer {
+    padding: 12px 0;
+  }
+
+  .auth-footer-container {
+    padding: 0 14px;
+  }
+
+  .terms-checkbox-group {
+    padding: 1rem;
+    margin: 1.25rem 0;
+  }
+
+  .terms-text {
+    font-size: 0.9rem;
   }
 }
 

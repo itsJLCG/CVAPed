@@ -23,6 +23,7 @@
 
 .admin-dashboard {
   height: 100vh;
+  height: 100dvh;
   background: var(--nav-background);
   display: flex;
   flex-direction: column;
@@ -42,6 +43,9 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  width: 100%;
+  min-width: 0;
+  position: relative;
 }
 
 /* Unified Navbar - Modern Design */
@@ -12066,13 +12070,18 @@
 
 @media (max-width: 768px) {
   .admin-navbar {
-    padding: 0 12px;
-    height: 56px;
+    padding: 10px 12px 12px;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
   }
 
   .navbar-toggle {
     width: 36px;
     height: 36px;
+    flex-shrink: 0;
   }
 
   .toggle-icon {
@@ -12081,6 +12090,21 @@
 
   .navbar-brand {
     padding: 4px 10px;
+    gap: 8px;
+  }
+
+  .navbar-left,
+  .navbar-right {
+    width: 100%;
+  }
+
+  .navbar-left {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .navbar-right {
+    justify-content: stretch;
     gap: 8px;
   }
 
@@ -12115,6 +12139,30 @@
     font-size: 0.75rem;
   }
 
+  .navbar-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .navbar-toggle {
+    display: flex;
+  }
+
+  .navbar-brand {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .dashboard-main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-content {
+    padding: 16px 14px 72px;
+  }
+
   .admin-sidebar {
     position: fixed;
     left: 0;
@@ -12137,5 +12185,49 @@
 
   .dashboard-main {
     width: 100%;
+  }
+}
+
+@media (min-width: 769px) {
+  .navbar-toggle {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-navbar {
+    padding: 10px 10px 12px;
+  }
+
+  .navbar-brand {
+    width: 100%;
+    padding: 6px 10px;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .brand-name {
+    font-size: 0.95rem;
+  }
+
+  .navbar-right {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .navbar-btn {
+    width: 100%;
+    padding: 9px 12px;
+  }
+
+  .navbar-btn span {
+    flex: 1;
+    text-align: center;
+  }
+
+  .admin-content {
+    padding: 14px 12px 68px;
   }
 }

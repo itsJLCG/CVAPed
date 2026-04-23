@@ -909,3 +909,271 @@
   }
 }
 
+@media (max-width: 768px) {
+  .sys-admin-header {
+    position: sticky;
+    padding: 12px 0;
+  }
+
+  .sys-admin-dashboard {
+    margin-top: 0;
+    min-height: auto;
+  }
+
+  .sys-admin-dashboard,
+  .sys-admin-content {
+    min-height: auto;
+  }
+
+  .sys-admin-header-container {
+    padding: 0 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .sys-admin-logo-group {
+    width: 100%;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .sys-admin-header-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .sys-admin-header-text {
+    height: 34px;
+  }
+
+  .sys-admin-badge {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+  }
+
+  .sys-admin-header-actions {
+    width: 100%;
+    margin-left: 0;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .sys-admin-user-name,
+  .sys-admin-logout-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .sys-admin-user-name {
+    padding: 8px 12px;
+  }
+
+  .sys-admin-logout-btn {
+    padding: 10px 16px;
+  }
+
+  .sys-admin-content {
+    flex-direction: column;
+  }
+
+  .sys-admin-sidebar {
+    width: 100%;
+    padding: 14px 0;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 8px;
+    padding: 0 12px;
+    scrollbar-width: thin;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .sys-admin-main {
+    padding: 16px 12px 20px;
+  }
+
+  .sys-admin-dashboard .section-title {
+    font-size: 1.45rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .stat-card {
+    padding: 18px;
+  }
+
+  .stat-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .charts-section {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .chart-card {
+    padding: 18px 14px;
+    min-height: auto;
+  }
+
+  .pie-svg {
+    width: 180px;
+    height: 180px;
+  }
+
+  .sys-admin-dashboard .table-controls {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px;
+  }
+
+  .sys-admin-dashboard .search-box {
+    max-width: none;
+    width: 100%;
+  }
+
+  .sys-admin-dashboard .per-page-selector {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .sys-admin-dashboard .table-wrapper {
+    border-radius: 10px;
+  }
+
+  .sys-admin-dashboard .modal-content {
+    width: 94%;
+    padding: 22px;
+  }
+
+  .sys-admin-dashboard .modal-actions {
+    flex-direction: column;
+  }
+
+  .sys-admin-dashboard .modal-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .sys-admin-header {
+    padding: 10px 0;
+  }
+
+  .sys-admin-header-container {
+    padding: 0 12px;
+  }
+
+  .sys-admin-header-text {
+    height: 28px;
+  }
+
+  .sys-admin-badge {
+    display: none;
+  }
+
+  .sys-admin-user-name {
+    font-size: 0.82rem;
+  }
+
+  .sys-admin-logout-btn {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+
+  .sidebar-nav {
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .nav-item {
+    padding: 12px 14px;
+    font-size: 0.88rem;
+  }
+
+  .sys-admin-main {
+    padding: 12px 10px 18px;
+  }
+
+  .sys-admin-dashboard .section-title {
+    font-size: 1.25rem;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .chart-title {
+    font-size: 1rem;
+  }
+
+  .pie-svg {
+    width: 160px;
+    height: 160px;
+  }
+
+  .legend-item {
+    padding: 10px 12px;
+  }
+
+  .bar-track {
+    height: 36px;
+  }
+
+  .bar-label {
+    font-size: 14px;
+  }
+
+  .bar-count {
+    font-size: 16px;
+  }
+
+  .sys-admin-dashboard .search-box {
+    flex-direction: column;
+  }
+
+  .sys-admin-dashboard .btn-search,
+  .sys-admin-dashboard .search-box input,
+  .sys-admin-dashboard .per-page-selector select {
+    width: 100%;
+  }
+
+  .sys-admin-dashboard .pagination {
+    gap: 10px;
+    padding: 16px 12px;
+    flex-wrap: wrap;
+  }
+
+  .sys-admin-dashboard .modal-content {
+    width: calc(100% - 16px);
+    padding: 18px 16px;
+  }
+}
+

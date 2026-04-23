@@ -228,6 +228,108 @@
   }
 }
 
+@media (max-width: 480px) {
+  .navbar-container {
+    padding: 14px 12px;
+    gap: 12px;
+  }
+
+  .navbar-brand h1 {
+    font-size: 1.4rem;
+  }
+
+  .navbar-brand p {
+    font-size: 0.78rem;
+  }
+
+  .navbar-menu {
+    width: 100%;
+  }
+
+  .btn-logout {
+    width: 100%;
+    padding: 12px 18px;
+  }
+
+  .dashboard-content {
+    padding: 16px 12px;
+  }
+
+  .welcome-section,
+  .user-info-section,
+  .appointments-section {
+    padding: 20px 16px;
+    border-radius: 14px;
+  }
+
+  .welcome-section h2 {
+    font-size: 1.35rem;
+  }
+
+  .info-card {
+    padding: 20px;
+  }
+
+  .card-icon {
+    font-size: 2.4rem;
+  }
+
+  .info-card h3 {
+    font-size: 1.2rem;
+  }
+
+  .user-info-section h3 {
+    font-size: 1.35rem;
+  }
+
+  .appointments-section .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .appointments-section .section-header h3 {
+    font-size: 1.35rem;
+  }
+
+  .appointment-item {
+    padding: 16px;
+  }
+
+  .appointment-therapy-type,
+  .appointment-status {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modal-content {
+    width: calc(100% - 16px);
+    border-radius: 14px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 18px 16px;
+  }
+
+  .modal-header h3 {
+    font-size: 1.25rem;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .btn-secondary {
+    width: 100%;
+  }
+
+  .no-appointments {
+    padding: 28px 18px;
+  }
+}
+
 /* Appointments Card */
 .card-appointments {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

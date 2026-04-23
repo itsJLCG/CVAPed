@@ -110,6 +110,8 @@ const SidebarDrawer = memo(function SidebarDrawer({
     if (isMobile) onClose();
   }, [isMobile, onClose, onReportCategoryChange, onTabChange]);
 
+  const drawerCollapsed = !isMobile && sidebarCollapsed;
+
   return (
     <>
       <div 
@@ -117,22 +119,30 @@ const SidebarDrawer = memo(function SidebarDrawer({
         onClick={handleOverlayClick}
         aria-hidden="true"
       />
-      <aside className={`sidebar-drawer ${isOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside
+        id="therapist-sidebar-drawer"
+        className={`sidebar-drawer ${isOpen ? 'open' : ''} ${drawerCollapsed ? 'collapsed' : ''}`}
+      >
         
         <button 
           className="sidebar-toggle-btn" 
+          type="button"
           onClick={onToggleCollapse}
-          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={isMobile ? 'Close sidebar' : drawerCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <svg 
-            className={`toggle-arrow ${sidebarCollapsed ? 'collapsed' : ''}`} 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2.5"
-          >
-            <path d="M15 19l-7-7 7-7" />
-          </svg>
+          {isMobile ? (
+            <span className="toggle-icon mobile-close">×</span>
+          ) : (
+            <svg 
+              className={`toggle-arrow ${drawerCollapsed ? 'collapsed' : ''}`} 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2.5"
+            >
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
+          )}
         </button>
 
         <nav className="sidebar-nav">
@@ -156,8 +166,8 @@ const SidebarDrawer = memo(function SidebarDrawer({
                 )}
               </button>
 
-              {item.hasDropdown && getDropdownOpen(item) && (
-                <div className={`dropdown-menu ${sidebarCollapsed ? 'collapsed' : ''}`}>
+                {item.hasDropdown && getDropdownOpen(item) && (
+                 <div className={`dropdown-menu ${drawerCollapsed ? 'collapsed' : ''}`}>
                   {getSubItems(item).map((subItem) => (
                     <button
                       key={subItem.id}

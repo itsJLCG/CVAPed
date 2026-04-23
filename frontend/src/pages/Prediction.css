@@ -1328,3 +1328,68 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .prediction-container {
+    padding: 12px 12px;
+  }
+
+  .pred-page-header h1 {
+    font-size: 20px;
+  }
+
+  .pred-page-header p {
+    font-size: 12px;
+  }
+
+  .prediction-hero {
+    padding: 14px;
+  }
+
+  .prediction-hero-left,
+  .prediction-hero-right {
+    gap: 8px;
+  }
+
+  .prediction-hero-number {
+    font-size: 28px;
+  }
+
+  .prediction-hero-unit {
+    font-size: 13px;
+  }
+
+  .accuracy-circle {
+    width: 48px;
+    height: 48px;
+  }
+
+  .therapies-list,
+  .speech-chart-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .therapy-section {
+    padding: 12px;
+  }
+
+  .metric-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .metric-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .current-value {
+    font-size: 20px;
+  }
+
+  .metric-name {
+    font-size: 11px;
+  }
+}

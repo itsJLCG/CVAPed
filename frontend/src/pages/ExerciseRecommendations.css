@@ -361,3 +361,55 @@
     justify-content: center;
   }
 }
+
+@media (max-width: 480px) {
+  .er-container {
+    padding: 1.25rem 0.75rem 2rem;
+  }
+
+  .er-header {
+    padding: 2rem 0.5rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .er-header-icon {
+    width: 54px;
+    height: 54px;
+    font-size: 1.4rem;
+  }
+
+  .er-title {
+    font-size: 1.3rem;
+  }
+
+  .er-subtitle {
+    font-size: 0.92rem;
+  }
+
+  .er-card-header {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .er-card-body {
+    padding: 0 1rem 1rem;
+  }
+
+  .er-card-name {
+    font-size: 0.95rem;
+  }
+
+  .er-meta-tag {
+    font-size: 0.7rem;
+  }
+
+  .er-description {
+    font-size: 0.85rem;
+  }
+
+  .er-back-btn,
+  .er-problems-btn {
+    padding: 0.7rem 1rem;
+    font-size: 0.88rem;
+  }
+}

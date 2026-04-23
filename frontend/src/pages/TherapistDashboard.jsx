@@ -2247,6 +2247,16 @@ function TherapistDashboard({ onLogout }) {
       <div className="dashboard-wrapper">
         <header className="admin-navbar">
           <div className="navbar-left">
+            <button
+              type="button"
+              className="navbar-toggle"
+              onClick={toggleSidebar}
+              aria-label={sidebarDrawerOpen ? 'Close sidebar' : 'Open sidebar'}
+              aria-expanded={sidebarDrawerOpen}
+              aria-controls="therapist-sidebar-drawer"
+            >
+              <span className="toggle-icon">{sidebarDrawerOpen ? '×' : '☰'}</span>
+            </button>
             <div className="navbar-brand">
               <img src={images.logo} alt="CVAPed" className="navbar-logo" />
               <div className="brand-content">

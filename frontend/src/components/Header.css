@@ -15,6 +15,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .app-logo-group {
@@ -38,6 +39,8 @@
   display: flex;
   align-items: center;
   gap: 15px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .nav-btn {
@@ -112,6 +115,7 @@
   .app-header-container {
     flex-direction: column;
     gap: 15px;
+    padding: 0 20px;
   }
   
   .app-nav {
@@ -122,6 +126,20 @@
 }
 
 @media (max-width: 768px) {
+  .app-header {
+    padding: 12px 0;
+  }
+
+  .app-header-container {
+    padding: 0 14px;
+  }
+
+  .app-logo-group {
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
   .app-header-text {
     height: 25px;
   }
@@ -130,9 +148,25 @@
     width: 40px;
     height: 40px;
   }
+
+  .facility-mode-badge {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
   
   .nav-btn {
-    padding: 8px 12px;
-    font-size: 0.85rem;
+    padding: 9px 12px;
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-nav {
+    gap: 8px;
+  }
+
+  .nav-btn {
+    width: 100%;
+    max-width: 260px;
   }
 }

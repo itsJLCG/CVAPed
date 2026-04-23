@@ -21,12 +21,14 @@
   left: 0;
   width: 280px;
   height: 100vh;
+  height: 100dvh;
   background: var(--nav-surface, #fff);
   border-right: 1px solid var(--nav-border, #e2e8f0);
   z-index: 999;
   display: flex;
   flex-direction: column;
   transform: translateX(-100%);
+  overscroll-behavior: contain;
 }
 
 .sidebar-drawer.open {
@@ -219,20 +221,97 @@
 }
 
 @media (max-width: 1023px) {
-  .sidebar-toggle-btn {
-    display: none;
-  }
-
   .sidebar-drawer {
     transform: translateX(-100%);
+    width: min(84vw, 320px);
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  }
+
+  .sidebar-toggle-btn {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    right: -18px;
+    background: var(--nav-primary, #ce3630);
+    border-color: var(--nav-primary, #ce3630);
+    color: white;
+    box-shadow: 0 8px 20px rgba(206, 54, 48, 0.28);
   }
 
   .sidebar-drawer.open {
     transform: translateX(0);
   }
 
+  .sidebar-drawer.collapsed {
+    width: min(84vw, 320px);
+  }
+
   .sidebar-nav {
-    padding-top: 70px;
+    padding: 70px 12px 16px;
+  }
+
+  .sidebar-drawer.collapsed .nav-item {
+    justify-content: flex-start;
+    padding: 12px 14px;
+  }
+
+  .sidebar-drawer.collapsed .nav-label,
+  .dropdown-menu.collapsed .nav-label {
+    display: block;
+  }
+
+  .sidebar-drawer.collapsed .dropdown-arrow {
+    display: inline-flex;
+  }
+
+  .dropdown-menu.collapsed {
+    padding-left: 24px;
+  }
+
+  .dropdown-menu.collapsed .nav-item.sub-item {
+    justify-content: flex-start;
+    padding: 10px 14px;
+  }
+
+  .sidebar-toggle-btn:hover {
+    background: var(--nav-primary-dark, #b52e29);
+    border-color: var(--nav-primary-dark, #b52e29);
+  }
+
+  .sidebar-toggle-btn .toggle-arrow {
+    display: none;
+  }
+
+  .sidebar-toggle-btn .toggle-icon.mobile-close {
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar-drawer,
+  .sidebar-drawer.collapsed {
+    width: min(88vw, 300px);
+    max-width: calc(100vw - 20px);
+  }
+
+  .sidebar-nav {
+    padding: 68px 10px 12px;
+    gap: 1px;
+  }
+
+  .nav-item {
+    padding: 11px 12px;
+  }
+
+  .nav-item.sub-item {
+    padding: 9px 12px;
+  }
+
+  .dropdown-menu {
+    padding-left: 18px;
   }
 }
 

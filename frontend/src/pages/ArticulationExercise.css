@@ -1511,6 +1511,71 @@
   }
 }
 
+@media (max-width: 480px) {
+  .exercise-header-container {
+    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .exercise-logo-group {
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .exercise-header-logo {
+    height: 32px;
+  }
+
+  .exercise-header-text {
+    height: 22px;
+  }
+
+  .exercise-title-section {
+    width: 100%;
+    text-align: left;
+  }
+
+  .exercise-sound-title {
+    font-size: 1.1rem;
+  }
+
+  .exercise-nav {
+    width: 100%;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .exercise-nav-btn {
+    width: 100%;
+  }
+
+  .exercise-main {
+    padding: 0.85rem;
+  }
+
+  .exercise-card {
+    padding: 1.25rem;
+  }
+
+  .centered-target-section {
+    padding: 1rem;
+  }
+
+  .progress-levels {
+    gap: 0.5rem;
+  }
+
+  .progress-level {
+    width: 100%;
+    max-width: none;
+  }
+
+  .assessment-modal {
+    width: calc(100% - 16px);
+    padding: 1.5rem;
+  }
+}
+
 /* Centered Record Button */
 .waiting-message {
   text-align: center;

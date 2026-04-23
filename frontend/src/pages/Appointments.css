@@ -696,3 +696,56 @@
     width: 100%;
   }
 }
+
+@media (max-width: 480px) {
+  .appointments-page {
+    padding: 0.75rem;
+  }
+
+  .appointments-header,
+  .appointments-filters,
+  .appointments-table-container,
+  .details-panel,
+  .modal-content {
+    border-radius: 14px;
+  }
+
+  .appointments-header {
+    padding: 1.25rem;
+  }
+
+  .header-content h1 {
+    font-size: 1.6rem;
+  }
+
+  .header-content p {
+    font-size: 0.95rem;
+  }
+
+  .appointments-filters {
+    padding: 0.75rem;
+  }
+
+  .filter-btn {
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .appointments-table tbody td {
+    padding: 0.875rem 1rem;
+  }
+
+  .status-badge {
+    width: 100%;
+    text-align: center;
+  }
+
+  .detail-value {
+    font-size: 0.95rem;
+    flex-wrap: wrap;
+  }
+
+  .modal-content {
+    width: calc(100% - 12px);
+  }
+}

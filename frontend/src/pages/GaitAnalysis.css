@@ -418,3 +418,64 @@
     width: 200px;
   }
 }
+
+@media (max-width: 480px) {
+  .gait-header {
+    padding: 12px 16px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .gait-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .start-gait-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 18px;
+    font-size: 0.95rem;
+  }
+
+  .gait-status {
+    margin: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .gait-container {
+    margin: 16px auto;
+    gap: 16px;
+    padding: 0 12px;
+  }
+
+  .gait-panel {
+    padding: 18px 16px;
+  }
+
+  .panel-title {
+    font-size: 1.1rem;
+  }
+
+  .body-image {
+    width: 250px;
+  }
+
+  .foot-image {
+    width: 160px;
+  }
+
+  .mpu-data-container {
+    padding: 0 12px;
+  }
+
+  .legend {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .data-grid {
+    flex-wrap: wrap;
+  }
+}

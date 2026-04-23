@@ -625,3 +625,106 @@
     padding: 12px;
   }
 }
+
+@media (max-width: 480px) {
+  .therapy-header {
+    padding: 12px 0;
+  }
+
+  .therapy-header-container {
+    padding: 0 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .therapy-logo-group {
+    gap: 10px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .therapy-header-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .therapy-header-text {
+    height: 24px;
+  }
+
+  .therapy-header-actions {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .therapy-profile-btn,
+  .therapy-logout-btn {
+    width: 100%;
+    padding: 11px 14px;
+    font-size: 0.9rem;
+  }
+
+  .therapy-main {
+    padding: 86px 12px 24px;
+  }
+
+  .therapy-title {
+    font-size: 1.45rem;
+  }
+
+  .therapy-subtitle {
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+  }
+
+  .therapy-container .dpc-card,
+  .therapy-container .dpc-compact {
+    margin-bottom: 20px;
+  }
+
+  .therapy-options {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    min-height: auto;
+  }
+
+  .therapy-option {
+    min-height: auto;
+  }
+
+  .therapy-image-wrapper {
+    width: 220px;
+    height: 220px;
+    border-width: 6px;
+  }
+
+  .therapy-overlay {
+    padding: 18px 14px;
+  }
+
+  .therapy-name {
+    font-size: 1.2rem;
+  }
+
+  .therapy-icon {
+    font-size: 2.5rem;
+  }
+
+  .therapy-details {
+    padding: 22px 16px;
+  }
+
+  .therapy-description p {
+    font-size: 0.9rem;
+  }
+
+  .diagnostic-banner {
+    padding: 14px 16px;
+  }
+
+  .diagnostic-banner-text {
+    font-size: 0.85rem;
+  }
+}

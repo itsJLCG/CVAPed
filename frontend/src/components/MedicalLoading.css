@@ -131,6 +131,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .skeleton-card-header {
@@ -157,6 +159,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .skeleton-chart-bars {
@@ -187,6 +191,8 @@
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid #f1f5f9;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .skeleton-table-header {

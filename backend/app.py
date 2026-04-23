@@ -365,6 +365,8 @@ def get_heat_index_snapshot():
         snapshot = {
             'available': temperature_c is not None and humidity_percent is not None,
             'location': FACILITY_LOCATION_NAME,
+            'latitude': FACILITY_LATITUDE,
+            'longitude': FACILITY_LONGITUDE,
             'temperature_c': round(float(temperature_c), 1) if temperature_c is not None else None,
             'humidity_percent': int(round(float(humidity_percent))) if humidity_percent is not None else None,
             'heat_index_c': heat_index_c,
@@ -378,6 +380,8 @@ def get_heat_index_snapshot():
         snapshot = {
             'available': False,
             'location': FACILITY_LOCATION_NAME,
+            'latitude': FACILITY_LATITUDE,
+            'longitude': FACILITY_LONGITUDE,
             'temperature_c': None,
             'humidity_percent': None,
             'heat_index_c': None,

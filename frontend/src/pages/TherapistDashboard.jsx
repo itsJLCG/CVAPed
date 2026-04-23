@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { therapistService, authService, fluencyExerciseService, languageExerciseService, receptiveExerciseService, articulationExerciseService, successStoryService, appointmentService, diagnosticComparisonService, detectionProblemsService, exerciseRecommendationsService } from '../services/api';
 import { useToast } from '../components/ToastContext';
 import { images } from '../assets/images';
-import { MedicalSpinner, SkeletonCard, SkeletonChart, SkeletonTable, LoadingOverlay } from '../components/MedicalLoading';
+import { SkeletonCard, SkeletonChart, SkeletonTable } from '../components/MedicalLoading';
 import './TherapistDashboard.css';
 import { generatePdfReport, PHYSICAL_THERAPY_METRICS_COLUMNS, buildGaitMetricsRows, generateDiagnosticComparisonPdf, generatePreEvalPdf, generateArticulationPdf, generateFluencyPdf, generateLanguagePdf, generatePhysicalTherapyPdf, generateTherapistReportsPdf } from '../components/PdfReportTemplate';
 import DashboardOverview from '../components/DashboardOverview';
@@ -24,6 +24,24 @@ const REPORT_GENDER_META = {
   'prefer-not-to-say': { label: 'Prefer not to say', icon: '❓' },
 };
 
+function SectionLoading({ children, className = '' }) {
+  return (
+    <div className={`therapist-loading-panel ${className}`.trim()} role="status" aria-live="polite">
+      {children}
+    </div>
+  );
+}
+
+function LoadingCardGrid({ count = 4, height = '140px', className = '' }) {
+  return (
+    <div className={`therapist-loading-grid cards-${count} ${className}`.trim()}>
+      {Array.from({ length: count }).map((_, index) => (
+        <SkeletonCard key={index} height={height} />
+      ))}
+    </div>
+  );
+}
+
 function TherapistDashboard({ onLogout }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -41,6 +59,7 @@ function TherapistDashboard({ onLogout }) {
   const [editingExercise, setEditingExercise] = useState(null);
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [availableFluencyOrders, setAvailableFluencyOrders] = useState([1]);
+  const [loadingFluency, setLoadingFluency] = useState(false);
   const [newExercise, setNewExercise] = useState({
     level: 1,
     level_name: 'Breathing & Single Words',
@@ -60,6 +79,7 @@ function TherapistDashboard({ onLogout }) {
   const [editingLanguageExercise, setEditingLanguageExercise] = useState(null);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [availableLanguageOrders, setAvailableLanguageOrders] = useState([1]);
+  const [loadingLanguage, setLoadingLanguage] = useState(false);
   
   // Initialize new language exercise based on mode
   const getDefaultLanguageExercise = (mode) => {
@@ -108,6 +128,7 @@ function TherapistDashboard({ onLogout }) {
   const [activeArticulationSound, setActiveArticulationSound] = useState('s');
   const [soundDropdownOpen, setSoundDropdownOpen] = useState(false);
   const [availableOrders, setAvailableOrders] = useState([1]);
+  const [loadingArticulation, setLoadingArticulation] = useState(false);
   const [newArticulationExercise, setNewArticulationExercise] = useState({
     sound_id: 's',
     sound_name: 'S Sound',
@@ -298,6 +319,7 @@ function TherapistDashboard({ onLogout }) {
 
   // Load exercises from database and group by level
   const loadFluencyExercises = async () => {
+    setLoadingFluency(true);
     try {
       const response = await fluencyExerciseService.getAll();
       if (response.success) {
@@ -333,6 +355,8 @@ function TherapistDashboard({ onLogout }) {
       }
     } catch (error) {
       console.error('Failed to load fluency exercises:', error);
+    } finally {
+      setLoadingFluency(false);
     }
   };
 
@@ -423,6 +447,7 @@ function TherapistDashboard({ onLogout }) {
   // ============= LANGUAGE EXERCISE CRUD FUNCTIONS =============
   
   const loadLanguageExercises = async () => {
+    setLoadingLanguage(true);
     try {
       // Use the appropriate service based on mode
       const service = activeSub === 'receptive' ? receptiveExerciseService : languageExerciseService;
@@ -491,6 +516,8 @@ function TherapistDashboard({ onLogout }) {
       }
     } catch (error) {
       console.error('Failed to load language exercises:', error);
+    } finally {
+      setLoadingLanguage(false);
     }
   };
 
@@ -591,6 +618,7 @@ function TherapistDashboard({ onLogout }) {
 
   // Articulation Exercise CRUD Functions
   const loadArticulationExercises = async () => {
+    setLoadingArticulation(true);
     try {
       const response = await articulationExerciseService.getAll();
       if (response.success) {
@@ -598,6 +626,8 @@ function TherapistDashboard({ onLogout }) {
       }
     } catch (error) {
       console.error('Failed to load articulation exercises:', error);
+    } finally {
+      setLoadingArticulation(false);
     }
   };
 
@@ -854,7 +884,6 @@ function TherapistDashboard({ onLogout }) {
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
 
   const loadOverview = async () => {
-    let cancelled = false;
     try {
       // Therapists don't have access to admin stats
       // Show a simple welcome message instead
@@ -864,13 +893,10 @@ function TherapistDashboard({ onLogout }) {
       ]);
     } catch (e) {
       console.error('Failed to load overview', e);
-    } finally {
-      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadArticulation = async () => {
-    let cancelled = false;
     try {
       // Therapists don't have access to patient data
       // This is for managing exercises only
@@ -880,13 +906,10 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load articulation', e);
       setTherapyData([]);
-    } finally {
-      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadLanguage = async (mode) => {
-    let cancelled = false;
     try {
       // Therapists don't have access to patient data
       setTherapyData([
@@ -895,13 +918,10 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load language', e);
       setTherapyData([]);
-    } finally {
-      if (!cancelled) setLoadingStats(false);
     }
   };
 
   const loadFluency = async () => {
-    let cancelled = false;
     try {
       // Therapists don't have access to patient session data
       // They can only manage exercises via the Therapy Levels tab
@@ -909,8 +929,6 @@ function TherapistDashboard({ onLogout }) {
     } catch (e) {
       console.error('Failed to load fluency', e);
       setTherapyData([]);
-    } finally {
-      if (!cancelled) setLoadingStats(false);
     }
   };
 
@@ -2312,102 +2330,112 @@ function TherapistDashboard({ onLogout }) {
                   </div>
                 </div>
 
-                <div className="sound-selector">
-                  <div className="sound-selector-title">Select Sound</div>
-                  <div className="sound-dropdown-wrapper">
-                    <button 
-                      className="sound-dropdown-button"
-                      onClick={() => setSoundDropdownOpen(!soundDropdownOpen)}
-                    >
-                      <span className="selected-sound">/{activeArticulationSound.toUpperCase()}/</span>
-                      <span className={`dropdown-arrow ${soundDropdownOpen ? 'open' : ''}`}>▼</span>
-                    </button>
-                    {soundDropdownOpen && (
-                      <div className="sound-dropdown-menu">
-                        {Object.keys(articulationExercises).map(sound => (
-                          <button
-                            key={sound}
-                            className={`sound-dropdown-item ${activeArticulationSound === sound ? 'active' : ''}`}
-                            onClick={() => {
-                              setActiveArticulationSound(sound);
-                              setSoundDropdownOpen(false);
-                            }}
-                          >
-                            /{sound.toUpperCase()}/
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {Object.keys(articulationExercises).length === 0 ? (
-                  <div className="no-exercises">
-                    <div className="no-exercises-icon">🎤</div>
-                    <p className="no-exercises-text">No exercises found</p>
-                    <p className="no-exercises-hint">Click "Seed Default Exercises" to get started</p>
+                {loadingArticulation ? (
+                  <div className="datatable-container">
+                    <SectionLoading>
+                      <LoadingCardGrid count={3} height="120px" />
+                    </SectionLoading>
                   </div>
                 ) : (
-                  articulationExercises[activeArticulationSound] && 
-                  Object.entries(articulationExercises[activeArticulationSound].levels || {}).map(([level, data]) => (
-                    <div key={level} className="exercise-table">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th colSpan="6">
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>Level {level}: {data.level_name}</span>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 'normal' }}>
-                                  {data.exercises.length} exercise{data.exercises.length !== 1 ? 's' : ''}
-                                </span>
-                              </div>
-                            </th>
-                          </tr>
-                          <tr>
-                            <th>#</th>
-                            <th>Exercise ID</th>
-                            <th>Target</th>
-                            <th>Order</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.exercises.map((exercise, idx) => (
-                            <tr key={exercise._id}>
-                              <td>{idx + 1}</td>
-                              <td>
-                                <span className={`table-badge level-${level}`}>{exercise.exercise_id}</span>
-                              </td>
-                              <td><strong>{exercise.target}</strong></td>
-                              <td>{exercise.order}</td>
-                              <td>
-                                <span className={`status-badge ${exercise.is_active ? 'active' : 'inactive'}`}>
-                                  {exercise.is_active ? 'Active' : 'Inactive'}
-                                </span>
-                              </td>
-                              <td>
-                                <div className="exercise-actions">
-                                  <button 
-                                    className="btn-edit" 
-                                    onClick={() => setEditingArticulationExercise(exercise)}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button 
-                                    className="btn-delete" 
-                                    onClick={() => handleDeleteArticulationExercise(exercise._id)}
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  <>
+                    <div className="sound-selector">
+                      <div className="sound-selector-title">Select Sound</div>
+                      <div className="sound-dropdown-wrapper">
+                        <button 
+                          className="sound-dropdown-button"
+                          onClick={() => setSoundDropdownOpen(!soundDropdownOpen)}
+                        >
+                          <span className="selected-sound">/{activeArticulationSound.toUpperCase()}/</span>
+                          <span className={`dropdown-arrow ${soundDropdownOpen ? 'open' : ''}`}>▼</span>
+                        </button>
+                        {soundDropdownOpen && (
+                          <div className="sound-dropdown-menu">
+                            {Object.keys(articulationExercises).map(sound => (
+                              <button
+                                key={sound}
+                                className={`sound-dropdown-item ${activeArticulationSound === sound ? 'active' : ''}`}
+                                onClick={() => {
+                                  setActiveArticulationSound(sound);
+                                  setSoundDropdownOpen(false);
+                                }}
+                              >
+                                /{sound.toUpperCase()}/
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ))
+
+                    {Object.keys(articulationExercises).length === 0 ? (
+                      <div className="no-exercises">
+                        <div className="no-exercises-icon">🎤</div>
+                        <p className="no-exercises-text">No exercises found</p>
+                        <p className="no-exercises-hint">Click "Seed Default Exercises" to get started</p>
+                      </div>
+                    ) : (
+                      articulationExercises[activeArticulationSound] && 
+                      Object.entries(articulationExercises[activeArticulationSound].levels || {}).map(([level, data]) => (
+                        <div key={level} className="exercise-table">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th colSpan="6">
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>Level {level}: {data.level_name}</span>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 'normal' }}>
+                                      {data.exercises.length} exercise{data.exercises.length !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </th>
+                              </tr>
+                              <tr>
+                                <th>#</th>
+                                <th>Exercise ID</th>
+                                <th>Target</th>
+                                <th>Order</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {data.exercises.map((exercise, idx) => (
+                                <tr key={exercise._id}>
+                                  <td>{idx + 1}</td>
+                                  <td>
+                                    <span className={`table-badge level-${level}`}>{exercise.exercise_id}</span>
+                                  </td>
+                                  <td><strong>{exercise.target}</strong></td>
+                                  <td>{exercise.order}</td>
+                                  <td>
+                                    <span className={`status-badge ${exercise.is_active ? 'active' : 'inactive'}`}>
+                                      {exercise.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="exercise-actions">
+                                      <button 
+                                        className="btn-edit" 
+                                        onClick={() => setEditingArticulationExercise(exercise)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button 
+                                        className="btn-delete" 
+                                        onClick={() => handleDeleteArticulationExercise(exercise._id)}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))
+                    )}
+                  </>
                 )}
             </div>
           )}
@@ -2436,8 +2464,10 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingPhysical ? (
-                <div className="medical-loading-overlay">
-                  <MedicalSpinner message="Loading patients list..." />
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <LoadingCardGrid count={4} height="120px" />
+                  </SectionLoading>
                 </div>
               ) : gaitAnalyses.length === 0 ? (
                 <div className="datatable-container">
@@ -2773,9 +2803,10 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingPhysical ? (
-                <div className="loading-overlay">
-                  <div className="loading-spinner"></div>
-                  <p>Loading common problem rankings...</p>
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <SkeletonChart type="bar" height={220} />
+                  </SectionLoading>
                 </div>
               ) : mostCommonProblemStats.ranked.length === 0 ? (
                 <div className="datatable-container">
@@ -2894,7 +2925,9 @@ function TherapistDashboard({ onLogout }) {
 
                 <div className="datatable-container">
                   {loadingSpeechEntries ? (
-                    <SkeletonTable rows={5} cols={6} />
+                    <SectionLoading>
+                      <SkeletonTable rows={5} cols={6} />
+                    </SectionLoading>
                   ) : speechEntries.length === 0 ? (
                     <div className="no-data-message">
                       <span className="no-data-icon">🎤</span>
@@ -3121,7 +3154,9 @@ function TherapistDashboard({ onLogout }) {
 
                 <div className="datatable-container">
                   {loadingRecommended ? (
-                    <SkeletonTable rows={5} cols={4} />
+                    <SectionLoading>
+                      <SkeletonTable rows={5} cols={4} />
+                    </SectionLoading>
                   ) : recommendedExercises.length === 0 ? (
                     <div className="no-data-message">
                       <span className="no-data-icon">🧩</span>
@@ -3287,7 +3322,13 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               </div>
 
-              {Object.keys(languageExercises).length === 0 ? (
+              {loadingLanguage ? (
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <LoadingCardGrid count={3} height="120px" />
+                  </SectionLoading>
+                </div>
+              ) : Object.keys(languageExercises).length === 0 ? (
                 <div className="no-exercises">
                   <div className="no-exercises-icon">💬</div>
                   <p className="no-exercises-text">No exercises found</p>
@@ -3407,7 +3448,7 @@ function TherapistDashboard({ onLogout }) {
           )}
 
           {activeTab === 'detection-problems' && (
-            <div className="success-stories-section physical-therapy-section">
+            <div className="physical-section">
               <div className="section-header">
                 <div className="header-left">
                   <h2>Detection Problems</h2>
@@ -3460,7 +3501,9 @@ function TherapistDashboard({ onLogout }) {
 
                 <div className="datatable-container">
                   {loadingDetectionProblems ? (
-                    <SkeletonTable rows={5} cols={7} />
+                    <SectionLoading>
+                      <SkeletonTable rows={5} cols={7} />
+                    </SectionLoading>
                   ) : detectionProblems.length === 0 ? (
                     <div className="no-data-message">
                       <span className="no-data-icon">🔍</span>
@@ -3469,7 +3512,7 @@ function TherapistDashboard({ onLogout }) {
                     </div>
                   ) : (
                     <>
-                    <table className="logs-table">
+                    <table className="logs-table gait-table detection-problems-table">
                     <thead>
                       <tr>
                         <th>ID</th>
@@ -3491,7 +3534,7 @@ function TherapistDashboard({ onLogout }) {
                         const last = currentDPPage * dpEntriesPerPage;
                         const first = last - dpEntriesPerPage;
                         return filtered.slice(first, last).map(item => (
-                          <tr key={item.problem_id} style={{ opacity: item.is_active ? 1 : 0.55 }}>
+                          <tr key={item.problem_id} className="gait-row" style={{ opacity: item.is_active ? 1 : 0.55 }}>
                             <td><code style={{ fontSize: '0.8rem' }}>{item.problem_id}</code></td>
                             <td><strong>{item.name}</strong></td>
                             <td>{item.category}</td>
@@ -3616,7 +3659,7 @@ function TherapistDashboard({ onLogout }) {
           )}
 
           {activeTab === 'exercise-recommendations' && (
-            <div className="success-stories-section physical-therapy-section">
+            <div className="physical-section">
               <div className="section-header">
                 <div className="header-left">
                   <h2>Exercise Recommendations</h2>
@@ -3632,46 +3675,48 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               </div>
 
-              <div className="stories-toolbar">
-                <div className="toolbar-left">
-                  <div className="search-container">
-                    <input
-                      type="text"
-                      placeholder="Search by name or category..."
-                      value={erSearchTerm}
-                      onChange={(e) => { setERSearchTerm(e.target.value); setCurrentERPage(1); }}
-                      className="search-input"
-                    />
-                  </div>
-                  <div className="pagination-controls">
-                    <label className="entries-label">
-                      Show:
-                      <select
-                        value={erEntriesPerPage}
-                        onChange={(e) => { setEREntriesPerPage(Number(e.target.value)); setCurrentERPage(1); }}
-                        className="entries-select"
-                      >
-                        <option value={5}>5</option>
-                        <option value={10}>10</option>
-                        <option value={25}>25</option>
-                        <option value={50}>50</option>
-                      </select>
-                      entries
-                    </label>
-                  </div>
-                </div>
-                <div className="toolbar-right">
-                  <div className="stats-summary">
-                    <span className="stat-item"><strong>{exerciseRecs.filter(e => e.is_active).length}</strong> Active</span>
-                    <span className="stat-item"><strong>{exerciseRecs.length}</strong> Total</span>
+              <div className="gait-analyses-container">
+                <div className="controls-section">
+                  <div className="control-group">
+                    <div className="search-container">
+                      <input
+                        type="text"
+                        placeholder="Search by name or category..."
+                        value={erSearchTerm}
+                        onChange={(e) => { setERSearchTerm(e.target.value); setCurrentERPage(1); }}
+                        className="search-input"
+                      />
+                    </div>
+                    <div className="pagination-controls">
+                      <label className="entries-label">
+                        Show:
+                        <select
+                          value={erEntriesPerPage}
+                          onChange={(e) => { setEREntriesPerPage(Number(e.target.value)); setCurrentERPage(1); }}
+                          className="entries-select"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                        </select>
+                        entries
+                      </label>
+                    </div>
+                    <div className="stats-summary">
+                      <span className="stat-item"><strong>{exerciseRecs.filter(e => e.is_active).length}</strong> Active</span>
+                      <span className="stat-item"><strong>{exerciseRecs.length}</strong> Total</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {loadingExerciseRecs ? (
-                  <div className="medical-loading-overlay">
-                    <MedicalSpinner message="Loading exercise recommendations..." />
-                  </div>
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <SkeletonTable rows={5} cols={8} />
+                  </SectionLoading>
+                </div>
               ) : exerciseRecs.length === 0 ? (
                 <div className="datatable-container">
                   <div className="no-data-message">
@@ -3682,7 +3727,7 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               ) : (
                 <div className="datatable-container">
-                  <table className="logs-table">
+                  <table className="logs-table gait-table exercise-recs-table">
                     <thead>
                       <tr>
                         <th>ID</th>
@@ -3705,7 +3750,7 @@ function TherapistDashboard({ onLogout }) {
                         const last = currentERPage * erEntriesPerPage;
                         const first = last - erEntriesPerPage;
                         return filtered.slice(first, last).map(item => (
-                          <tr key={item.exercise_id} style={{ opacity: item.is_active ? 1 : 0.55 }}>
+                          <tr key={item.exercise_id} className="gait-row" style={{ opacity: item.is_active ? 1 : 0.55 }}>
                             <td><code style={{ fontSize: '0.8rem' }}>{item.exercise_id}</code></td>
                             <td><strong>{item.name}</strong></td>
                             <td>{item.category}</td>
@@ -3900,8 +3945,10 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingStories ? (
-                <div className="medical-loading-overlay">
-                  <MedicalSpinner message="Loading diagnostics data..." />
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <SkeletonTable rows={4} cols={3} />
+                  </SectionLoading>
                 </div>
               ) : successStories.length === 0 ? (
                 <div className="datatable-container">
@@ -4086,7 +4133,13 @@ function TherapistDashboard({ onLogout }) {
                 </div>
               </div>
 
-              {Object.keys(fluencyExercises).length === 0 ? (
+              {loadingFluency ? (
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <LoadingCardGrid count={3} height="120px" />
+                  </SectionLoading>
+                </div>
+              ) : Object.keys(fluencyExercises).length === 0 ? (
                 <div className="no-exercises">
                   <div className="no-exercises-icon">🗣️</div>
                   <p className="no-exercises-text">No exercises found</p>
@@ -4183,7 +4236,9 @@ function TherapistDashboard({ onLogout }) {
                   {showUnassignedSection && (
                     <div className="unassigned-list">
                       {loadingUnassigned ? (
-                        <div className="loading-message">Loading pending appointments...</div>
+                        <SectionLoading>
+                          <LoadingCardGrid count={3} height="180px" />
+                        </SectionLoading>
                       ) : (
                         <div className="unassigned-grid">
                           {unassignedAppointments.map((appointment) => (
@@ -4332,8 +4387,10 @@ function TherapistDashboard({ onLogout }) {
               </div>
 
               {loadingAppointments ? (
-                <div className="medical-loading-overlay">
-                  <MedicalSpinner message="Loading diagnostics data..." />
+                <div className="datatable-container">
+                  <SectionLoading>
+                    <SkeletonTable rows={5} cols={8} />
+                  </SectionLoading>
                 </div>
               ) : appointments.length > 0 ? (
                 <div className="datatable-container">
@@ -4540,7 +4597,7 @@ function TherapistDashboard({ onLogout }) {
                           />
                           {searchingPatients && (
                             <div className="autocomplete-loading">
-                              <div className="spinner-small"></div>
+                              <div className="search-skeleton-dot"></div>
                             </div>
                           )}
                           {showPatientDropdown && patientSearchResults.length > 0 && (
@@ -4785,8 +4842,26 @@ function TherapistDashboard({ onLogout }) {
           {activeTab === 'reports' && (
             <div className="reports-section">
               {loadingReports ? (
-                <div className="medical-loading-overlay">
-                  <MedicalSpinner message="Generating medical reports..." />
+                <div className="reports-container">
+                  <SectionLoading>
+                    <div className="reports-main reports-main-full">
+                      <div className="report-card report-overview-card">
+                        <div className="report-card-header">
+                          <div className="report-loading-stack">
+                            <SkeletonCard height="84px" />
+                            <SkeletonCard height="84px" />
+                          </div>
+                        </div>
+                        <div className="report-card-body">
+                          <LoadingCardGrid count={3} height="92px" />
+                        </div>
+                      </div>
+                      <div className="reports-therapy-grid">
+                        <SkeletonCard height="220px" />
+                        <SkeletonCard height="220px" />
+                      </div>
+                    </div>
+                  </SectionLoading>
                 </div>
               ) : reportsData && (reportsData.totalPatients || 0) > 0 ? (
                 <div className="reports-container">
@@ -5051,7 +5126,7 @@ function TherapistDashboard({ onLogout }) {
                       if (diagSearchResults.length > 0 || diagSearchError) setShowDiagPatientDropdown(true);
                     }}
                   />
-                  {searchingDiagPatients && <span className="diag-search-spinner">⏳</span>}
+                  {searchingDiagPatients && <div className="diag-search-loading-badge search-skeleton-dot"></div>}
                   {showDiagPatientDropdown && (
                     <div className="diag-patient-dropdown">
                       {diagSearchError ? (
@@ -5096,22 +5171,16 @@ function TherapistDashboard({ onLogout }) {
 
               {/* Loading Skeleton */}
               {selectedDiagPatient && loadingDiagComparison && (
-                <div className="diag-skeleton-container">
-                  <div className="diag-skeleton-header">
-                    <div className="skeleton-line skeleton-title"></div>
-                    <div className="skeleton-line skeleton-subtitle"></div>
+                <SectionLoading>
+                  <div className="diag-skeleton-container">
+                    <div className="diag-skeleton-header">
+                      <SkeletonCard height="90px" />
+                    </div>
+                    <div className="diag-skeleton-table">
+                      <SkeletonTable rows={5} cols={4} />
+                    </div>
                   </div>
-                  <div className="diag-skeleton-table">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div key={i} className="skeleton-row">
-                        <div className="skeleton-line skeleton-cell"></div>
-                        <div className="skeleton-line skeleton-cell"></div>
-                        <div className="skeleton-line skeleton-cell"></div>
-                        <div className="skeleton-line skeleton-cell"></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                </SectionLoading>
               )}
 
               {/* Comparison Results */}
@@ -6032,10 +6101,9 @@ function TherapistDashboard({ onLogout }) {
 
                 {/* Datatable */}
                 {preEvalLoading ? (
-                  <div className="no-data-large">
-                    <div className="no-data-icon">⏳</div>
-                    <p className="no-data-text">Loading patients...</p>
-                  </div>
+                  <SectionLoading>
+                    <SkeletonTable rows={5} cols={4} />
+                  </SectionLoading>
                 ) : preEvalPatientList.length === 0 ? (
                   <div className="no-data-large">
                     <div className="no-data-icon">🩺</div>

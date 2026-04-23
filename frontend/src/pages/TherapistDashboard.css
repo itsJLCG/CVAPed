@@ -8228,11 +8228,41 @@
   margin-top: 1.5rem;
 }
 
-.loading-message {
-  text-align: center;
-  padding: 2rem;
-  color: #92400e;
-  font-size: 1rem;
+.therapist-loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+.therapist-loading-panel > * {
+  width: 100%;
+  min-width: 0;
+}
+
+.therapist-loading-grid {
+  width: 100%;
+  display: grid;
+  gap: 16px;
+}
+
+.therapist-loading-grid.cards-3 {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.therapist-loading-grid.cards-4 {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.therapist-loading-grid.cards-8 {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.report-loading-stack {
+  width: 100%;
+  display: grid;
+  gap: 12px;
 }
 
 .unassigned-grid {
@@ -9776,17 +9806,26 @@
   pointer-events: none;
 }
 
-.spinner-small {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #e5e7eb;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+.diag-search-loading-badge {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.search-skeleton-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: search-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes search-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .autocomplete-dropdown {
@@ -9968,18 +10007,6 @@
 .diag-search-input:focus {
   border-color: var(--color-primary, #ce3630);
   outline: none;
-}
-
-.diag-search-spinner {
-  position: absolute;
-  right: 12px;
-  font-size: 1rem;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .diag-patient-dropdown {
@@ -11193,49 +11220,15 @@
 .diag-skeleton-header {
   background: white;
   border-radius: 12px;
-  padding: 24px;
-  border: 2px solid #e5e7eb;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
 }
 
 .diag-skeleton-table {
   background: white;
   border-radius: 12px;
-  padding: 24px;
-  border: 2px solid #e5e7eb;
-}
-
-.skeleton-line {
-  border-radius: 6px;
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-  background-size: 200% 100%;
-  animation: diag-shimmer 1.5s ease-in-out infinite;
-}
-
-.skeleton-title {
-  height: 24px;
-  width: 220px;
-  margin-bottom: 12px;
-}
-
-.skeleton-subtitle {
-  height: 16px;
-  width: 350px;
-}
-
-.skeleton-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.skeleton-cell {
-  height: 20px;
-  flex: 1;
-}
-
-@keyframes diag-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  padding: 18px;
+  border: 1px solid #e5e7eb;
 }
 
 /* Tooltip on metric names */

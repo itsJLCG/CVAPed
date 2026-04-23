@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   AreaChart, Area,
   BarChart, Bar,
@@ -7,10 +7,51 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid,
   RadialBarChart, RadialBar, PolarAngleAxis
 } from 'recharts';
-import { MedicalSpinner, SkeletonCard } from './MedicalLoading';
+import L from 'leaflet';
+import { SkeletonCard, SkeletonChart, SkeletonTable } from './MedicalLoading';
+import { images } from '../assets/images';
 import './DashboardOverview.css';
+import 'leaflet/dist/leaflet.css';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 const SCORE_RANGE_COLORS = ['#ef4444', '#f59e0b', '#eab308', '#22c55e', '#10b981'];
+
+const FACILITY_COORDINATES = {
+  latitude: 14.514722,
+  longitude: 121.055833,
+};
+
+const FACILITY_ADDRESS = '10, 1639 9th St, Taguig, Metro Manila';
+
+const FACILITY_PHOTOS = [
+  'https://lh3.googleusercontent.com/gps-cs-s/APNQkAG6F7L0HBqWKgxMb0jARxSZrbK1cuZjGQmwplfVZOu2_b-2eYcmsuBveHpssTtTvHQRjeXTy24iTuyo6pywdi-yoCLBqvpBLg9VUH7GzbbXXea2Sv65aYP8Gs2a_vr5rlM8fzzm6w=s1360-w1360-h1020-rw',
+  'https://lh3.googleusercontent.com/gps-cs-s/APNQkAElJY9HTlzKe3870dKBLEibBXx8cKbAi0wNe6539OGPaqgununVQq_VlniOdyPaMkvtr_whecbhPcGKcvo04glroKZJcTWxczRONygvIkllx_Qih6_eEy2VwFcspSEXPQFCMDTk=s1360-w1360-h1020-rw',
+  'https://lh3.googleusercontent.com/gps-cs-s/APNQkAHglbrOoyCEkMU7GWtVqyubnpoQPIlBC4NJWeJp6auXjHpfDM1ChqeJhk0D2sWoxi89tu-vp9oIKFGneX_mS-4NIt-hf2AVXDgMoimN54Yc5M_nJ3gpMnROsBXLM_yv-ue5xt4q=s1360-w1360-h1020-rw',
+  'https://lh3.googleusercontent.com/gps-cs-s/APNQkAHYhlay60e9Gb0RvSbH60iu1tUNhHDcFmJZ9DM6UhGrFEYc7O35fnF8VYFsX0_vTJ-qoK8Rs-9vUvn0b4HYs0rPNFpu62Xp1Ubc8dthE8orY1ZyaZCg9a8UkSixLRmVMQDuXjEySA=s1360-w1360-h1020-rw',
+];
+
+const FACILITY_FALLBACK_PHOTO = images.taguigPRU;
+const CLIMATE_SECTION_TITLE = 'Facility Thermal Conditions';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
+
+const FACILITY_MARKER_ICON = L.divIcon({
+  className: 'do-facility-marker',
+  html: `
+    <span class="do-facility-marker-pulse"></span>
+    <span class="do-facility-marker-pin">📍</span>
+  `,
+  iconSize: [44, 44],
+  iconAnchor: [22, 42],
+  popupAnchor: [0, -40],
+});
 
 const APPOINTMENT_COLORS = {
   Completed: '#059669',
@@ -105,71 +146,215 @@ function ChartCard({ title, icon, children, gridArea, className = '' }) {
   );
 }
 
+function buildFacilityPopupContent({ photoSrc, facilityName, facilityLatitude, facilityLongitude }) {
+  const popup = document.createElement('div');
+  popup.className = 'do-map-popup';
+
+  const header = document.createElement('div');
+  header.className = 'do-map-popup-header';
+
+  const title = document.createElement('strong');
+  title.textContent = facilityName;
+
+  const address = document.createElement('span');
+  address.textContent = FACILITY_ADDRESS;
+
+  header.appendChild(title);
+  header.appendChild(address);
+
+  const gallery = document.createElement('div');
+  gallery.className = 'do-map-popup-gallery';
+
+  FACILITY_PHOTOS.forEach((src, index) => {
+    const tile = document.createElement('div');
+    tile.className = 'do-map-popup-photo-tile';
+
+    const photo = document.createElement('img');
+    photo.className = 'do-map-popup-photo';
+    photo.src = src;
+    photo.alt = `${facilityName} photo ${index + 1}`;
+    photo.decoding = 'async';
+    photo.loading = 'lazy';
+    photo.referrerPolicy = 'no-referrer';
+    photo.onerror = () => {
+      if (photo.src !== FACILITY_FALLBACK_PHOTO) {
+        photo.src = FACILITY_FALLBACK_PHOTO;
+      }
+    };
+
+    tile.appendChild(photo);
+    gallery.appendChild(tile);
+  });
+
+  popup.appendChild(header);
+  popup.appendChild(gallery);
+
+  return popup;
+}
+
 function ClimateAdvisoryChart({ climate }) {
-  if (!climate?.available || climate.heat_index_c == null) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  const facilityLatitude = climate?.latitude ?? FACILITY_COORDINATES.latitude;
+  const facilityLongitude = climate?.longitude ?? FACILITY_COORDINATES.longitude;
+  const facilityName = climate?.location || 'Taguig City Disability Resource and Development Center';
+  const heatIndexValue = climate?.heat_index_c;
+  const climateAvailable = Boolean(climate?.available && heatIndexValue != null);
+
+  useEffect(() => {
+    if (!climateAvailable || !mapRef.current || mapInstanceRef.current) return undefined;
+
+    const map = L.map(mapRef.current, {
+      scrollWheelZoom: false,
+      zoomControl: true,
+      attributionControl: true,
+    }).setView([facilityLatitude, facilityLongitude], 17);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    const marker = L.marker([facilityLatitude, facilityLongitude], {
+      title: facilityName,
+      icon: FACILITY_MARKER_ICON,
+    }).addTo(map);
+
+    mapInstanceRef.current = map;
+
+    marker.bindPopup(buildFacilityPopupContent({
+      facilityName,
+      facilityLatitude,
+      facilityLongitude,
+    }), {
+      closeButton: false,
+      autoClose: false,
+      closeOnClick: false,
+      className: 'do-map-popup-card',
+      offset: L.point(0, -36),
+    }).openPopup();
+
+    requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
+
+    return () => {
+      mapInstanceRef.current = null;
+      map.remove();
+    };
+  }, [climateAvailable, facilityLatitude, facilityLongitude, facilityName]);
+
+  if (!climateAvailable) {
     return <EmptyState icon="☀️" message="No climate data available" />;
   }
 
   const gaugeMax = 54;
-  const gaugeData = [{ name: 'Heat Index', value: Math.min(climate.heat_index_c, gaugeMax), fill: '#f97316' }];
-  const thresholdLabels = [
-    { label: 'Normal', limit: '< 27°C' },
-    { label: 'Caution', limit: '27-31°C' },
-    { label: 'Extreme Caution', limit: '32-40°C' },
-    { label: 'Danger', limit: '41°C+' },
-  ];
+  const gaugeData = [{ name: 'Heat Index', value: Math.min(heatIndexValue, gaugeMax), fill: '#f97316' }];
+  const humidityValue = Number(climate.humidity_percent ?? 0);
+  const humidityMeta = humidityValue < 40
+    ? { label: 'Dry', tone: 'normal', fill: '#14b8a6' }
+    : humidityValue < 60
+      ? { label: 'Comfortable', tone: 'caution', fill: '#f59e0b' }
+      : humidityValue < 75
+        ? { label: 'Humid', tone: 'warning', fill: '#f97316' }
+        : { label: 'Very Humid', tone: 'danger', fill: '#ef4444' };
+  const humidityGaugeData = [{ name: 'Humidity', value: Math.min(humidityValue, 100), fill: humidityMeta.fill }];
+  const heatRiskLabel = climate.risk_level || 'No alert';
+  const heatRiskTone = climate.risk_tone || 'neutral';
+  const advisoryToneClass = `tone-${heatRiskTone}`;
+  const advisorySubtitle = climate.available
+    ? 'Current conditions are based on the facility weather snapshot.'
+    : 'Climate data is currently unavailable for this facility.';
 
   return (
     <div className="do-climate-layout">
-      <div className="do-climate-gauge-wrap">
-        <ResponsiveContainer width="100%" height={230}>
-          <RadialBarChart
-            innerRadius="68%"
-            outerRadius="100%"
-            data={gaugeData}
-            startAngle={210}
-            endAngle={-30}
-            barSize={18}
-          >
-            <PolarAngleAxis type="number" domain={[0, gaugeMax]} angleAxisId={0} tick={false} />
-            <RadialBar background dataKey="value" cornerRadius={10} />
-          </RadialBarChart>
-        </ResponsiveContainer>
-        <div className="do-climate-center">
-          <span className="do-climate-value">{climate.heat_index_c}°C</span>
-          <span className={`do-climate-risk ${climate.risk_tone || 'neutral'}`}>{climate.risk_level}</span>
-        </div>
+      <div className="do-climate-location do-climate-location--hero">
+        <span className="do-climate-location-label">Facility</span>
+        <span className="do-climate-location-name">{facilityName}</span>
       </div>
 
-      <div className="do-climate-details">
-        <div className="do-climate-location">
-          <span className="do-climate-location-label">Facility</span>
-          <span className="do-climate-location-name">{climate.location || 'Taguig City Disability Resource and Development Center'}</span>
-        </div>
-
-        <div className="do-climate-stats-row">
-          <div className="do-climate-stat-card">
-            <span className="do-climate-stat-label">Temperature</span>
-            <span className="do-climate-stat-value">{climate.temperature_c}°C</span>
+      <section className="do-facility-map-card" aria-label="Facility map">
+        <div className="do-facility-map-header">
+          <div>
+            <span className="do-facility-map-kicker">Facility Map</span>
+            <p className="do-facility-map-subtitle">Approximate facility location and local context</p>
           </div>
-          <div className="do-climate-stat-card">
-            <span className="do-climate-stat-label">Humidity</span>
-            <span className="do-climate-stat-value">{climate.humidity_percent}%</span>
-          </div>
+          <a
+            className="do-facility-map-link"
+            href={`https://www.google.com/maps/search/?api=1&query=${facilityLatitude},${facilityLongitude}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open in Google Maps
+          </a>
         </div>
+        <div className="do-facility-map-frame">
+          <div ref={mapRef} className="do-facility-map-canvas" aria-label="Interactive facility map" />
+        </div>
+      </section>
 
-        <div className="do-climate-thresholds">
-          {thresholdLabels.map((item) => (
-            <div key={item.label} className="do-climate-threshold-item">
-              <span className="do-climate-threshold-label">{item.label}</span>
-              <span className="do-climate-threshold-limit">{item.limit}</span>
+      <div className="do-climate-metrics-grid">
+        <section className="do-climate-gauge-card do-climate-gauge-card--heat" aria-label={`Heat index ${climate.heat_index_c} degrees Celsius`}>
+          <div className="do-climate-gauge-header">
+            <span className="do-climate-gauge-kicker">Heat Stress</span>
+            <span className="do-climate-gauge-subtitle">Thermal conditions</span>
+          </div>
+          <div className="do-climate-gauge-wrap do-climate-gauge-wrap--heat">
+            <ResponsiveContainer width="100%" height={230}>
+              <RadialBarChart
+                innerRadius="74%"
+                outerRadius="100%"
+                data={gaugeData}
+                startAngle={210}
+                endAngle={-30}
+                barSize={14}
+              >
+                <PolarAngleAxis type="number" domain={[0, gaugeMax]} angleAxisId={0} tick={false} />
+                <RadialBar background dataKey="value" cornerRadius={14} />
+              </RadialBarChart>
+            </ResponsiveContainer>
+            <div className="do-climate-center">
+              <span className="do-climate-value">{heatIndexValue}°C</span>
+              <span className={`do-climate-risk do-climate-risk--heat ${heatRiskTone}`}>{heatRiskLabel}</span>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
 
-        <div className="do-climate-advisory">
+        <section className="do-climate-gauge-card do-climate-gauge-card--humidity" aria-label={`Humidity ${humidityValue}%`}>
+          <div className="do-climate-gauge-header">
+            <span className="do-climate-gauge-kicker">Humidity</span>
+            <span className="do-climate-gauge-subtitle">Moisture balance</span>
+          </div>
+          <div className="do-humidity-gauge do-climate-gauge-wrap--humidity">
+            <ResponsiveContainer width="100%" height={230}>
+              <RadialBarChart
+                innerRadius="74%"
+                outerRadius="100%"
+                data={humidityGaugeData}
+                startAngle={210}
+                endAngle={-30}
+                barSize={14}
+              >
+                <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                <RadialBar background dataKey="value" cornerRadius={14} />
+              </RadialBarChart>
+            </ResponsiveContainer>
+            <div className="do-climate-center">
+              <span className="do-climate-value">{humidityValue}%</span>
+              <span className={`do-climate-risk do-climate-risk--humidity ${humidityMeta.tone}`}>{humidityMeta.label}</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div className={`do-climate-advisory do-climate-advisory--${advisoryToneClass}`}>
+        <div className="do-climate-advisory-icon">⚑</div>
+        <div className="do-climate-advisory-body">
           <span className="do-climate-advisory-label">Facility Advisory</span>
+          <h4>{heatRiskLabel}</h4>
           <p>{climate.advisory}</p>
+          <span className="do-climate-advisory-note">{advisorySubtitle}</span>
         </div>
       </div>
     </div>
@@ -682,7 +867,7 @@ function PatientDemographicsChart({ reportsData, loadingReports }) {
   if (loadingReports && !reportsData) {
     return (
       <div className="do-demographics-loading" role="status" aria-live="polite">
-        <MedicalSpinner size="small" message="Loading demographic data..." />
+        <SkeletonChart type="bar" height={250} />
       </div>
     );
   }
@@ -815,15 +1000,46 @@ function RecentActivitiesList({ activities }) {
 function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelectedDays, loadingStats, loadingReports, user }) {
   if (loadingStats) {
     return (
-      <div className="loading-overlay" style={{ minHeight: '600px', display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', width: '100%' }}>
+      <div className="do-container do-loading-shell">
+        <div className="do-metrics-row">
           <SkeletonCard height="120px" />
           <SkeletonCard height="120px" />
           <SkeletonCard height="120px" />
           <SkeletonCard height="120px" />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0' }}>
-          <MedicalSpinner message="Loading dashboard statistics..." />
+      <div className="do-climate-section">
+        <ChartCard title={CLIMATE_SECTION_TITLE} icon={'☀️'}>
+          <SkeletonChart type="donut" height={230} />
+        </ChartCard>
+      </div>
+        <div className="do-charts-grid">
+          <ChartCard title="Session Trend" icon={'📈'} gridArea="trend">
+            <SkeletonChart type="line" height={280} />
+          </ChartCard>
+          <ChartCard title="Therapy Distribution" icon={'📊'} gridArea="distribution">
+            <SkeletonChart type="donut" height={260} />
+          </ChartCard>
+          <ChartCard title="Average Scores" icon={'🏆'} gridArea="scores">
+            <SkeletonChart type="bar" height={180} />
+          </ChartCard>
+          <ChartCard title="Appointments" icon={'📅'} gridArea="appointments">
+            <SkeletonChart type="donut" height={180} />
+          </ChartCard>
+          <ChartCard title="Patient Engagement" icon={'💡'} gridArea="engagement">
+            <SkeletonChart type="donut" height={180} />
+          </ChartCard>
+          <ChartCard title="Weekly Activity" icon={'📆'} gridArea="weekly">
+            <SkeletonChart type="bar" height={220} />
+          </ChartCard>
+          <ChartCard title="Score Distribution" icon={'📊'} gridArea="scoredist">
+            <SkeletonChart type="bar" height={220} />
+          </ChartCard>
+          <ChartCard title="Patient Demographics" icon={'👥'} gridArea="demographics">
+            <SkeletonChart type="bar" height={250} />
+          </ChartCard>
+          <ChartCard title="Recent Activities" icon={'🕑'} gridArea="activities" className="do-activities-card">
+            <SkeletonTable rows={5} cols={3} />
+          </ChartCard>
         </div>
       </div>
     );
@@ -850,7 +1066,7 @@ function DashboardOverview({ overviewStats, reportsData, selectedDays, setSelect
       />
 
       <div className="do-climate-section">
-        <ChartCard title="Climate Responsive (Heat Index)" icon={'☀️'}>
+        <ChartCard title={CLIMATE_SECTION_TITLE} icon={'☀️'}>
           <ClimateAdvisoryChart climate={overviewStats.climate} />
         </ChartCard>
       </div>

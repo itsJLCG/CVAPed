@@ -34,12 +34,28 @@ import Prescription from './pages/Prescription';
 import Profile from './pages/Profile';
 import SuccessStoryPage from './pages/SuccessStoryPage';
 import Diagnostic from './pages/Diagnostic';
+import { images } from './assets/images';
 import './App.css';
+
+const SPLASH_MIN_DURATION_MS = 5000;
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isSplashReady, setIsSplashReady] = useState(false);
+
+  const loading = !isAuthReady || !isSplashReady;
+
+  useEffect(() => {
+    const splashTimer = window.setTimeout(() => {
+      setIsSplashReady(true);
+    }, SPLASH_MIN_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(splashTimer);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,7 +67,7 @@ function App() {
       const user = localStorage.getItem('user');
       if (!token || !user) {
         if (isMounted) {
-          setLoading(false);
+          setIsAuthReady(true);
         }
         return;
       }
@@ -78,7 +94,7 @@ function App() {
         setUserRole(null);
       } finally {
         if (isMounted) {
-          setLoading(false);
+          setIsAuthReady(true);
         }
       }
     };
@@ -131,7 +147,22 @@ function App() {
   };
 
   if (loading) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <div className="loading-splash" role="status" aria-live="polite" aria-busy="true">
+        <div className="loading-splash-card">
+          <div className="loading-splash-visual" aria-hidden="true">
+            <span className="loading-splash-orbit" />
+            <span className="loading-splash-halo" />
+            <img src={images.logo} alt="CVAPed" className="loading-splash-logo" />
+          </div>
+          <div className="loading-splash-copy">
+            <div className="loading-splash-title">CVAPed</div>
+            <div className="loading-splash-text">Loading your care workspace</div>
+            <div className="loading-splash-subtext">Preparing the dashboard...</div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Component to handle role-based redirect

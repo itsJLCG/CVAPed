@@ -37,7 +37,7 @@ import Diagnostic from './pages/Diagnostic';
 import { images } from './assets/images';
 import './App.css';
 
-const SPLASH_MIN_DURATION_MS = 5000;
+const SPLASH_MIN_DURATION_MS = 3000;
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -149,18 +149,8 @@ function App() {
   if (loading) {
     return (
       <div className="loading-splash" role="status" aria-live="polite" aria-busy="true">
-        <div className="loading-splash-card">
-          <div className="loading-splash-visual" aria-hidden="true">
-            <span className="loading-splash-orbit" />
-            <span className="loading-splash-halo" />
-            <img src={images.logo} alt="CVAPed" className="loading-splash-logo" />
-          </div>
-          <div className="loading-splash-copy">
-            <div className="loading-splash-title">CVAPed</div>
-            <div className="loading-splash-text">Loading your care workspace</div>
-            <div className="loading-splash-subtext">Preparing the dashboard...</div>
-          </div>
-        </div>
+        <span className="loading-splash-sr">Loading CVAPed</span>
+        <img src={images.logo} alt="" aria-hidden="true" className="loading-splash-logo" />
       </div>
     );
   }

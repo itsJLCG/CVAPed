@@ -13,15 +13,22 @@ logger = logging.getLogger(__name__)
 db = None
 users_collection = None
 SECRET_KEY = None
+report_cache_invalidator = None
 
-def init_admin_management(database, secret_key):
+def init_admin_management(database, secret_key, report_cache_invalidator_fn=None):
     """Initialize admin management with database connection"""
-    global db, users_collection, SECRET_KEY
+    global db, users_collection, SECRET_KEY, report_cache_invalidator
     if not secret_key:
         raise RuntimeError('SECRET_KEY is required to initialize admin management')
     db = database
     users_collection = db['users']
     SECRET_KEY = secret_key
+    report_cache_invalidator = report_cache_invalidator_fn
+
+
+def invalidate_report_caches():
+    if callable(report_cache_invalidator):
+        report_cache_invalidator()
 
 def admin_required(f):
     """Decorator to require admin authentication"""
@@ -156,6 +163,7 @@ def delete_user(user_id):
         result = users_collection.delete_one({'_id': ObjectId(user_id)})
         
         if result.deleted_count > 0:
+            invalidate_report_caches()
             return jsonify({
                 'success': True,
                 'message': 'User deleted successfully'
@@ -204,6 +212,7 @@ def update_user_role(user_id):
         )
         
         if result.modified_count > 0:
+            invalidate_report_caches()
             return jsonify({
                 'success': True,
                 'message': f'User role updated to {new_role} successfully'

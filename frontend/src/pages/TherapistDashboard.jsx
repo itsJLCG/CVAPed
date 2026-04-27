@@ -181,8 +181,10 @@ function TherapistDashboard({ onLogout }) {
   });
 
   // Reports state
-  const [reportsData, setReportsData] = useState(null);
+  const [reportsSummary, setReportsSummary] = useState(null);
+  const [reportCategoryData, setReportCategoryData] = useState({});
   const [loadingReports, setLoadingReports] = useState(false);
+  const [loadingReportCategories, setLoadingReportCategories] = useState({});
   const [activeReportCategory, setActiveReportCategory] = useState('age');
   const [reportsDropdownOpen, setReportsDropdownOpen] = useState(false);
   const [exportingReports, setExportingReports] = useState(false);
@@ -871,7 +873,6 @@ function TherapistDashboard({ onLogout }) {
     if (activeTab === 'detection-problems') loadDetectionProblems();
     if (activeTab === 'exercise-recommendations') loadExerciseRecs();
     if (activeTab === 'success-stories') loadSuccessStories();
-    if (activeTab === 'reports') loadReports();
     if (activeTab === 'appointments') {
       loadAppointments();
       loadUnassignedAppointments();
@@ -882,6 +883,16 @@ function TherapistDashboard({ onLogout }) {
     }
     return () => { cancelled = true; };
   }, [activeTab, activeSub, showFluencyLevels, showLanguageLevels, showArticulationLevels]);
+
+  useEffect(() => {
+    if (activeTab !== 'reports') return;
+    loadReportsSummary();
+  }, [activeTab, user]);
+
+  useEffect(() => {
+    if (activeTab !== 'reports') return;
+    ensureReportCategoryLoaded(activeReportCategory);
+  }, [activeTab, activeReportCategory]);
 
   const loadOverview = async () => {
     try {
@@ -1694,20 +1705,43 @@ function TherapistDashboard({ onLogout }) {
   };
 
   // Reports Functions
-  const loadReports = async () => {
+  const loadReportsSummary = async () => {
     let cancelled = false;
     setLoadingReports(true);
     try {
-      const response = await therapistService.getReports();
+      const response = await therapistService.getReportsSummary();
       if (!cancelled && response.success) {
-        setReportsData(response.data || null);
+        setReportsSummary(response.data || null);
       }
     } catch (e) {
-      console.error('Failed to load reports', e);
-      setReportsData(null);
+      console.error('Failed to load report summary', e);
+      setReportsSummary(null);
     } finally {
       if (!cancelled) setLoadingReports(false);
     }
+  };
+
+  const loadReportCategory = async (category) => {
+    if (!category) return;
+    if (reportCategoryData[category] || loadingReportCategories[category]) return;
+
+    setLoadingReportCategories((prev) => ({ ...prev, [category]: true }));
+    try {
+      const response = await therapistService.getReportCategory(category);
+      if (response.success) {
+        setReportCategoryData((prev) => ({ ...prev, [category]: response.data || null }));
+      }
+    } catch (e) {
+      console.error(`Failed to load ${category} report`, e);
+      setReportCategoryData((prev) => ({ ...prev, [category]: null }));
+    } finally {
+      setLoadingReportCategories((prev) => ({ ...prev, [category]: false }));
+    }
+  };
+
+  const ensureReportCategoryLoaded = async (category) => {
+    if (reportCategoryData[category]) return;
+    await loadReportCategory(category);
   };
 
   // Appointments Functions
@@ -2157,7 +2191,10 @@ function TherapistDashboard({ onLogout }) {
     };
   }, [gaitAnalyses]);
 
-  const activeReportData = reportsData?.categories?.[activeReportCategory] || null;
+  const activeReportPayload = reportCategoryData[activeReportCategory] || null;
+  const activeReportData = activeReportPayload?.categories?.[activeReportCategory] || null;
+  const reportSummaryData = reportsSummary || activeReportPayload || null;
+  const reportCategoryLoading = !!loadingReportCategories[activeReportCategory];
   const reportTherapyPanels = useMemo(() => {
     if (!activeReportData?.byTherapy) return [];
     return ['speech', 'physical']
@@ -2169,11 +2206,11 @@ function TherapistDashboard({ onLogout }) {
 
   const overallReportItems = useMemo(() => {
     if (activeReportCategory === 'age') {
-      return reportsData?.ageBrackets || [];
+      return activeReportPayload?.ageBrackets || [];
     }
 
     if (activeReportCategory === 'gender') {
-      return reportsData?.genderDistribution || [];
+      return activeReportPayload?.genderDistribution || [];
     }
 
     if (!activeReportData?.byTherapy) return [];
@@ -2201,7 +2238,7 @@ function TherapistDashboard({ onLogout }) {
         percentage: total > 0 ? Number(((item.count / total) * 100).toFixed(1)) : 0,
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [activeReportCategory, activeReportData, reportsData]);
+  }, [activeReportCategory, activeReportData, activeReportPayload]);
 
   const getReportItemsForDisplay = (items = []) => {
     if (activeReportCategory === 'age') return items;
@@ -2211,7 +2248,7 @@ function TherapistDashboard({ onLogout }) {
   const getProblemGenderMeta = (genderKey) => REPORT_GENDER_META[genderKey] || { label: genderKey, icon: '❓' };
 
   const handleExportReportsPdf = useCallback(async () => {
-    if (!reportsData || !activeReportData) return;
+    if (!reportSummaryData || !activeReportData) return;
 
     setExportingReports(true);
     try {
@@ -2220,9 +2257,9 @@ function TherapistDashboard({ onLogout }) {
         reportDescription: activeReportData.description || 'Therapist demographic report.',
         categoryLabel: activeReportData.title || 'Report',
         summaryStats: [
-          { label: 'Total Patients', value: reportsData.totalPatients || 0 },
-          { label: 'Speech Therapy', value: reportsData.therapyTotals?.speech?.totalPatients || 0 },
-          { label: 'Physical Therapy', value: reportsData.therapyTotals?.physical?.totalPatients || 0 },
+          { label: 'Total Patients', value: reportSummaryData.totalPatients || 0 },
+          { label: 'Speech Therapy', value: reportSummaryData.therapyTotals?.speech?.totalPatients || 0 },
+          { label: 'Physical Therapy', value: reportSummaryData.therapyTotals?.physical?.totalPatients || 0 },
         ],
         overallItems: overallReportItems,
         therapyPanels: reportTherapyPanels.map((panel) => ({
@@ -2240,7 +2277,7 @@ function TherapistDashboard({ onLogout }) {
     } finally {
       setExportingReports(false);
     }
-  }, [activeReportCategory, activeReportData, overallReportItems, reportTherapyPanels, reportsData, toast, user]);
+  }, [activeReportCategory, activeReportData, overallReportItems, reportSummaryData, reportTherapyPanels, toast, user]);
 
   return (
     <div className="admin-dashboard">
@@ -2311,7 +2348,7 @@ function TherapistDashboard({ onLogout }) {
           {activeTab === 'overview' && (
             <DashboardOverview
               overviewStats={overviewStats}
-              reportsData={overviewStats?.demographics || reportsData}
+              reportsData={overviewStats?.demographics || reportSummaryData}
               selectedDays={selectedDays}
               setSelectedDays={setSelectedDays}
               loadingStats={loadingStats}
@@ -4851,7 +4888,7 @@ function TherapistDashboard({ onLogout }) {
 
           {activeTab === 'reports' && (
             <div className="reports-section">
-              {loadingReports ? (
+              {loadingReports && !reportSummaryData ? (
                 <div className="reports-container">
                   <SectionLoading>
                     <div className="reports-main reports-main-full">
@@ -4873,7 +4910,7 @@ function TherapistDashboard({ onLogout }) {
                     </div>
                   </SectionLoading>
                 </div>
-              ) : reportsData && (reportsData.totalPatients || 0) > 0 ? (
+              ) : reportSummaryData && (reportSummaryData.totalPatients || 0) > 0 ? (
                 <div className="reports-container">
                   <div className="reports-main reports-main-full">
                     <div className="report-card report-overview-card">
@@ -4901,15 +4938,15 @@ function TherapistDashboard({ onLogout }) {
                           <div className="summary-stats-row">
                             <div className="summary-stat">
                               <span className="stat-label">Total Patients</span>
-                              <span className="stat-value">{reportsData.totalPatients || 0}</span>
+                              <span className="stat-value">{reportSummaryData.totalPatients || 0}</span>
                             </div>
                             <div className="summary-stat">
                               <span className="stat-label">Speech Therapy</span>
-                              <span className="stat-value">{reportsData.therapyTotals?.speech?.totalPatients || 0}</span>
+                              <span className="stat-value">{reportSummaryData.therapyTotals?.speech?.totalPatients || 0}</span>
                             </div>
                             <div className="summary-stat">
                               <span className="stat-label">Physical Therapy</span>
-                              <span className="stat-value">{reportsData.therapyTotals?.physical?.totalPatients || 0}</span>
+                              <span className="stat-value">{reportSummaryData.therapyTotals?.physical?.totalPatients || 0}</span>
                             </div>
                           </div>
                         </div>
@@ -4945,9 +4982,9 @@ function TherapistDashboard({ onLogout }) {
                               <span className="summary-icon">🎯</span>
                               <div className="summary-content">
                                 <span className="summary-label">Highest Age Bracket</span>
-                                <span className="summary-value">{reportsData?.highestAgeBracket?.range || 'N/A'}</span>
+                                <span className="summary-value">{activeReportPayload?.highestAgeBracket?.range || 'N/A'}</span>
                               </div>
-                              <div className="summary-count">{reportsData?.highestAgeBracket?.count || 0} patients</div>
+                              <div className="summary-count">{activeReportPayload?.highestAgeBracket?.count || 0} patients</div>
                             </div>
                           </div>
                         </div>
@@ -5020,6 +5057,11 @@ function TherapistDashboard({ onLogout }) {
                     )}
 
                     <div className="reports-therapy-grid">
+                      {reportCategoryLoading && (
+                        <SectionLoading>
+                          <SkeletonCard height="220px" />
+                        </SectionLoading>
+                      )}
                       {reportTherapyPanels.map((panel) => {
                         const displayItems = getReportItemsForDisplay(panel.items || []);
                         const maxCount = displayItems.reduce((highest, item) => Math.max(highest, item.count || 0), 0);
@@ -5063,7 +5105,15 @@ function TherapistDashboard({ onLogout }) {
                       })}
                     </div>
 
-                    {activeReportCategory === 'gender' && (
+                    {activeReportCategory === 'gender' && reportCategoryLoading && (
+                      <div className="report-card report-problems-card">
+                        <div className="report-card-body">
+                          <SkeletonCard height="180px" />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeReportCategory === 'gender' && !reportCategoryLoading && (
                       <div className="report-card report-problems-card">
                         <div className="report-card-header">
                           <h3 className="report-card-title">

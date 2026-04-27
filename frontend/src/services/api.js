@@ -21,6 +21,13 @@ const API_CACHE_TTL = {
   STORIES: 10 * 60 * 1000,
 };
 
+const REPORT_CACHE_ENDPOINTS = [
+  '/therapist/reports/summary',
+  '/therapist/reports/age',
+  '/therapist/reports/gender',
+  '/therapist/reports/work',
+];
+
 const getCurrentUserId = () => {
   try {
     const storedUser = localStorage.getItem('user');
@@ -276,7 +283,7 @@ export const authService = {
   },
 
   updateProfile: async (userData) => {
-    invalidateApiCacheByEndpoints(['/user'], 'user');
+    invalidateApiCacheByEndpoints(['/user', '/therapist/stats', '/diagnostic-comparison', '/therapist/reports/summary', '/therapist/reports/age', '/therapist/reports/gender', '/therapist/reports/work'], 'user');
     const response = await api.put('/user/update', userData);
     if (response.data.user) {
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -285,7 +292,7 @@ export const authService = {
   },
 
   updateDiagnosticStatus: async (hasInitialDiagnostic) => {
-    invalidateApiCacheByEndpoints(['/user', '/diagnostic-comparison'], 'user');
+    invalidateApiCacheByEndpoints(['/user', '/diagnostic-comparison', '/therapist/stats', '/therapist/reports/summary', '/therapist/reports/age', '/therapist/reports/gender', '/therapist/reports/work'], 'user');
     const response = await api.put('/user/diagnostic-status', { hasInitialDiagnostic });
     if (response.data.user) {
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -294,7 +301,7 @@ export const authService = {
   },
 
   saveDiagnosticData: async (diagnosticData) => {
-    invalidateApiCacheByEndpoints(['/user', '/diagnostic-comparison'], 'user');
+    invalidateApiCacheByEndpoints(['/user', '/diagnostic-comparison', '/therapist/stats', ...REPORT_CACHE_ENDPOINTS], 'user');
     const response = await api.put('/user/diagnostic-data', diagnosticData);
     if (response.data.user) {
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -364,13 +371,13 @@ export const adminService = {
   },
 
   updateUserRole: async (userId, role) => {
-    invalidateApiCacheByEndpoints(['/admin/stats', '/admin/users'], 'user');
+    invalidateApiCacheByEndpoints(['/admin/stats', '/admin/users', '/therapist/stats', ...REPORT_CACHE_ENDPOINTS], 'user');
     const response = await api.put(`/admin/users/${userId}/role`, { role });
     return response.data;
   },
 
   deleteUser: async (userId) => {
-    invalidateApiCacheByEndpoints(['/admin/stats', '/admin/users'], 'user');
+    invalidateApiCacheByEndpoints(['/admin/stats', '/admin/users', '/therapist/stats', ...REPORT_CACHE_ENDPOINTS], 'user');
     const response = await api.delete(`/admin/users/${userId}`);
     return response.data;
   },
@@ -408,8 +415,12 @@ export const therapistService = {
     return response.data;
   },
 
-  getReports: async () => {
-    return cachedGet('/therapist/reports', { ttlMs: API_CACHE_TTL.REPORTS });
+  getReportsSummary: async () => {
+    return cachedGet('/therapist/reports/summary', { ttlMs: API_CACHE_TTL.REPORTS });
+  },
+
+  getReportCategory: async (category) => {
+    return cachedGet(`/therapist/reports/${category}`, { ttlMs: API_CACHE_TTL.REPORTS });
   },
 
   getArticulationAnalytics: async (days = 30) => {

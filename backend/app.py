@@ -124,6 +124,21 @@ def get_or_set_cached_response(cache_key, ttl_seconds, builder):
     return built_value
 
 
+def invalidate_cached_responses(*namespace_prefixes):
+    if not namespace_prefixes:
+        return
+
+    prefixes = tuple(f'{namespace}:' for namespace in namespace_prefixes)
+    with RESPONSE_CACHE_LOCK:
+        for cache_key in list(RESPONSE_CACHE.keys()):
+            if cache_key.startswith(prefixes):
+                RESPONSE_CACHE.pop(cache_key, None)
+
+
+def invalidate_dashboard_report_caches():
+    invalidate_cached_responses('therapist-stats', 'therapist-reports')
+
+
 def _build_health_summary_payload(user_id):
     articulation_count = articulation_trials_collection.count_documents({'user_id': user_id})
 
@@ -221,6 +236,8 @@ WORK_STATUS_LABELS = {
 
 AGE_BRACKET_ORDER = ['0-12', '13-17', '18-25', '26-35', '36-45', '46-55', '56-65', '66+']
 GENDER_ORDER = ['male', 'female', 'other', 'prefer-not-to-say']
+REPORT_THERAPY_KEYS = ['speech', 'physical']
+REPORT_THERAPY_LABELS = {'speech': 'Speech Therapy', 'physical': 'Physical Therapy'}
 
 
 def normalize_therapy_type(raw_value):
@@ -411,8 +428,8 @@ def build_ranked_items(counts, total, label_key='label', value_key='count', pref
 
 def build_patient_report_payload(patients):
     total_patients = len(patients)
-    therapy_keys = ['speech', 'physical']
-    therapy_labels = {'speech': 'Speech Therapy', 'physical': 'Physical Therapy'}
+    therapy_keys = REPORT_THERAPY_KEYS
+    therapy_labels = REPORT_THERAPY_LABELS
 
     age_counts = {key: {bracket: 0 for bracket in AGE_BRACKET_ORDER} for key in therapy_keys + ['overall']}
     gender_counts = {key: {gender: 0 for gender in GENDER_ORDER} for key in therapy_keys + ['overall']}
@@ -558,6 +575,239 @@ def build_patient_report_payload(patients):
             }
         }
     }
+
+
+def build_report_therapy_panels(source_counts, therapy_totals, preferred_order, label_map=None, label_key='label'):
+    result = {}
+    for therapy_key in REPORT_THERAPY_KEYS:
+        therapy_total = therapy_totals.get(therapy_key, 0)
+        items = build_ranked_items(
+            source_counts[therapy_key],
+            therapy_total,
+            label_key=label_key,
+            preferred_order=preferred_order,
+            label_map=label_map
+        )
+        result[therapy_key] = {
+            'therapyType': therapy_key,
+            'therapyLabel': REPORT_THERAPY_LABELS[therapy_key],
+            'totalPatients': therapy_total,
+            'items': items
+        }
+    return result
+
+
+def build_age_report_payload(patients):
+    total_patients = len(patients)
+    age_counts = {key: {bracket: 0 for bracket in AGE_BRACKET_ORDER} for key in REPORT_THERAPY_KEYS + ['overall']}
+    therapy_totals = {key: 0 for key in REPORT_THERAPY_KEYS}
+
+    for patient in patients:
+        therapy = normalize_therapy_type(patient.get('therapyType'))
+        if therapy in therapy_totals:
+            therapy_totals[therapy] += 1
+
+        bracket = get_age_bracket(patient.get('age'))
+        if bracket:
+            age_counts['overall'][bracket] += 1
+            if therapy in therapy_totals:
+                age_counts[therapy][bracket] += 1
+
+    age_brackets_list = build_ranked_items(age_counts['overall'], total_patients, label_key='range', preferred_order=AGE_BRACKET_ORDER)
+    highest_age_bracket = None
+    if age_brackets_list:
+        highest_age_bracket = max(age_brackets_list, key=lambda item: item['count'])
+        for item in age_brackets_list:
+            item['isHighest'] = item['range'] == highest_age_bracket['range'] and highest_age_bracket['count'] > 0
+        highest_age_bracket = next((item for item in age_brackets_list if item.get('isHighest')), None)
+
+    return {
+        'totalPatients': total_patients,
+        'ageBrackets': age_brackets_list,
+        'highestAgeBracket': highest_age_bracket,
+        'therapyTotals': {
+            therapy_key: {
+                'therapyType': therapy_key,
+                'therapyLabel': REPORT_THERAPY_LABELS[therapy_key],
+                'totalPatients': therapy_totals[therapy_key]
+            }
+            for therapy_key in REPORT_THERAPY_KEYS
+        },
+        'categories': {
+            'age': {
+                'title': 'Age',
+                'description': 'Age groups currently using each therapy type.',
+                'byTherapy': build_report_therapy_panels(age_counts, therapy_totals, AGE_BRACKET_ORDER, label_key='label')
+            }
+        }
+    }
+
+
+def build_gender_report_payload(patients):
+    total_patients = len(patients)
+    gender_counts = {key: {gender: 0 for gender in GENDER_ORDER} for key in REPORT_THERAPY_KEYS + ['overall']}
+    therapy_totals = {key: 0 for key in REPORT_THERAPY_KEYS}
+    patient_gender_map = {
+        str(patient.get('_id')): normalize_gender(patient.get('gender'))
+        for patient in patients
+        if patient.get('_id')
+    }
+
+    for patient in patients:
+        therapy = normalize_therapy_type(patient.get('therapyType'))
+        if therapy in therapy_totals:
+            therapy_totals[therapy] += 1
+
+        gender = normalize_gender(patient.get('gender'))
+        gender_counts['overall'][gender] += 1
+        if therapy in therapy_totals:
+            gender_counts[therapy][gender] += 1
+
+    gender_distribution = build_ranked_items(gender_counts['overall'], total_patients, label_key='gender', preferred_order=GENDER_ORDER)
+    gender_distribution = [item for item in gender_distribution if item['count'] > 0]
+    gender_distribution.sort(key=lambda item: item['count'], reverse=True)
+
+    detected_problem_map = {}
+    patient_gender_cache = {}
+    gait_records = list(db['gaitprogresses'].find({}, {'user_id': 1, 'detected_problems': 1}))
+
+    for record in gait_records:
+        user_id = str(record.get('user_id') or '')
+        if not user_id:
+            continue
+
+        gender = patient_gender_map.get(user_id)
+        if gender is None:
+            if user_id not in patient_gender_cache:
+                user_doc = None
+                try:
+                    user_doc = users_collection.find_one({'_id': ObjectId(user_id)}, {'gender': 1})
+                except Exception:
+                    user_doc = users_collection.find_one({'_id': user_id}, {'gender': 1})
+                patient_gender_cache[user_id] = normalize_gender(user_doc.get('gender')) if user_doc else 'other'
+            gender = patient_gender_cache[user_id]
+        for raw_problem in record.get('detected_problems', []):
+            problem_key = raw_problem.get('problem') if isinstance(raw_problem, dict) else raw_problem
+            normalized_problem = str(problem_key or '').strip().lower()
+            if not normalized_problem:
+                continue
+
+            entry = detected_problem_map.setdefault(normalized_problem, {
+                'key': normalized_problem,
+                'label': normalized_problem.replace('_', ' ').title(),
+                'patient_sets': {g: set() for g in GENDER_ORDER}
+            })
+            entry['patient_sets'].setdefault(gender, set()).add(user_id)
+
+    detected_problem_rows = []
+    for entry in detected_problem_map.values():
+        counts_by_gender = {gender: len(entry['patient_sets'].get(gender, set())) for gender in GENDER_ORDER}
+        max_count = max(counts_by_gender.values()) if counts_by_gender else 0
+        dominant = [gender for gender, count in counts_by_gender.items() if count == max_count and count > 0]
+        detected_problem_rows.append({
+            'key': entry['key'],
+            'label': entry['label'],
+            'countsByGender': counts_by_gender,
+            'totalPatients': sum(counts_by_gender.values()),
+            'dominantGender': dominant[0] if len(dominant) == 1 else ('tie' if len(dominant) > 1 else None),
+            'dominantGenderLabel': (
+                'Tie' if len(dominant) > 1 else
+                (dominant[0].replace('-', ' ').title() if dominant else 'N/A')
+            )
+        })
+
+    detected_problem_rows.sort(key=lambda item: (-item['totalPatients'], item['label']))
+
+    return {
+        'totalPatients': total_patients,
+        'genderDistribution': gender_distribution,
+        'therapyTotals': {
+            therapy_key: {
+                'therapyType': therapy_key,
+                'therapyLabel': REPORT_THERAPY_LABELS[therapy_key],
+                'totalPatients': therapy_totals[therapy_key]
+            }
+            for therapy_key in REPORT_THERAPY_KEYS
+        },
+        'categories': {
+            'gender': {
+                'title': 'Gender',
+                'description': 'Gender distribution under each therapy type and detected physical gait problems by gender.',
+                'byTherapy': build_report_therapy_panels(gender_counts, therapy_totals, GENDER_ORDER, label_map={
+                    'male': 'Male',
+                    'female': 'Female',
+                    'other': 'Other',
+                    'prefer-not-to-say': 'Prefer not to say'
+                }, label_key='label'),
+                'detectedProblems': detected_problem_rows
+            }
+        }
+    }
+
+
+def build_work_report_payload(patients):
+    total_patients = len(patients)
+    work_counts = {key: {status: 0 for status in WORK_STATUS_LABELS.keys()} for key in REPORT_THERAPY_KEYS + ['overall']}
+    therapy_totals = {key: 0 for key in REPORT_THERAPY_KEYS}
+
+    for patient in patients:
+        therapy = normalize_therapy_type(patient.get('therapyType'))
+        if therapy in therapy_totals:
+            therapy_totals[therapy] += 1
+
+        work_status = normalize_work_status(patient.get('workStatus'))
+        work_counts['overall'][work_status] += 1
+        if therapy in therapy_totals:
+            work_counts[therapy][work_status] += 1
+
+    return {
+        'totalPatients': total_patients,
+        'therapyTotals': {
+            therapy_key: {
+                'therapyType': therapy_key,
+                'therapyLabel': REPORT_THERAPY_LABELS[therapy_key],
+                'totalPatients': therapy_totals[therapy_key]
+            }
+            for therapy_key in REPORT_THERAPY_KEYS
+        },
+        'categories': {
+            'work': {
+                'title': 'Work',
+                'description': 'Occupation and employment status across each therapy type.',
+                'byTherapy': build_report_therapy_panels(work_counts, therapy_totals, list(WORK_STATUS_LABELS.keys()), label_map=WORK_STATUS_LABELS, label_key='label')
+            }
+        }
+    }
+
+
+def build_report_category_payload(category):
+    patient_projection = {'therapyType': 1}
+
+    if category == 'age':
+        patient_projection['age'] = 1
+        patients = list(users_collection.find({'role': 'patient'}, patient_projection))
+        return build_age_report_payload(patients)
+
+    if category == 'gender':
+        patient_projection['gender'] = 1
+        patients = list(users_collection.find({'role': 'patient'}, patient_projection))
+        return build_gender_report_payload(patients)
+
+    if category == 'work':
+        patient_projection['workStatus'] = 1
+        patients = list(users_collection.find({'role': 'patient'}, patient_projection))
+        return build_work_report_payload(patients)
+
+    return None
+
+
+def get_cached_report_category_response(category):
+    cache_key = build_response_cache_key('therapist-reports', scope='public', category=category)
+    return get_or_set_cached_response(
+        cache_key,
+        5 * 60,
+        lambda: {'success': True, 'data': build_report_category_payload(category)}
+    )
 
 
 def build_patient_demographics_payload(patients):
@@ -739,7 +989,7 @@ init_articulation_crud(db, app.config['SECRET_KEY'])
 
 # Register admin management blueprint
 app.register_blueprint(admin_bp)
-init_admin_management(db, app.config['SECRET_KEY'])
+init_admin_management(db, app.config['SECRET_KEY'], invalidate_dashboard_report_caches)
 
 # Register success story CRUD blueprint
 app.register_blueprint(success_story_bp, url_prefix='/api')
@@ -959,6 +1209,7 @@ def register():
         
         # Insert user into database
         result = users_collection.insert_one(user)
+        invalidate_dashboard_report_caches()
         
         # Generate token
         token = jwt.encode({
@@ -1297,6 +1548,7 @@ def firebase_auth():
                         }
                     }
                 )
+                invalidate_dashboard_report_caches()
                 # Return success with updated user
                 token = jwt.encode({
                     'user_id': str(existing_user['_id']),
@@ -1335,6 +1587,7 @@ def firebase_auth():
                         }
                     }
                 )
+                invalidate_dashboard_report_caches()
                 token = jwt.encode({
                     'user_id': str(existing_user['_id']),
                     'role': existing_user.get('role', 'patient'),
@@ -1374,6 +1627,7 @@ def firebase_auth():
         }
         
         result = users_collection.insert_one(new_user)
+        invalidate_dashboard_report_caches()
         
         # Generate token
         token = jwt.encode({
@@ -1493,6 +1747,7 @@ def complete_profile(current_user):
             {'_id': current_user['_id']},
             {'$set': update_data}
         )
+        invalidate_dashboard_report_caches()
         
         # Get updated user
         updated_user = users_collection.find_one({'_id': current_user['_id']})
@@ -1613,6 +1868,7 @@ def update_diagnostic_status(current_user):
                 'updatedAt': datetime.datetime.utcnow()
             }}
         )
+        invalidate_dashboard_report_caches()
         
         # Get updated user
         updated_user = users_collection.find_one({'_id': current_user['_id']})
@@ -1656,6 +1912,7 @@ def save_diagnostic_data(current_user):
             {'_id': current_user['_id']},
             {'$set': update_fields}
         )
+        invalidate_dashboard_report_caches()
 
         updated_user = users_collection.find_one({'_id': current_user['_id']})
         return jsonify({
@@ -2770,46 +3027,57 @@ def get_therapist_stats(current_user):
         }), 500
 
 
-@app.route('/api/therapist/reports', methods=['GET'])
+@app.route('/api/therapist/reports/summary', methods=['GET'])
 @token_required
-def get_therapist_reports(current_user):
-    """
-    Get therapist reports including age bracket analysis and gender distribution
-    """
+def get_therapist_reports_summary(current_user):
+    """Get shared report summary totals for the reports tab."""
     try:
-        # Verify user is a therapist
         if current_user.get('role') != 'therapist':
-            return jsonify({
-                'success': False,
-                'message': 'Unauthorized. Only therapists can access this endpoint.'
-            }), 403
-        
-        therapist_id = str(current_user['_id'])
-        cache_key = build_response_cache_key('therapist-reports', scope=f'user:{therapist_id}')
-        cached_payload = get_cached_response(cache_key)
-        if cached_payload is not None:
-            return jsonify(cached_payload), 200
+            return jsonify({'success': False, 'message': 'Unauthorized. Only therapists can access this endpoint.'}), 403
 
-        patients = list(users_collection.find({'role': 'patient'}))
-        report_payload = build_patient_report_payload(patients)
+        payload = get_or_set_cached_response(
+            build_response_cache_key('therapist-reports', scope='public', category='summary'),
+            5 * 60,
+            lambda: {
+                'success': True,
+                'data': {
+                    'totalPatients': users_collection.count_documents({'role': 'patient'}),
+                    'therapyTotals': {
+                        therapy_key: {
+                            'therapyType': therapy_key,
+                            'therapyLabel': REPORT_THERAPY_LABELS[therapy_key],
+                            'totalPatients': users_collection.count_documents({'role': 'patient', 'therapyType': therapy_key})
+                        }
+                        for therapy_key in REPORT_THERAPY_KEYS
+                    }
+                }
+            }
+        )
+        return jsonify(payload), 200
+    except Exception as e:
+        logger.error(f"Error fetching therapist report summary: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to fetch report summary'}), 500
 
-        payload = {
-            'success': True,
-            'data': report_payload
-        }
-        set_cached_response(cache_key, payload, 300)
+
+@app.route('/api/therapist/reports/<category>', methods=['GET'])
+@token_required
+def get_therapist_report_category(current_user, category):
+    """Get a single therapist report category on demand."""
+    try:
+        if current_user.get('role') != 'therapist':
+            return jsonify({'success': False, 'message': 'Unauthorized. Only therapists can access this endpoint.'}), 403
+
+        if category not in {'age', 'gender', 'work'}:
+            return jsonify({'success': False, 'message': 'Invalid report category'}), 400
+
+        payload = get_cached_report_category_response(category)
+        if payload.get('data') is None:
+            return jsonify({'success': False, 'message': 'Invalid report category'}), 400
 
         return jsonify(payload), 200
-    
     except Exception as e:
-        import traceback
-        logger.error(f"Error fetching therapist reports: {e}", exc_info=True)
-        print(f"❌ Error fetching therapist reports: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'message': 'Failed to fetch therapist reports'
-        }), 500
+        logger.error(f"Error fetching therapist report category {category}: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Failed to fetch report category'}), 500
 
 
 # ========================================
@@ -5720,6 +5988,7 @@ def admin_update_user(current_user, user_id):
             {'_id': ObjectId(user_id)},
             {'$set': update_fields}
         )
+        invalidate_dashboard_report_caches()
         
         if result.modified_count == 0:
             return jsonify({'message': 'User not found or no changes made'}), 404
@@ -5756,6 +6025,7 @@ def admin_delete_user(current_user, user_id):
         language_trials_collection.delete_many({'user_id': user_id})
         db['fluency_progress'].delete_many({'user_id': user_id})
         db['fluency_trials'].delete_many({'user_id': user_id})
+        invalidate_dashboard_report_caches()
         
         return jsonify({
             'success': True,

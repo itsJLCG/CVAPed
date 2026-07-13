@@ -12,8 +12,8 @@ def get_int_env(name, default):
 
 
 bind = f"0.0.0.0:{os.getenv('PORT', '8080')}"
-workers = max(1, get_int_env('GUNICORN_WORKERS', 1))
-threads = max(1, get_int_env('GUNICORN_THREADS', 8))
+workers = max(1, get_int_env('GUNICORN_WORKERS', 2))
+threads = max(1, get_int_env('GUNICORN_THREADS', 2))
 timeout = get_int_env('GUNICORN_TIMEOUT', 0)
 graceful_timeout = get_int_env('GUNICORN_GRACEFUL_TIMEOUT', 30)
 keepalive = get_int_env('GUNICORN_KEEPALIVE', 65)

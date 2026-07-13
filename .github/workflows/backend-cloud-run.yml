@@ -106,6 +106,10 @@ jobs:
             --update-env-vars "FACILITY_LOCATION_NAME=${FACILITY_LOCATION_NAME},FACILITY_LATITUDE=${FACILITY_LATITUDE},FACILITY_LONGITUDE=${FACILITY_LONGITUDE}" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
+            --max-instances=2 \
+            --min-instances=0 \
+            --cpu=1 \
+            --memory=512Mi \
             --quiet
 
           SERVICE_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
